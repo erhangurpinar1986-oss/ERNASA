@@ -422,3 +422,34 @@ button {
     align-items: center;
     justify-content: center;
 }
+#interviewQuestionArea {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.question-card {
+    width: 100%;
+}
+
+#answerText {
+    width: 100%;
+    min-height: 220px;
+    box-sizing: border-box;
+    resize: vertical;
+    padding: 18px;
+    border: 1px solid #cfd8e6;
+    border-radius: 12px;
+    font-size: 16px;
+    line-height: 1.6;
+    font-family: inherit;
+    outline: none;
+}
+
+#answerText:focus {
+    border-color: #123a83;
+}
+
+#submitAnswerButton {
+    width: 100%;
+    margin-top: 18px;
+}

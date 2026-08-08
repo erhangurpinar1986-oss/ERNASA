@@ -16,7 +16,7 @@ const questionProgress = document.getElementById("questionProgress");
 const questionText = document.getElementById("questionText");
 const answerText = document.getElementById("answerText");
 const submitAnswerButton = document.getElementById("submitAnswerButton");
-
+const consentCard = document.getElementById("consentCard");
 const startInterviewButton = document.getElementById(
     "startInterviewButton"
 );
@@ -151,13 +151,14 @@ startInterviewButton.addEventListener("click", () => {
         .then(data => {
             console.log("Mülakat başladı:", data);
 
-                if (data.success) {
-                    interviewQuestionArea.style.display = "block";
+if (data.success) {
+    interviewQuestionArea.style.display = "block";
 
-                    questionProgress.textContent = `Soru ${data.question_number}`;
-                    questionText.textContent = data.question;
+    questionProgress.textContent = `Soru ${data.question_number}`;
+    questionText.textContent = data.question;
 
-                    startInterviewButton.style.display = "none";
+    consentCard.style.display = "none";
+    startInterviewButton.style.display = "none";
 }
         })
         .catch(error => {
