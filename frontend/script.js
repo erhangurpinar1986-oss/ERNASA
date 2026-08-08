@@ -11,6 +11,11 @@ const modalCloseAction = document.getElementById("modalCloseAction");
 const kvkkCheckbox = document.getElementById("kvkkCheckbox");
 const consentCheckbox = document.getElementById("consentCheckbox");
 const accuracyCheckbox = document.getElementById("accuracyCheckbox");
+const interviewQuestionArea = document.getElementById("interviewQuestionArea");
+const questionProgress = document.getElementById("questionProgress");
+const questionText = document.getElementById("questionText");
+const answerText = document.getElementById("answerText");
+const submitAnswerButton = document.getElementById("submitAnswerButton");
 
 const startInterviewButton = document.getElementById(
     "startInterviewButton"
@@ -146,9 +151,14 @@ startInterviewButton.addEventListener("click", () => {
         .then(data => {
             console.log("Mülakat başladı:", data);
 
-            if (data.success) {
-                alert(data.question);
-            }
+                if (data.success) {
+                    interviewQuestionArea.style.display = "block";
+
+                    questionProgress.textContent = `Soru ${data.question_number}`;
+                    questionText.textContent = data.question;
+
+                    startInterviewButton.style.display = "none";
+}
         })
         .catch(error => {
             console.error("Mülakat başlatılamadı:", error);
