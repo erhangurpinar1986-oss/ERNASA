@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>ERNASA Dijital Ön Mülakat</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <main class="page">
+
+        <section class="interview-panel">
+
+            <header class="topbar">
+
+                <div class="brand-area">
+<div class="brand-logo">
+    <img src="assets/ernasa-logo.png" alt="ERNASA Logosu">
+</div>
+    
+                    <div class="brand-text">
+                        <h1>ERNASA</h1>
+                        <p>Yazılım Teknoloji Bilişim A.Ş.</p>
+                    </div>
+
+                </div>
+
+                <div class="client-area">
+                    <span>Mülakatı Yapan Kurum</span>
+                    <strong>Arvato Lojistik</strong>
+                </div>
+
+            </header>
+
+            <section class="welcome-card">
+
+                <div class="welcome-icon" aria-hidden="true">
+                    👤
+                </div>
+
+                <div class="welcome-text">
+
+                    <span class="eyebrow">
+                        Aday Bilgilendirme
+                    </span>
+
+                    <h2>
+                        Hoş geldiniz,
+                        <strong>Sayın Aday </strong>
+                    </h2>
+
+                    <p>
+                        Başvurunuz başarıyla alınmıştır.
+                    </p>
+
+                    <p>
+                        Bu ön mülakat yaklaşık
+                        <strong>8–10 dakika</strong>
+                        sürecektir.
+                    </p>
+
+                    <p class="quiet-note">
+                        Lütfen mülakatı sessiz ve dikkat dağıtıcı
+                        unsurların olmadığı bir ortamda tamamlayınız.
+                    </p>
+
+                </div>
+
+            </section>
+
+            <section class="consent-card">
+
+                <div class="section-heading">
+
+                    <div class="shield-icon" aria-hidden="true">
+                        ✓
+                    </div>
+
+                    <div>
+                        <h3>KVKK ve Açık Rıza Metinleri</h3>
+
+                        <p>
+                            Mülakata başlamadan önce aşağıdaki
+                            onayları tamamlayınız.
+                        </p>
+                    </div>
+
+                </div>
+
+                <div class="consent-row">
+
+                    <label for="kvkkCheckbox">
+
+                        <input
+                            type="checkbox"
+                            id="kvkkCheckbox"
+                        >
+
+                        <span>
+                            KVKK Aydınlatma Metni'ni okudum ve anladım.
+                        </span>
+
+                    </label>
+
+                    <button
+                        type="button"
+                        class="text-button"
+                        id="openKvkkButton"
+                    >
+                        Metni Oku
+                    </button>
+
+                </div>
+
+                <div class="consent-row">
+
+                    <label for="consentCheckbox">
+
+                        <input
+                            type="checkbox"
+                            id="consentCheckbox"
+                        >
+
+                        <span>
+                            Açık Rıza Metni'ni okudum ve kabul ediyorum.
+                        </span>
+
+                    </label>
+
+                    <button
+                        type="button"
+                        class="text-button"
+                        id="openConsentButton"
+                    >
+                        Metni Oku
+                    </button>
+
+                </div>
+
+                <div class="consent-row">
+
+                    <label for="accuracyCheckbox">
+
+                        <input
+                            type="checkbox"
+                            id="accuracyCheckbox"
+                        >
+
+                        <span>
+                            Paylaştığım bilgilerin doğru olduğunu
+                            beyan ederim.
+                        </span>
+
+                    </label>
+
+                </div>
+
+                <button
+                    type="button"
+                    id="startInterviewButton"
+                    class="start-button"
+                    disabled
+                >
+                    MÜLAKATI BAŞLAT
+                </button>
+
+                <p class="button-note">
+                    Devam edebilmek için tüm onayları vermeniz gerekmektedir.
+                </p>
+
+            </section>
+
+            <footer class="footer">
+
+                <span>
+                    Verileriniz 6698 sayılı KVKK kapsamında korunmaktadır.
+                </span>
+
+                <span>
+                    © 2026 ERNASA Yazılım Teknoloji Bilişim A.Ş.
+                    Tüm hakları saklıdır.
+                </span>
+
+            </footer>
+
+        </section>
+
+    </main>
+
+    <div
+        class="modal-overlay"
+        id="modalOverlay"
+        hidden
+    >
+
+        <section
+            class="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modalTitle"
+        >
+
+            <div class="modal-header">
+
+                <h2 id="modalTitle">
+                    Bilgilendirme Metni
+                </h2>
+
+                <button
+                    type="button"
+                    id="closeModalButton"
+                    class="close-button"
+                    aria-label="Pencereyi kapat"
+                >
+                    ×
+                </button>
+
+            </div>
+
+            <div
+                class="modal-content"
+                id="modalContent"
+            ></div>
+
+            <div class="modal-footer">
+
+                <button
+                    type="button"
+                    id="modalCloseAction"
+                    class="modal-action-button"
+                >
+                    Kapat
+                </button>
+
+            </div>
+
+        </section>
+
+    </div>
+
+    <script src="script.js"></script>
+
+</body>
+</html>
