@@ -134,7 +134,26 @@ startInterviewButton.addEventListener("click", () => {
         return;
     }
 
-    alert("Mülakat ekranı bir sonraki adımda açılacaktır.");
+    fetch(`https://ernasa.com/api/interviews/${interviewToken}/start`, {
+        method: "POST"
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("Mülakat başladı:", data);
+
+            if (data.success) {
+                alert(data.question);
+            }
+        })
+        .catch(error => {
+            console.error("Mülakat başlatılamadı:", error);
+            alert("Mülakat başlatılırken bir hata oluştu.");
+        });
 });
 
 updateStartButton();

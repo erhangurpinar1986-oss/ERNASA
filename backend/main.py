@@ -202,3 +202,51 @@ def get_interview_link(token: str):
 @app.get("/interview/{token}")
 def open_interview(token: str):
     return FileResponse(FRONTEND_DIR / "index.html")
+@app.post("/api/interviews/{token}/start")
+def start_interview(token: str):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "SELECT * FROM interview_links WHERE token = ?",
+        (token,)
+    )
+
+    row = cursor.fetchone()
+
+    if not row:
+        connection.close()
+        raise HTTPException(
+            status_code=404,
+            detail="Mülakat bağlantısı bulunamadı."
+        )
+
+    interview = dict(row)
+
+    expires_at = datetime.fromisoformat(interview["expires_at"])
+
+    if datetime.now(timezone.utc) > expires_at:
+        connection.close()
+        raise HTTPException(
+            status_code=410,
+            detail="Mülakat bağlantısının süresi dolmuş."
+        )
+
+    cursor.execute(
+        """
+        UPDATE interview_links
+        SET status = ?
+        WHERE token = ?
+        """,
+        ("started", token)
+    )
+
+    connection.commit()
+    connection.close()
+
+    return {
+        "success": True,
+        "status": "started",
+        "question_number": 1,
+        "question": "Kendinizi kısaca tanıtır mısınız?"
+    }
