@@ -201,8 +201,4 @@ def get_interview_link(token: str):
 
 @app.get("/interview/{token}")
 def open_interview(token: str):
-    return {
-        "status": "ok",
-        "token": token,
-        "message": "ERNASA aday mülakat bağlantısı çalışıyor."
-    }
+    return FileResponse(FRONTEND_DIR / "index.html")
