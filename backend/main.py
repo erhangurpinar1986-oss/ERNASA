@@ -1,18 +1,18 @@
 from services import parser
-from services.cv_service import extract_contact_info, extract_text
 from pathlib import Path
 from uuid import uuid4
-from services.cv_service import extract_contact_info, extract_text
-
+from services.cv_service import extract_text
+from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-
+from database import initialize_database, get_connection
+from services.candidate_service import create_interview_identity
 app = FastAPI(
     title="ERNASA API",
     description="Yapay Zekâ Destekli İnsan Kaynakları Asistanı",
     version="1.0.0"
 )
-
+initialize_database()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -38,7 +38,7 @@ def home():
         "project": "ERNASA",
         "message": "ERNASA Backend başarıyla çalışıyor."
     }
-
+interview_links = {}
 
 @app.post("/api/cv/upload")
 async def upload_cv(cv: UploadFile = File(...)):
@@ -86,4 +86,97 @@ async def upload_cv(cv: UploadFile = File(...)):
         "size": len(content),
         "contact": contact,
         "message": "CV başarıyla yüklendi ve analiz edildi."
+    }
+@app.post("/api/interview-links")
+def create_interview_link(candidate: dict):
+    identity = create_interview_identity()
+
+    candidate_number = identity["candidate_number"]
+    security_code = identity["security_code"]
+    interview_id = identity["interview_id"]
+
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=48)
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO interview_links (
+            token,
+            name,
+            phone,
+            email,
+            company,
+            position,
+            expires_at,
+            status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            interview_id,
+            candidate.get("name", ""),
+            candidate.get("phone", ""),
+            candidate.get("email", ""),
+            candidate.get("company", ""),
+            candidate.get("position", ""),
+            expires_at.isoformat(),
+            "waiting"
+        )
+    )
+
+    connection.commit()
+    connection.close()
+
+    return {
+        "success": True,
+        "candidate_number": candidate_number,
+        "security_code": security_code,
+        "interview_id": interview_id,
+        "expires_at": expires_at.isoformat(),
+        "status": "waiting",
+        "interview_url":
+            f"https://ernasa.com/interview/{interview_id}"
+    }
+@app.get("/api/interview-links/{token}")
+def get_interview_link(token: str):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "SELECT * FROM interview_links WHERE token = ?",
+        (token,)
+    )
+
+    row = cursor.fetchone()
+    connection.close()
+
+    interview = dict(row) if row else None
+
+    if not interview:
+        raise HTTPException(
+            status_code=404,
+            detail="Mülakat bağlantısı bulunamadı."
+        )
+
+    expires_at = datetime.fromisoformat(interview["expires_at"])
+
+    if datetime.now(timezone.utc) > expires_at:
+        raise HTTPException(
+            status_code=410,
+            detail="Mülakat bağlantısının süresi dolmuş."
+        )
+
+    return {
+        "success": True,
+        "candidate": {
+            "name": interview["name"],
+            "phone": interview["phone"],
+            "email": interview["email"],
+            "company": interview["company"],
+            "position": interview["position"]
+        },
+        "expires_at": interview["expires_at"],
+        "status": interview["status"]
     }
