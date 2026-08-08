@@ -144,10 +144,13 @@ if (interviewToken) {
         .then(data => {
             console.log("Aday Bilgileri:", data);
 
-            if (data.success) {
-                console.log("Aday:", data.candidate.name);
-            }
-        })
+       if (data.success) {
+            const candidateGreeting = document.getElementById("candidateGreeting");
+            const companyName = document.getElementById("companyName");
+
+            candidateGreeting.textContent = data.candidate.name;
+            companyName.textContent = data.candidate.company;
+}
         .catch(error => {
             console.error("Mülakat bilgisi alınamadı:", error);
         });
