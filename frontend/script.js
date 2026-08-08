@@ -150,7 +150,7 @@ if (interviewToken) {
 
             candidateGreeting.textContent = data.candidate.name;
             companyName.textContent = data.candidate.company;
-}
+})
         .catch(error => {
             console.error("Mülakat bilgisi alınamadı:", error);
         });
