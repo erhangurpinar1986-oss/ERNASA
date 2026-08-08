@@ -4,19 +4,20 @@ import string
 
 def generate_candidate_number():
     connection = get_connection()
+    cursor = connection.cursor()
 
     try:
-        connection.execute("BEGIN IMMEDIATE")
-
-        row = connection.execute("""
+        cursor.execute("""
             SELECT last_number
             FROM candidate_sequence
             WHERE id = 1
-        """).fetchone()
+            FOR UPDATE
+        """)
 
+        row = cursor.fetchone()
         next_number = row["last_number"] + 1
 
-        connection.execute("""
+        cursor.execute("""
             UPDATE candidate_sequence
             SET last_number = ?
             WHERE id = 1
