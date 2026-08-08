@@ -137,7 +137,7 @@ def create_interview_link(candidate: dict):
         "expires_at": expires_at.isoformat(),
         "status": "waiting",
         "interview_url":
-            f"https://ernasa.com/interview/{interview_id}"
+            f"https://ernasa.com/interview/{token}"
     }
 @app.get("/api/interview-links/{token}")
 def get_interview_link(token: str):
@@ -179,4 +179,12 @@ def get_interview_link(token: str):
         },
         "expires_at": interview["expires_at"],
         "status": interview["status"]
+    }
+
+@app.get("/interview/{token}")
+def open_interview(token: str):
+    return {
+        "status": "ok",
+        "token": token,
+        "message": "ERNASA aday mülakat bağlantısı çalışıyor."
     }
