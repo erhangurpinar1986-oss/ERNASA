@@ -144,13 +144,19 @@ if (interviewToken) {
         .then(data => {
             console.log("Aday Bilgileri:", data);
 
-       if (data.success) {
-            const candidateGreeting = document.getElementById("candidateGreeting");
-            const companyName = document.getElementById("companyName");
+            if (data.success) {
+                const candidateGreeting = document.getElementById("candidateGreeting");
+                const companyName = document.getElementById("companyName");
 
-            candidateGreeting.textContent = data.candidate.name;
-            companyName.textContent = data.candidate.company;
-})
+                if (candidateGreeting) {
+                    candidateGreeting.textContent = data.candidate.name;
+                }
+
+                if (companyName) {
+                    companyName.textContent = data.candidate.company;
+                }
+            }
+        })
         .catch(error => {
             console.error("Mülakat bilgisi alınamadı:", error);
         });
