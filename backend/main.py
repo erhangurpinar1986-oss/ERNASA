@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from database import initialize_database, get_connection
 from services.candidate_service import create_interview_identity
 from fastapi.staticfiles import StaticFiles
+
 app = FastAPI(
     title="ERNASA API",
     description="Yapay Zekâ Destekli İnsan Kaynakları Asistanı",
@@ -163,7 +164,7 @@ def get_interview_link(token: str):
     cursor = connection.cursor()
 
     cursor.execute(
-        "SELECT * FROM interview_links WHERE token = ?",
+        "SELECT * FROM interview_links WHERE token = %s",
         (token,)
     )
 
@@ -250,3 +251,66 @@ def start_interview(token: str):
         "question_number": 1,
         "question": "Kendinizi kısaca tanıtır mısınız?"
     }
+@app.post("/api/interviews/{token}/answer")
+def submit_interview_answer(token: str, payload: dict):
+    answer = str(payload.get("answer", "")).strip()
+    question_number = int(payload.get("question_number", 1))
+
+    if not answer:
+        raise HTTPException(
+            status_code=400,
+            detail="Cevap boş bırakılamaz."
+        )
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT * FROM interview_links
+            WHERE token = ?
+            """,
+            (token,)
+        )
+
+        row = cursor.fetchone()
+
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail="Mülakat bağlantısı bulunamadı."
+            )
+        question_text = "Kendinizi kısaca tanıtır mısınız?"
+
+        cursor.execute(
+            """
+            INSERT INTO interview_answers (
+                token,
+                question_number,
+                question,
+                answer,
+                created_at
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                token,
+                question_number,
+                question_text,
+                answer,
+                datetime.now(timezone.utc).isoformat()
+            )
+        )
+
+        connection.commit()
+
+    return {
+        "success": True,
+        "message": "Cevap kaydedildi.",
+        "question_number": 2,
+        "question": "Daha önce yaptığınız işlerden ve sorumluluklarınızdan kısaca bahseder misiniz?"
+    }
+
+    finally:
+        connection.close()

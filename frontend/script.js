@@ -191,3 +191,52 @@ if (interviewToken) {
             console.error("Mülakat bilgisi alınamadı:", error);
         });
 }
+submitAnswerButton.addEventListener("click", () => {
+    const answer = answerText.value.trim();
+
+    if (!answer) {
+        alert("Lütfen cevabınızı yazınız.");
+        return;
+    }
+
+    const currentQuestionNumber = Number(
+        questionProgress.textContent.replace("Soru", "").trim()
+    );
+
+    submitAnswerButton.disabled = true;
+    submitAnswerButton.textContent = "GÖNDERİLİYOR...";
+
+    fetch(`https://ernasa.com/api/interviews/${interviewToken}/answer`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            answer: answer,
+            question_number: currentQuestionNumber
+        })
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                questionProgress.textContent = `Soru ${data.question_number}`;
+                questionText.textContent = data.question;
+                answerText.value = "";
+                answerText.focus();
+            }
+        })
+        .catch(error => {
+            console.error("Cevap gönderilemedi:", error);
+            alert("Cevap gönderilirken bir hata oluştu.");
+        })
+        .finally(() => {
+            submitAnswerButton.disabled = false;
+            submitAnswerButton.textContent = "CEVABI GÖNDER";
+        });
+});
