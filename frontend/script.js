@@ -7,7 +7,7 @@ const openConsentButton = document.getElementById("openConsentButton");
 
 const closeModalButton = document.getElementById("closeModalButton");
 const modalCloseAction = document.getElementById("modalCloseAction");
-
+const welcomeCard = document.querySelector(".welcome-card");
 const kvkkCheckbox = document.getElementById("kvkkCheckbox");
 const consentCheckbox = document.getElementById("consentCheckbox");
 const accuracyCheckbox = document.getElementById("accuracyCheckbox");
@@ -158,6 +158,7 @@ if (data.success) {
     questionText.textContent = data.question;
 
     consentCard.style.display = "none";
+    welcomeCard.style.display = "none";
     startInterviewButton.style.display = "none";
 }
         })
