@@ -133,6 +133,28 @@ def initialize_database():
             INSERT OR IGNORE INTO candidate_sequence (id, last_number)
             VALUES (1, 0)
         """)
+    if DATABASE_URL:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS interview_answers (
+                id SERIAL PRIMARY KEY,
+                token TEXT NOT NULL,
+                question_number INTEGER NOT NULL,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+    else:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS interview_answers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT NOT NULL,
+                question_number INTEGER NOT NULL,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
 
     connection.commit()
     connection.close()

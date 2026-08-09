@@ -281,6 +281,7 @@ def submit_interview_answer(token: str, payload: dict):
                 status_code=404,
                 detail="Mülakat bağlantısı bulunamadı."
             )
+
         question_text = "Kendinizi kısaca tanıtır mısınız?"
 
         cursor.execute(
@@ -292,7 +293,7 @@ def submit_interview_answer(token: str, payload: dict):
                 answer,
                 created_at
             )
-            VALUES (%s, %s, %s, %s, %s)
+            VALUES (?, ?, ?, ?, ?)
             """,
             (
                 token,
@@ -305,12 +306,12 @@ def submit_interview_answer(token: str, payload: dict):
 
         connection.commit()
 
-    return {
-        "success": True,
-        "message": "Cevap kaydedildi.",
-        "question_number": 2,
-        "question": "Daha önce yaptığınız işlerden ve sorumluluklarınızdan kısaca bahseder misiniz?"
-    }
+        return {
+            "success": True,
+            "message": "Cevap kaydedildi.",
+            "question_number": 2,
+            "question": "Daha önce yaptığınız işlerden ve sorumluluklarınızdan kısaca bahseder misiniz?"
+        }
 
     finally:
         connection.close()
