@@ -494,38 +494,119 @@ button {
 
     .interview-panel {
         width: 100%;
-        padding: 12px;
-    }
-
-    #interviewQuestionArea {
-        margin: 16px 0;
-        padding: 18px;
-        border-radius: 16px;
-    }
-
-    #questionText {
-        font-size: 17px;
-        line-height: 1.5;
-        margin: 12px 0;
-    }
-
-    #answerText {
-        width: 100%;
-        min-height: 150px;
-        padding: 14px;
-        font-size: 16px;
-        line-height: 1.5;
+        padding: 10px;
         box-sizing: border-box;
     }
 
-    #submitAnswerButton {
+    /* Aday bilgilendirme ve KVKK kartları */
+    .welcome-card,
+    .consent-card {
+        padding: 16px;
+        border-radius: 14px;
+    }
+
+    .welcome-card h2,
+    .consent-card h2 {
+        font-size: 24px;
+        line-height: 1.25;
+    }
+
+    .welcome-card p,
+    .consent-card p {
+        font-size: 16px;
+        line-height: 1.45;
+    }
+
+    /* Mülakat soru kartı */
+    #interviewQuestionArea {
+        width: auto;
+        margin: 14px 0;
+        padding: 16px;
+        border-radius: 14px;
+        box-sizing: border-box;
+    }
+
+    #questionTitle {
+        font-size: 22px;
+        margin-bottom: 4px;
+    }
+
+    #questionProgress {
+        font-size: 15px;
+        margin: 0 0 18px;
+    }
+
+    #questionText {
+        font-size: 18px;
+        line-height: 1.45;
+        margin: 10px 0 16px;
+    }
+
+    /* Cevap kutusu */
+    #answerText {
+        width: 100%;
+        min-height: 145px;
+        max-height: 260px;
+        padding: 14px;
+        font-size: 16px;
+        line-height: 1.5;
+        border-radius: 12px;
+        box-sizing: border-box;
+        resize: vertical;
+    }
+
+    /* Gönder / Başlat butonları */
+    #submitAnswerButton,
+    #startInterviewButton {
         width: 100%;
         min-height: 50px;
         margin-top: 14px;
+        font-size: 16px;
     }
 
-    .welcome-card,
-    .consent-card {
-        padding: 18px;
+    /* Footer mobilde daha kompakt */
+    .footer {
+        padding: 18px 16px;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+       /* Üst başlık - mobil */
+    .topbar {
+        padding: 18px 14px;
+        gap: 14px;
+    }
+
+    .brand-area {
+        gap: 10px;
+        align-items: center;
+    }
+
+    .brand-logo img {
+        width: 55px;
+        height: auto;
+    }
+
+    .brand-text h1 {
+        font-size: 28px;
+        line-height: 1.1;
+        margin: 0;
+    }
+
+    .brand-text p {
+        font-size: 14px;
+        margin: 4px 0 0;
+    }
+
+    .client-area {
+        margin-top: 14px;
+    }
+
+    .client-area span {
+        font-size: 14px;
+    }
+
+    .client-area strong {
+        font-size: 20px;
+        line-height: 1.2;
     }
 }
