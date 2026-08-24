@@ -10,3 +10,4 @@ Pillow
 PyMuPDF
 psycopg2-binary
 python-dotenv
+openai
