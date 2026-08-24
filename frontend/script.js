@@ -134,12 +134,16 @@ kvkkCheckbox.addEventListener("change", updateStartButton);
 consentCheckbox.addEventListener("change", updateStartButton);
 accuracyCheckbox.addEventListener("change", updateStartButton);
 
+let interviewStarting = false;
 startInterviewButton.addEventListener("click", () => {
-    if (startInterviewButton.disabled) {
+    if (startInterviewButton.disabled || interviewStarting) {
         return;
     }
 
-    fetch(`https://ernasa.com/api/interviews/${interviewToken}/start`, {
+    interviewStarting = true;
+    startInterviewButton.disabled = true;
+
+    fetch(`/api/interviews/${interviewToken}/start`, {
         method: "POST"
     })
         .then(response => {
@@ -207,15 +211,16 @@ submitAnswerButton.addEventListener("click", () => {
     submitAnswerButton.disabled = true;
     submitAnswerButton.textContent = "GÖNDERİLİYOR...";
 
-    fetch(`https://ernasa.com/api/interviews/${interviewToken}/answer`, {
+    fetch(`/api/interviews/${interviewToken}/answer`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
         },
         body: JSON.stringify({
-            answer: answer,
-            question_number: currentQuestionNumber
-        })
+    answer: answer,
+    question_number: currentQuestionNumber,
+    question: questionText.textContent
+})
     })
         .then(response => {
             if (!response.ok) {
@@ -225,13 +230,25 @@ submitAnswerButton.addEventListener("click", () => {
             return response.json();
         })
         .then(data => {
-            if (data.success) {
-                questionProgress.textContent = `Soru ${data.question_number}`;
-                questionText.textContent = data.question;
-                answerText.value = "";
-                answerText.focus();
-            }
-        })
+    if (data.success) {
+
+        if (data.completed) {
+            questionProgress.textContent = "Mülakat Tamamlandı";
+            questionText.textContent =
+                "Teşekkür ederiz. Mülakatınızı başarıyla tamamladınız. Yanıtlarınız değerlendirilmek üzere ilgili birime iletilmiştir.";
+
+            answerText.value = "";
+            answerText.style.display = "none";
+            submitAnswerButton.style.display = "none";
+            return;
+        }
+
+        questionProgress.textContent = `Soru ${data.question_number}`;
+        questionText.textContent = data.question;
+        answerText.value = "";
+        answerText.focus();
+    }
+})
         .catch(error => {
             console.error("Cevap gönderilemedi:", error);
             alert("Cevap gönderilirken bir hata oluştu.");

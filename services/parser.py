@@ -113,7 +113,62 @@ def extract_fallback_name(lines: list[str]) -> str:
 
     return ""
 
+def extract_experience(lines: list[str]) -> list[dict]:
+    experience = []
 
+    experience_headings = {
+        "is deneyimi",
+        "iş deneyimi",
+        "deneyim",
+        "is tecrubeleri",
+        "iş tecrübeleri",
+        "work experience",
+        "professional experience"
+    }
+
+    stop_headings = {
+        "egitim",
+        "eğitim",
+        "yetkinlikler",
+        "beceriler",
+        "skills",
+        "sertifikalar",
+        "referanslar",
+        "kisisel bilgiler",
+        "kişisel bilgiler"
+        "dijital yetkinlikler",
+        "sürücü bilgileri",
+        "arac deneyimi",
+        "araç deneyimi",
+        "iletisim",
+        "iletişim",
+        "referanslar",
+    }
+
+    collecting = False
+
+    for line in lines:
+        clean = clean_ocr_line(line)
+        normalized = normalize_text(clean)
+
+        if normalized in experience_headings:
+            collecting = True
+            continue
+
+        if collecting and normalized in stop_headings:
+            break
+
+        if not collecting:
+            continue
+
+        if not clean:
+            continue
+
+        experience.append({
+            "text": clean
+        })
+
+    return experience
 def parse_candidate(text: str) -> dict:
     print(">>> PARSER ÇALIŞTI <<<")
 
@@ -138,6 +193,7 @@ def parse_candidate(text: str) -> dict:
 
     if not candidate_name:
         candidate_name = extract_fallback_name(lines)
+        experience = extract_experience(lines)
 
     return {
         "name": candidate_name,
@@ -145,6 +201,6 @@ def parse_candidate(text: str) -> dict:
         "email": email_match.group(0) if email_match else "",
         "phone": phone_match.group(0) if phone_match else "",
         "education": [],
-        "experience": [],
+        "experience": experience,
         "skills": []
     }

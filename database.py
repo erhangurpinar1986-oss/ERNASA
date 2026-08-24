@@ -111,7 +111,8 @@ def initialize_database():
             company TEXT,
             position TEXT,
             expires_at TEXT,
-            status TEXT
+            status TEXT,
+            cv_text TEXT
         )
     """)
 

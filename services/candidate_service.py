@@ -11,7 +11,6 @@ def generate_candidate_number():
             SELECT last_number
             FROM candidate_sequence
             WHERE id = 1
-            FOR UPDATE
         """)
 
         row = cursor.fetchone()

@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from database import initialize_database, get_connection
 from services.candidate_service import create_interview_identity
 from fastapi.staticfiles import StaticFiles
+from services.ai_service import generate_interview_question
 
 app = FastAPI(
     title="ERNASA API",
@@ -129,9 +130,10 @@ def create_interview_link(candidate: dict):
             company,
             position,
             expires_at,
-            status
+            status,
+            cv_text
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?,?)
         """,
         (
             interview_id,
@@ -141,7 +143,8 @@ def create_interview_link(candidate: dict):
             candidate.get("company", ""),
             candidate.get("position", ""),
             expires_at.isoformat(),
-            "waiting"
+            "waiting",
+            candidate.get("cv_text", "")
         )
     )
 
@@ -156,7 +159,7 @@ def create_interview_link(candidate: dict):
         "expires_at": expires_at.isoformat(),
         "status": "waiting",
         "interview_url":
-            f"https://ernasa.com/interview/{interview_id}"
+            f"http://127.0.0.1:8000/interview/{interview_id}"
     }
 @app.get("/api/interview-links/{token}")
 def get_interview_link(token: str):
@@ -245,17 +248,27 @@ def start_interview(token: str):
     connection.commit()
     connection.close()
 
+    cv_text = interview.get("cv_text", "") or ""
+    position = interview.get("position", "") or ""
+
+    ai_question = (
+        "Merhaba, hoş geldiniz. Bu görüşmede sizi ve çalışma deneyimlerinizi "
+        "biraz daha yakından tanımaya çalışacağım. Burada doğru ya da yanlış "
+        "cevap yok; soruları kendi deneyimlerinize göre rahatça yanıtlayabilirsiniz. "
+        "Hazırsanız, öncelikle kendinizden biraz bahseder misiniz?"
+    )
+
     return {
         "success": True,
         "status": "started",
         "question_number": 1,
-        "question": "Kendinizi kısaca tanıtır mısınız?"
+        "question": ai_question
     }
 @app.post("/api/interviews/{token}/answer")
 def submit_interview_answer(token: str, payload: dict):
     answer = str(payload.get("answer", "")).strip()
     question_number = int(payload.get("question_number", 1))
-
+    question_text = str(payload.get("question", "")).strip()
     if not answer:
         raise HTTPException(
             status_code=400,
@@ -281,8 +294,12 @@ def submit_interview_answer(token: str, payload: dict):
                 status_code=404,
                 detail="Mülakat bağlantısı bulunamadı."
             )
+        interview = dict(row)
+        cv_text = interview.get("cv_text", "") or ""
+        position = interview.get("position", "") or ""
+        print("MULAKAT CV METNI:", cv_text[:500])
 
-        question_text = "Kendinizi kısaca tanıtır mısınız?"
+
 
         cursor.execute(
             """
@@ -305,12 +322,57 @@ def submit_interview_answer(token: str, payload: dict):
         )
 
         connection.commit()
+        cursor.execute(
+            """
+            SELECT question_number, question, answer
+            FROM interview_answers
+            WHERE token = ?
+            ORDER BY question_number ASC
+            """,
+            (token,)
+        )
+
+        history_rows = cursor.fetchall()
+
+        previous_answers = "\n".join(
+            [
+                f"Soru {row['question_number']}: {row['question']}\n"
+                f"Cevap: {row['answer']}"
+                for row in history_rows
+            ]
+        )
+        if question_number >= 10:
+            cursor.execute(
+                """
+                UPDATE interview_links
+                SET status = ?
+                WHERE token = ?
+                """,
+                ("completed", token)
+            )
+            connection.commit()
+
+            return {
+                "success": True,
+                "completed": True,
+                "message": "Mülakat tamamlandı.",
+                "question_number": 10,
+                "question": None
+            }
+        next_question_number = question_number + 1
+
+        ai_question = generate_interview_question(
+            cv_text=cv_text,
+            position=position,
+            previous_answers=previous_answers,
+            question_number=next_question_number
+        )
 
         return {
             "success": True,
             "message": "Cevap kaydedildi.",
-            "question_number": 2,
-            "question": "Daha önce yaptığınız işlerden ve sorumluluklarınızdan kısaca bahseder misiniz?"
+            "question_number": next_question_number,
+            "question": ai_question
         }
 
     finally:
