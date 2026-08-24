@@ -161,7 +161,7 @@ def create_interview_link(candidate: dict):
         "expires_at": expires_at.isoformat(),
         "status": "waiting",
         "interview_url":
-            f"http://127.0.0.1:8000/interview/{interview_id}"
+            f"https://ernasa.com/interview/{interview_id}"
     }
 @app.get("/api/interview-links/{token}")
 def get_interview_link(token: str):
