@@ -1,0 +1,263 @@
+    <!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>ERNASA İK Portalı</title>
+
+    <link rel="stylesheet" href="/static/ik.css">
+</head>
+
+
+<body>
+
+    <main class="page">
+
+        <section class="portal-panel">
+
+            <header class="topbar">
+
+                <div class="brand-area">
+
+                    <div class="brand-logo">
+                        E
+                    </div>
+
+                    <div>
+                        <h1>ERNASA İK Portalı</h1>
+                        <p>Yapay Zekâ Destekli İnsan Kaynakları Asistanı</p>
+                    </div>
+
+                </div>
+
+                <a href="index.html" class="candidate-link">
+                    Aday Portalını Aç
+                </a>
+
+            </header>
+
+            <section class="upload-card">
+
+                <div class="section-heading">
+                    <span class="step-number">1</span>
+
+                    <div>
+                        <h2>CV Yükleme</h2>
+                        <p>
+                            Adayın PDF veya DOCX formatındaki öz geçmişini yükleyiniz.
+                        </p>
+                    </div>
+                </div>
+
+                <label class="upload-area" for="cvFile">
+
+                    <input
+                        type="file"
+                        id="cvFile"
+                        accept=".pdf,.doc,.docx"
+                    >
+
+                    <span class="upload-icon">↑</span>
+
+                    <strong>CV dosyasını seçin</strong>
+
+                    <span>
+                        veya bu alana sürükleyip bırakın
+                    </span>
+
+                    <small>
+                        Desteklenen formatlar: PDF, DOC, DOCX
+                    </small>
+
+                </label>
+
+                <div class="file-status" id="fileStatus">
+                    Henüz CV yüklenmedi.
+                </div>
+
+                <button
+                    type="button"
+                    id="analyzeButton"
+                    class="primary-button"
+                    disabled
+                >
+                    CV'Yİ ANALİZ ET
+                </button>
+
+            </section>
+
+            <section class="candidate-card">
+
+                <div class="section-heading">
+                    <span class="step-number">2</span>
+
+                    <div>
+                        <h2>Aday Bilgileri</h2>
+                        <p>
+                            CV'den çıkarılan bilgileri kontrol edip gerektiğinde düzenleyiniz.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="form-grid">
+
+                    <div class="form-group">
+                        <label for="candidateName">Ad Soyad</label>
+                        <input
+                            type="text"
+                            id="candidateName"
+                            placeholder="CV'den otomatik doldurulacak"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="candidatePhone">Telefon</label>
+                        <input
+                            type="tel"
+                            id="candidatePhone"
+                            placeholder="CV'den otomatik doldurulacak"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="candidateEmail">E-posta</label>
+                        <input
+                            type="email"
+                            id="candidateEmail"
+                            placeholder="CV'den otomatik doldurulacak"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="companyName">Firma</label>
+                        <input
+                            type="text"
+                            id="companyName"
+                            value="Arvato Lojistik"
+                        >
+                    </div>
+
+                    <div class="form-group form-group-full">
+                        <label for="positionName">Pozisyon</label>
+                        <input
+                            type="text"
+                            id="positionName"
+                            placeholder="Pozisyon giriniz (Örn: Lojistik Personeli)"
+                            autocomplete="off"
+                            required
+                         >
+                    </div>
+
+                </div>
+
+            </section>
+
+            <section class="analysis-card">
+
+                <div class="section-heading">
+                    <span class="step-number">3</span>
+
+                    <div>
+                        <h2>Yapay Zekâ Analizi</h2>
+                        <p>
+                            Sistem CV'deki iletişim, eğitim ve deneyim bilgilerini inceleyecektir.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="analysis-box" id="analysisBox">
+
+                    <div class="analysis-empty">
+                        Analizi başlatmak için önce bir CV yükleyiniz.
+                    </div>
+
+                </div>
+
+                <button
+                    type="button"
+                    id="createLinkButton"
+                    class="primary-button"
+                    disabled
+                >
+                    MÜLAKAT LİNKİ OLUŞTUR
+                </button>
+<div id="interviewActions" style="display:none; margin-top:16px;">
+
+    <div style="margin-bottom:10px; font-weight:600;">
+        Aday No:
+        <span id="candidateNumber">-</span>
+    </div>
+
+    <input
+        id="interviewLink"
+        type="text"
+        readonly
+        style="
+            width:100%;
+            box-sizing:border-box;
+            padding:12px;
+            border:1px solid #cfd8dc;
+            border-radius:8px;
+            font-size:15px;
+            background:#f8f9fa;
+            margin-bottom:12px;
+        "
+    >
+
+    <div style="
+        display:flex;
+        gap:10px;
+        flex-wrap:wrap;
+    ">
+
+        <button
+            id="copyLinkButton"
+            type="button"
+            class="primary-button"
+        >
+            📋 Linki Kopyala
+        </button>
+
+        <button
+            id="whatsappButton"
+            type="button"
+            class="primary-button"
+        >
+            📱 WhatsApp
+        </button>
+
+        <button
+            id="emailButton"
+            type="button"
+            class="primary-button"
+        >
+            📧 E-posta
+        </button>
+
+    </div>
+
+    <div
+        id="candidateStatus"
+        style="
+            margin-top:12px;
+            font-weight:600;
+        "
+    >
+        Durum: -
+    </div>
+
+</div>
+
+        <footer class="footer">
+            © 2026 ERNASA Yazılım Teknoloji Bilişim A.Ş.
+        </footer>
+
+    </section>
+
+</main>
+
+<script src="/static/ik.js"></script>
+
+</body>
+</html>
