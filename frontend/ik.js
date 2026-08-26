@@ -121,7 +121,7 @@ analyzeButton.addEventListener("click", async () => {
 formData.append("cv", selectedFile);
 
 const uploadResponse = await fetch(
-    "http://127.0.0.1:8000/api/cv/upload",
+    "/api/cv/upload",
     {
         method: "POST",
         body: formData
@@ -238,7 +238,7 @@ createLinkButton.addEventListener("click", async () => {
         createLinkButton.textContent = "LİNK OLUŞTURULUYOR...";
 
         const response = await fetch(
-            "http://127.0.0.1:8000/api/interview-links",
+            "/api/interview-links",
             {
                 method: "POST",
                 headers: {

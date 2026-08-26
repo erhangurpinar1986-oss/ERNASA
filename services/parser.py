@@ -193,7 +193,7 @@ def parse_candidate(text: str) -> dict:
 
     if not candidate_name:
         candidate_name = extract_fallback_name(lines)
-        experience = extract_experience(lines)
+    experience = extract_experience(lines)
 
     return {
         "name": candidate_name,
