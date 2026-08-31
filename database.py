@@ -115,6 +115,11 @@ def initialize_database():
             cv_text TEXT
         )
     """)
+    if DATABASE_URL:
+        cursor.execute("""
+            ALTER TABLE interview_links
+            ADD COLUMN IF NOT EXISTS cv_text TEXT
+        """)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS candidate_sequence (
