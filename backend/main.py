@@ -117,7 +117,7 @@ def create_interview_link(candidate: dict):
     security_code = identity["security_code"]
     interview_id = identity["interview_id"]
 
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=48)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=8)
 
     connection = get_connection()
     cursor = connection.cursor()
