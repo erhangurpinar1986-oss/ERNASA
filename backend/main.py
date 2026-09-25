@@ -380,37 +380,37 @@ def submit_interview_answer(token: str, payload: dict):
     finally:
         connection.close()
 
-    @app.get("/api/hr/interviews")
-    def get_hr_interviews():
-        connection = get_connection()
-        cursor = connection.cursor()
+@app.get("/api/hr/interviews")
+def get_hr_interviews():
+    connection = get_connection()
+    cursor = connection.cursor()
 
-        try:
-            cursor.execute(
-                """
-                SELECT
-                    token,
-                    name,
-                    phone,
-                    email,
-                    company,
-                    position,
-                    status,
-                    expires_at
-                FROM interview_links
-                ORDER BY token DESC
-                """
-            )
+    try:
+        cursor.execute(
+            """
+            SELECT
+                token,
+                name,
+                phone,
+                email,
+                company,
+                position,
+                status,
+                expires_at
+            FROM interview_links
+            ORDER BY token DESC
+            """
+        )
 
-            rows = cursor.fetchall()
+        rows = cursor.fetchall()
 
-            return {
-                "success": True,
-                "interviews": [dict(row) for row in rows]
-            }
+        return {
+            "success": True,
+            "interviews": [dict(row) for row in rows]
+        }
 
-        finally:
-            connection.close()
+    finally:
+        connection.close()
 
 @app.get("/api/hr/interviews/{token}")
 def get_hr_interview_detail(token: str):
