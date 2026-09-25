@@ -353,7 +353,7 @@ whatsappButton.addEventListener("click", () => {
         `${company} bünyesindeki ${position} pozisyonu için ` +
         `online mülakat bağlantınız oluşturulmuştur.\n\n` +
         `Mülakatınızı aşağıdaki bağlantı üzerinden ` +
-        `48 saat içerisinde tamamlamanızı rica ederiz.\n\n` +
+        `8 saat içerisinde tamamlamanızı rica ederiz.\n\n` +
         `${interviewLink}\n\n` +
         `Başarılar dileriz.\n\n` +
         `ERNASA Yapay Zekâ İnsan Kaynakları Asistanı`;
@@ -393,7 +393,7 @@ emailButton.addEventListener("click", () => {
         `${company} bünyesindeki ${position} pozisyonu için ` +
         `online mülakat bağlantınız oluşturulmuştur.\n\n` +
         `${interviewLink}\n\n` +
-        `Mülakatınızı 48 saat içerisinde tamamlamanızı rica ederiz.\n\n` +
+        `Mülakatınızı 8 saat içerisinde tamamlamanızı rica ederiz.\n\n` +
         `İyi çalışmalar.`;
 
     const url =
