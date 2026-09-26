@@ -488,7 +488,7 @@ async function openInterviewReport(token) {
 
         const interview = data.interview;
         const answers = data.answers || [];
-        const jobFitAnalysis = data.job_fit_analysis || "";
+        const jobFitAnalysis = (data.job_fit_analysis || "").trim();
         resultsBox.innerHTML = `
             <div style="
                 border:1px solid #d9e2ec;
