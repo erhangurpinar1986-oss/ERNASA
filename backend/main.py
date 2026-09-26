@@ -403,7 +403,49 @@ def get_hr_interviews():
         )
 
         rows = cursor.fetchall()
+        for row in rows:
+            token = row["token"]
 
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS answer_count
+                FROM interview_answers
+                WHERE token = ?
+                """,
+                (token,)
+            )
+
+            answer_count = cursor.fetchone()["answer_count"]
+
+            if answer_count >= 10 and row["status"] != "completed":
+                cursor.execute(
+                    """
+                    UPDATE interview_links
+                    SET status = ?
+                    WHERE token = ?
+                    """,
+                    ("completed", token)
+                )
+
+        connection.commit()
+
+        cursor.execute(
+            """
+            SELECT
+                token,
+                name,
+                phone,
+                email,
+                company,
+                position,
+                status,
+                expires_at
+            FROM interview_links
+            ORDER BY token DESC
+            """
+        )
+
+        rows = cursor.fetchall()
         return {
             "success": True,
             "interviews": [dict(row) for row in rows]
