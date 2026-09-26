@@ -428,19 +428,33 @@ async function loadInterviewResults() {
         }
 
         resultsBox.innerHTML = data.interviews.map(interview => `
-            <div style="
-                border:1px solid #e0e0e0;
-                border-radius:10px;
-                padding:16px;
-                margin-bottom:12px;
-                background:#ffffff;
-            ">
-                <strong>${interview.token}</strong><br>
-                ${interview.name || "Ad bilgisi yok"}<br>
-                ${interview.company || "-"} - ${interview.position || "-"}<br>
-                <strong>Durum:</strong> ${interview.status || "-"}
+
+    <div style="
+        border:1px solid #e0e0e0;
+        border-radius:10px;
+        padding:16px;
+        margin-bottom:12px;
+        background:#ffffff;
+    ">
+        <strong>${interview.token}</strong><br>
+        ${interview.name || "Ad bilgisi yok"}<br>
+        ${interview.company || "-"} - ${interview.position || "-"}<br>
+        <strong>Durum:</strong> ${interview.status || "-"}
+
+        ${interview.status === "completed" ? `
+            <div style="margin-top:12px;">
+                <button
+                    type="button"
+                    class="primary-button"
+                    onclick="openInterviewReport('${interview.token}')"
+                >
+                    RAPORU GÖRÜNTÜLE
+                </button>
             </div>
-        `).join("");
+        ` : ""}
+    </div>
+`).join("");
+
 
     } catch (error) {
         resultsBox.innerHTML = `
@@ -454,3 +468,88 @@ async function loadInterviewResults() {
 }
 
 loadInterviewResults();
+
+async function openInterviewReport(token) {
+    const resultsBox = document.getElementById("interviewResults");
+
+    try {
+        resultsBox.innerHTML = `
+            <div class="analysis-empty">
+                Mülakat raporu yükleniyor...
+            </div>
+        `;
+
+        const response = await fetch(`/api/hr/interviews/${token}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error("Mülakat raporu alınamadı.");
+        }
+
+        const interview = data.interview;
+        const answers = data.answers || [];
+
+        resultsBox.innerHTML = `
+            <div style="
+                border:1px solid #d9e2ec;
+                border-radius:10px;
+                padding:20px;
+                background:#ffffff;
+            ">
+
+                <h3 style="margin-top:0;">
+                    ${interview.name || "Aday"} - Mülakat Raporu
+                </h3>
+
+                <p>
+                    <strong>Aday No:</strong> ${interview.token}<br>
+                    <strong>Firma:</strong> ${interview.company || "-"}<br>
+                    <strong>Pozisyon:</strong> ${interview.position || "-"}<br>
+                    <strong>Durum:</strong> ${interview.status || "-"}
+                </p>
+
+                <hr>
+
+                ${answers.map(item => `
+                    <div style="
+                        margin-top:18px;
+                        padding:15px;
+                        border:1px solid #e0e0e0;
+                        border-radius:8px;
+                    ">
+                        <strong>Soru ${item.question_number}</strong>
+
+                        <p>
+                            ${item.question_text    }
+                        </p>
+
+                        <strong>Cevap</strong>
+
+                        <p>
+                            ${item.answer}
+                        </p>
+                    </div>
+                `).join("")}
+
+                <button
+                    type="button"
+                    class="primary-button"
+                    style="margin-top:20px;"
+                    onclick="loadInterviewResults()"
+                >
+                    LİSTEYE DÖN
+                </button>
+
+            </div>
+        `;
+
+    } catch (error) {
+        resultsBox.innerHTML = `
+            <div class="analysis-empty">
+                Mülakat raporu yüklenemedi.
+            </div>
+        `;
+
+        console.error(error);
+    }
+}
