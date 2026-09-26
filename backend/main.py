@@ -448,7 +448,7 @@ def get_hr_interview_detail(token: str):
             """
             SELECT
                 question_number,
-                question_text,
+                question,
                 answer,
                 created_at
             FROM interview_answers
