@@ -4,22 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ERNASA Aday Takip Sistemi</title>
+    <link rel="stylesheet" href="/static/ik.css">
 </head>
 
 <body>
 
-<main>
-    <header>
-        <h1>ERNASA Aday Takip Sistemi</h1>
-        <p>Aday süreçlerini, mülakat durumlarını ve değerlendirme raporlarını yönetin.</p>
+<main class="page">
+    <section class="portal-panel">
+    <header class="topbar">
 
-        <a href="/ik">İK Portalına Dön</a>
-    </header>
+    <div class="brand-area">
 
-    <section>
-        <h2>Adaylar</h2>
+        <div class="brand-logo">
+            E
+        </div>
 
         <div>
+            <h1>ERNASA Aday Takip Sistemi</h1>
+            <p>Yapay Zekâ Destekli Aday Yönetim Merkezi</p>
+        </div>
+
+    </div>
+
+    <a href="/ik" class="candidate-link">
+        İK Portalına Dön
+    </a>
+
+</header>
+    <section class="analysis-card">
+    <div class="section-heading">
+        <div class="step-badge">1</div>
+
+        <div>
+            <h2>Aday Takip Merkezi</h2>
+            <p>Adayları arayın, mülakat durumlarını takip edin ve tamamlanan raporları görüntüleyin.</p>
+        </div>
+    </div>
+
+        <div class="form-grid">
             <input
                 type="text"
                 id="candidateSearch"
@@ -36,13 +58,17 @@
             </select>
         </div>
 
-        <div id="candidateSummary">
-            Toplam aday: -
-        </div>
+        <div class="analysis-result" style="margin-top:16px;">
+    <strong>Aday Özeti</strong>
+    <div id="candidateSummary" style="margin-top:8px;">
+        Toplam aday: -
+    </div>
+</div>
 
         <div id="candidateList">
             Adaylar yükleniyor...
         </div>
+        </section>
     </section>
 </main>
 

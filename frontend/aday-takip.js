@@ -60,27 +60,51 @@ function renderCandidates() {
         return;
     }
 
-    candidateList.innerHTML = filteredCandidates.map(candidate => `
-        <div>
-            <strong>${candidate.token}</strong><br>
-            ${candidate.name || "Ad bilgisi yok"}<br>
-            ${candidate.company || "-"} - ${candidate.position || "-"}<br>
-            <strong>Durum:</strong>
-            ${statusLabels[candidate.status] || candidate.status || "-"}
-            <br><br>
+   candidateList.innerHTML = filteredCandidates.map(candidate => `
+    <div class="analysis-result" style="margin-top:12px;">
+        <div style="
+            display:flex;
+            justify-content:space-between;
+            align-items:flex-start;
+            gap:16px;
+            flex-wrap:wrap;
+        ">
+            <div>
+                <strong style="font-size:16px;">
+                    ${candidate.name || "Ad bilgisi yok"}
+                </strong>
 
-            ${candidate.status === "completed" ? `
-                <button
-                    type="button"
-                    onclick="openCandidateReport('${candidate.token}')"
-                >
-                    Raporu Görüntüle
-                </button>
-            ` : ""}
+                <div style="margin-top:5px;">
+                    <strong>Aday No:</strong> ${candidate.token}
+                </div>
 
-            <hr>
+                <div style="margin-top:4px;">
+                    <strong>Firma:</strong> ${candidate.company || "-"}
+                </div>
+
+                <div style="margin-top:4px;">
+                    <strong>Pozisyon:</strong> ${candidate.position || "-"}
+                </div>
+            </div>
+
+            <div>
+                <strong>Durum:</strong>
+                ${statusLabels[candidate.status] || candidate.status || "-"}
+            </div>
         </div>
-    `).join("");
+
+        ${candidate.status === "completed" ? `
+            <button
+                type="button"
+                class="primary-button"
+                style="margin-top:14px;"
+                onclick="openCandidateReport('${candidate.token}')"
+            >
+                RAPORU GÖRÜNTÜLE
+            </button>
+        ` : ""}
+    </div>
+`).join("");
 }
 
 function openCandidateReport(token) {
