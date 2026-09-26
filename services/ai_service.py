@@ -115,3 +115,72 @@ Bu örnekleri aynen tekrarlamak zorunda değilsin. Aynı sadelikte ve doğallık
         return "Mesleki deneyiminizden, bu pozisyonda size katkı sağlayacağını düşündüğünüz bir örnek paylaşır mısınız?"
 
     return question
+
+
+def generate_job_fit_analysis(
+    cv_text: str,
+    position: str,
+    interview_answers: str
+) -> str:
+
+    prompt = f"""
+Sen ERNASA adlı yapay zeka destekli insan kaynakları sisteminin
+işe uygunluk analiz asistanısın.
+
+Adayı yalnızca aşağıdaki bilgiler üzerinden değerlendir.
+
+BAŞVURULAN POZİSYON:
+{position}
+
+ADAYIN CV METNİ:
+{cv_text}
+
+MÜLAKAT SORU VE CEVAPLARI:
+{interview_answers}
+
+Görevin aday hakkında işe alım kararı vermek değil,
+İK uzmanına objektif ve açıklanabilir karar desteği sağlamaktır.
+
+Adayı başvurduğu pozisyonun gerçek gerekliliklerine göre değerlendir.
+
+Aşağıdaki başlıklarda 0-100 arasında uyum yüzdesi üret:
+
+- Genel Pozisyon Uyumu
+- Mesleki Deneyim Uyumu
+- Mesleki Bilgi / Uygulama
+- Problem Çözme
+- İletişim
+- Takım Çalışması
+
+Ardından kısa şekilde:
+
+GÜÇLÜ YÖNLER:
+Adayın CV ve mülakat cevaplarıyla desteklenen güçlü yönlerini yaz.
+
+GELİŞTİRİLMESİ GEREKEN ALANLAR:
+Pozisyon açısından geliştirilmesi gereken noktaları yaz.
+
+DİKKAT EDİLMESİ GEREKEN NOKTALAR:
+Eksik, belirsiz veya doğrulanması gereken bilgiler varsa belirt.
+Kanıt yoksa varsayım yapma.
+
+İK DEĞERLENDİRME ÖZETİ:
+Adayın pozisyonla hangi yönlerden örtüştüğünü ve hangi alanların
+İK tarafından ayrıca değerlendirilmesi gerektiğini kısa ve profesyonel şekilde açıkla.
+
+KURALLAR:
+- Türkçe yaz.
+- İşe alınmalı veya işe alınmamalı şeklinde karar verme.
+- Yaş, cinsiyet, medeni durum ve benzeri kişisel özellikleri değerlendirmeye katma.
+- Yalnızca işle ilgili bilgi ve cevapları kullan.
+- CV'de veya cevaplarda bulunmayan bilgileri uydurma.
+- Her yüzdeyi mevcut kanıtlara göre ver.
+- Kısa, anlaşılır ve profesyonel yaz.
+"""
+
+    response = client.responses.create(
+        model="gpt-5",
+        input=prompt
+    )
+
+    return response.output_text.strip()

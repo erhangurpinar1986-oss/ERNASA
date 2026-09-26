@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from database import initialize_database, get_connection
 from services.candidate_service import create_interview_identity
 from fastapi.staticfiles import StaticFiles
-from services.ai_service import generate_interview_question
+from services.ai_service import generate_interview_question, generate_job_fit_analysis
 
 app = FastAPI(
     title="ERNASA API",
@@ -501,11 +501,27 @@ def get_hr_interview_detail(token: str):
         )
 
         answer_rows = cursor.fetchall()
+        interview_data = dict(interview_row)
+
+        interview_answers_text = "\n\n".join(
+            [
+                f"Soru {row['question_number']}: {row['question']}\n"
+                f"Cevap: {row['answer']}"
+                for row in answer_rows
+            ]
+        )
+
+        job_fit_analysis = generate_job_fit_analysis(
+            cv_text=interview_data.get("cv_text", "") or "",
+            position=interview_data.get("position", "") or "",
+            interview_answers=interview_answers_text
+        )
 
         return {
             "success": True,
-            "interview": dict(interview_row),
-            "answers": [dict(row) for row in answer_rows]
+            "interview": interview_data,
+            "answers": [dict(row) for row in answer_rows],
+            "job_fit_analysis": job_fit_analysis
         }
 
     finally:
