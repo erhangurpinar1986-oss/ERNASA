@@ -22,6 +22,14 @@ const startInterviewButton = document.getElementById(
 );
 const pathParts = window.location.pathname.split("/");
 const interviewToken = pathParts[pathParts.length - 1];
+if (interviewToken) {
+    fetch(`/api/interviews/${interviewToken}/opened`, {
+        method: "POST"
+    }).catch(error => {
+        console.error("Mülakat açılma durumu güncellenemedi:", error);
+    });
+}
+
 const kvkkText = `
     <h3>
         6698 Sayılı Kişisel Verilerin Korunması Kanunu

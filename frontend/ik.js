@@ -426,7 +426,13 @@ async function loadInterviewResults() {
             `;
             return;
         }
-
+const statusLabels = {
+    waiting: "Bekliyor",
+    opened: "Link Açıldı",
+    started: "Mülakat Başladı",
+    completed: "Tamamlandı",
+    expired: "Süresi Doldu"
+};
         resultsBox.innerHTML = data.interviews.map(interview => `
 
     <div style="
@@ -439,7 +445,7 @@ async function loadInterviewResults() {
         <strong>${interview.token}</strong><br>
         ${interview.name || "Ad bilgisi yok"}<br>
         ${interview.company || "-"} - ${interview.position || "-"}<br>
-        <strong>Durum:</strong> ${interview.status || "-"}
+        <strong>Durum:</strong> ${statusLabels[interview.status] || interview.status || "-"}
 
         ${interview.status === "completed" ? `
             <div style="margin-top:12px;">
@@ -468,6 +474,10 @@ async function loadInterviewResults() {
 }
 
 loadInterviewResults();
+
+setInterval(() => {
+    loadInterviewResults();
+}, 10000);
 
 async function openInterviewReport(token) {
     const resultsBox = document.getElementById("interviewResults");

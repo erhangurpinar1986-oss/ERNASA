@@ -208,6 +208,41 @@ def get_interview_link(token: str):
 @app.get("/interview/{token}")
 def open_interview(token: str):
     return FileResponse(FRONTEND_DIR / "index.html")
+@app.post("/api/interviews/{token}/opened")
+def mark_interview_opened(token: str):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "SELECT status FROM interview_links WHERE token = ?",
+        (token,)
+    )
+
+    row = cursor.fetchone()
+
+    if not row:
+        connection.close()
+        raise HTTPException(
+            status_code=404,
+            detail="Mülakat bağlantısı bulunamadı."
+        )
+
+    if row["status"] == "waiting":
+        cursor.execute(
+            """
+            UPDATE interview_links
+            SET status = ?
+            WHERE token = ?
+            """,
+            ("opened", token)
+        )
+        connection.commit()
+
+    connection.close()
+
+    return {
+        "success": True
+    }
 @app.post("/api/interviews/{token}/start")
 def start_interview(token: str):
     connection = get_connection()
@@ -232,7 +267,17 @@ def start_interview(token: str):
     expires_at = datetime.fromisoformat(interview["expires_at"])
 
     if datetime.now(timezone.utc) > expires_at:
+        cursor.execute(
+            """
+            UPDATE interview_links
+            SET status = ?
+            WHERE token = ?
+            """,
+            ("expired", token)
+        )
+        connection.commit()
         connection.close()
+
         raise HTTPException(
             status_code=410,
             detail="Mülakat bağlantısının süresi dolmuş."
