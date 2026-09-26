@@ -520,7 +520,7 @@ async function openInterviewReport(token) {
                         <strong>Soru ${item.question_number}</strong>
 
                         <p>
-                            ${item.question_text    }
+                            ${item.question}
                         </p>
 
                         <strong>Cevap</strong>
