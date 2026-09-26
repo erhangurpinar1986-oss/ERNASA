@@ -501,6 +501,15 @@ def get_hr_interview_detail(token: str):
         )
 
         answer_rows = cursor.fetchall()
+        unique_answers = {}
+
+        for row in answer_rows:
+            question_number = row["question_number"]
+
+            if question_number not in unique_answers:
+                unique_answers[question_number] = row
+
+        answer_rows = list(unique_answers.values())
         interview_data = dict(interview_row)
 
         interview_answers_text = "\n\n".join(
