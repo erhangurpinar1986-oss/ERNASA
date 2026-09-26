@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERNASA Aday Takip Sistemi</title>
+</head>
+
+<body>
+
+<main>
+    <header>
+        <h1>ERNASA Aday Takip Sistemi</h1>
+        <p>Aday süreçlerini, mülakat durumlarını ve değerlendirme raporlarını yönetin.</p>
+
+        <a href="/ik">İK Portalına Dön</a>
+    </header>
+
+    <section>
+        <h2>Adaylar</h2>
+
+        <div>
+            <input
+                type="text"
+                id="candidateSearch"
+                placeholder="Aday adı, aday numarası veya pozisyon ara..."
+            >
+
+            <select id="statusFilter">
+                <option value="">Tüm Durumlar</option>
+                <option value="waiting">Bekliyor</option>
+                <option value="opened">Link Açıldı</option>
+                <option value="started">Mülakat Başladı</option>
+                <option value="completed">Tamamlandı</option>
+                <option value="expired">Süresi Doldu</option>
+            </select>
+        </div>
+
+        <div id="candidateSummary">
+            Toplam aday: -
+        </div>
+
+        <div id="candidateList">
+            Adaylar yükleniyor...
+        </div>
+    </section>
+</main>
+
+</body>
+</html>
