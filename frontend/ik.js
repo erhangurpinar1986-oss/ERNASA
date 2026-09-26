@@ -488,7 +488,7 @@ async function openInterviewReport(token) {
 
         const interview = data.interview;
         const answers = data.answers || [];
-
+        const jobFitAnalysis = data.job_fit_analysis || "";
         resultsBox.innerHTML = `
             <div style="
                 border:1px solid #d9e2ec;
@@ -509,7 +509,23 @@ async function openInterviewReport(token) {
                 </p>
 
                 <hr>
+${jobFitAnalysis ? `
+    <div style="
+        margin:20px 0;
+        padding:18px;
+        border:1px solid #d9e2ec;
+        border-radius:10px;
+        background:#f8fafc;
+    ">
+        <h3 style="margin-top:0;">AI İşe Uygunluk Analizi</h3>
 
+        <div style="white-space:pre-wrap; line-height:1.6;">
+            ${jobFitAnalysis}
+        </div>
+    </div>
+
+    <hr>
+` : ""}
                 ${answers.map(item => `
                     <div style="
                         margin-top:18px;
