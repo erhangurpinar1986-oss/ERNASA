@@ -403,3 +403,54 @@ emailButton.addEventListener("click", () => {
 
     window.location.href = url;
 });
+async function loadInterviewResults() {
+    const resultsBox = document.getElementById("interviewResults");
+
+    if (!resultsBox) {
+        return;
+    }
+
+    try {
+        const response = await fetch("/api/hr/interviews");
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error("Mülakat kayıtları alınamadı.");
+        }
+
+        if (!data.interviews || data.interviews.length === 0) {
+            resultsBox.innerHTML = `
+                <div class="analysis-empty">
+                    Henüz mülakat kaydı bulunmuyor.
+                </div>
+            `;
+            return;
+        }
+
+        resultsBox.innerHTML = data.interviews.map(interview => `
+            <div style="
+                border:1px solid #e0e0e0;
+                border-radius:10px;
+                padding:16px;
+                margin-bottom:12px;
+                background:#ffffff;
+            ">
+                <strong>${interview.token}</strong><br>
+                ${interview.name || "Ad bilgisi yok"}<br>
+                ${interview.company || "-"} - ${interview.position || "-"}<br>
+                <strong>Durum:</strong> ${interview.status || "-"}
+            </div>
+        `).join("");
+
+    } catch (error) {
+        resultsBox.innerHTML = `
+            <div class="analysis-empty">
+                Mülakat kayıtları yüklenemedi.
+            </div>
+        `;
+
+        console.error(error);
+    }
+}
+
+loadInterviewResults();
