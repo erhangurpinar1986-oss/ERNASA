@@ -49,6 +49,17 @@ UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx"}
 MAX_FILE_SIZE = 10 * 1024 * 1024
+
+@app.get("/ik")
+def open_hr_panel():
+    return FileResponse(FRONTEND_DIR / "ik.html")
+
+
+@app.get("/aday-takip")
+def open_candidate_tracking():
+    return FileResponse(FRONTEND_DIR / "aday-takip.html")
+
+
 @app.get("/")
 def home():
     return FileResponse(FRONTEND_DIR / "home.html")
