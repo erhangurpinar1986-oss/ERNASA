@@ -10,12 +10,42 @@ from database import initialize_database, get_connection
 from services.candidate_service import create_interview_identity
 from fastapi.staticfiles import StaticFiles
 from services.ai_service import generate_interview_question, generate_job_fit_analysis
+import os
+import secrets
 
+from fastapi import Depends
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 app = FastAPI(
     title="ERNASA API",
     description="Yapay Zekâ Destekli İnsan Kaynakları Asistanı",
     version="1.0.0"
 )
+security = HTTPBasic()
+
+def verify_ik_login(
+    credentials: HTTPBasicCredentials = Depends(security)
+):
+    correct_username = os.getenv("IK_USERNAME", "")
+    correct_password = os.getenv("IK_PASSWORD", "")
+
+    username_ok = secrets.compare_digest(
+        credentials.username,
+        correct_username
+    )
+
+    password_ok = secrets.compare_digest(
+        credentials.password,
+        correct_password
+    )
+
+    if not (username_ok and password_ok):
+        raise HTTPException(
+            status_code=401,
+            detail="Kullanıcı adı veya şifre hatalı.",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    return credentials.username
 initialize_database()
 app.add_middleware(
     CORSMiddleware,
@@ -51,7 +81,7 @@ ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx"}
 MAX_FILE_SIZE = 10 * 1024 * 1024
 
 @app.get("/ik")
-def open_hr_panel():
+def open_hr_panel(_username: str = Depends(verify_ik_login)):
     return FileResponse(FRONTEND_DIR / "ik.html")
 
 
@@ -59,11 +89,13 @@ def open_hr_panel():
 def open_candidate_tracking():
     return FileResponse(FRONTEND_DIR / "aday-takip.html")
 
-
 @app.get("/")
 def home():
     return FileResponse(FRONTEND_DIR / "home.html")
-    
+    @app.get("/")
+    def home():
+        return FileResponse(FRONTEND_DIR / "home.html")
+
 interview_links = {}
 
 @app.post("/api/cv/upload")
