@@ -19,7 +19,10 @@ from fastapi.responses import StreamingResponse
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from io import BytesIO
+
 
 app = FastAPI(
     title="ERNASA API",
@@ -687,6 +690,15 @@ def download_interview_pdf(token: str):
         )
 
         styles = getSampleStyleSheet()
+
+        pdfmetrics.registerFont(
+            TTFont("DejaVuSans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+        )
+
+        styles["Title"].fontName = "DejaVuSans"
+        styles["Heading2"].fontName = "DejaVuSans"
+        styles["BodyText"].fontName = "DejaVuSans"
+        styles["Normal"].fontName = "DejaVuSans"
         story = []
 
         story.append(Paragraph("ERNASA - Aday Mülakat Raporu", styles["Title"]))
