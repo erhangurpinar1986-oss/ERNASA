@@ -638,7 +638,8 @@ def download_interview_pdf(token: str):
                 name,
                 company,
                 position,
-                status
+                status,
+                cv_text
             FROM interview_links
             WHERE token = ?
             """,
@@ -677,6 +678,19 @@ def download_interview_pdf(token: str):
 
         answer_rows = list(unique_answers.values())
         interview = dict(interview_row)
+        interview_answers_text = "\n\n".join(
+            [
+                f"Soru {row['question_number']}: {row['question']}\n"
+                f"Cevap: {row['answer']}"
+                for row in answer_rows
+            ]
+        )
+
+        job_fit_analysis = generate_job_fit_analysis(
+            cv_text=interview.get("cv_text") or "",
+            position=interview.get("position") or "",
+            interview_answers=interview_answers_text
+        )
 
         buffer = BytesIO()
 
@@ -738,6 +752,25 @@ def download_interview_pdf(token: str):
         )
 
         story.append(Spacer(1, 20))
+        story.append(
+            Paragraph(
+                "AI Pozisyon Uyum Değerlendirmesi",
+                styles["Heading2"]
+            )
+        )
+        story.append(Spacer(1, 10))
+
+        for line in job_fit_analysis.splitlines():
+            if line.strip():
+                story.append(
+                    Paragraph(
+                        line.strip(),
+                        styles["Normal"]
+                    )
+                )
+                story.append(Spacer(1, 5))
+
+        story.append(Spacer(1, 15))
         story.append(Paragraph("Mülakat Soruları ve Cevapları", styles["Heading2"]))
         story.append(Spacer(1, 10))
 
