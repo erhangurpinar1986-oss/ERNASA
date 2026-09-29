@@ -12,9 +12,15 @@ from fastapi.staticfiles import StaticFiles
 from services.ai_service import generate_interview_question, generate_job_fit_analysis
 import os
 import secrets
-
 from fastapi import Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import Request
+from fastapi.responses import StreamingResponse
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from io import BytesIO
+
 app = FastAPI(
     title="ERNASA API",
     description="Yapay Zekâ Destekli İnsan Kaynakları Asistanı",
@@ -613,6 +619,137 @@ def get_hr_interview_detail(token: str):
             "answers": [dict(row) for row in answer_rows],
             "job_fit_analysis": job_fit_analysis
         }
+
+    finally:
+        connection.close()
+@app.get("/api/hr/interviews/{token}/pdf")
+def download_interview_pdf(token: str):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT
+                token,
+                name,
+                company,
+                position,
+                status
+            FROM interview_links
+            WHERE token = ?
+            """,
+            (token,)
+        )
+
+        interview_row = cursor.fetchone()
+
+        if not interview_row:
+            raise HTTPException(
+                status_code=404,
+                detail="Mülakat bulunamadı."
+            )
+
+        cursor.execute(
+            """
+            SELECT
+                question_number,
+                question,
+                answer
+            FROM interview_answers
+            WHERE token = ?
+            ORDER BY question_number ASC
+            """,
+            (token,)
+        )
+
+        answer_rows = cursor.fetchall()
+
+        # Aynı soru numarasının PDF'de tekrar etmesini engelle
+        unique_answers = {}
+        for row in answer_rows:
+            question_number = row["question_number"]
+            if question_number not in unique_answers:
+                unique_answers[question_number] = row
+
+        answer_rows = list(unique_answers.values())
+        interview = dict(interview_row)
+
+        buffer = BytesIO()
+
+        document = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            rightMargin=40,
+            leftMargin=40,
+            topMargin=40,
+            bottomMargin=40
+        )
+
+        styles = getSampleStyleSheet()
+        story = []
+
+        story.append(Paragraph("ERNASA - Aday Mülakat Raporu", styles["Title"]))
+        story.append(Spacer(1, 18))
+
+        story.append(
+            Paragraph(
+                f"<b>Aday:</b> {interview.get('name') or '-'}",
+                styles["Normal"]
+            )
+        )
+        story.append(
+            Paragraph(
+                f"<b>Aday No:</b> {interview.get('token') or '-'}",
+                styles["Normal"]
+            )
+        )
+        story.append(
+            Paragraph(
+                f"<b>Firma:</b> {interview.get('company') or '-'}",
+                styles["Normal"]
+            )
+        )
+        story.append(
+            Paragraph(
+                f"<b>Pozisyon:</b> {interview.get('position') or '-'}",
+                styles["Normal"]
+            )
+        )
+
+        story.append(Spacer(1, 20))
+        story.append(Paragraph("Mülakat Soruları ve Cevapları", styles["Heading2"]))
+        story.append(Spacer(1, 10))
+
+        for row in answer_rows:
+            story.append(
+                Paragraph(
+                    f"<b>Soru {row['question_number']}:</b> {row['question']}",
+                    styles["Normal"]
+                )
+            )
+            story.append(Spacer(1, 5))
+            story.append(
+                Paragraph(
+                    f"<b>Cevap:</b> {row['answer']}",
+                    styles["Normal"]
+                )
+            )
+            story.append(Spacer(1, 14))
+
+        document.build(story)
+
+        buffer.seek(0)
+
+        filename = f"ERNASA_{token}_Mulakat_Raporu.pdf"
+
+        return StreamingResponse(
+            buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
 
     finally:
         connection.close()

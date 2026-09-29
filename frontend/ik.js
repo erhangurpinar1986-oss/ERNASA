@@ -763,3 +763,6 @@ async function downloadInterviewPdf(token) {
         alert("PDF raporu hazırlanırken bir hata oluştu.");
     }
 }
+function downloadBackendPdf(token) {
+    window.location.href = `/api/hr/interviews/${token}/pdf`;
+}
