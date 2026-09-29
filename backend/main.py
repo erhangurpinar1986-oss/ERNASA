@@ -17,7 +17,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer,Image
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -700,6 +700,14 @@ def download_interview_pdf(token: str):
         styles["BodyText"].fontName = "DejaVuSans"
         styles["Normal"].fontName = "DejaVuSans"
         story = []
+
+        logo_path = FRONTEND_DIR / "assets" / "ernasalogo.png"
+
+        if logo_path.exists():
+            logo = Image(str(logo_path), width=90, height=90)
+            logo.hAlign = "CENTER"
+            story.append(logo)
+            story.append(Spacer(1, 10))
 
         story.append(Paragraph("ERNASA - Aday Mülakat Raporu", styles["Title"]))
         story.append(Spacer(1, 18))
