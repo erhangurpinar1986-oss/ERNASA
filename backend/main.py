@@ -95,7 +95,9 @@ def open_hr_panel(_username: str = Depends(verify_ik_login)):
 
 
 @app.get("/aday-takip")
-def open_candidate_tracking():
+def open_candidate_tracking(
+    username: str = Depends(verify_ik_login)
+):
     return FileResponse(FRONTEND_DIR / "aday-takip.html")
 
 @app.get("/")
