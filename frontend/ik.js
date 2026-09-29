@@ -556,7 +556,14 @@ ${jobFitAnalysis ? `
                         </p>
                     </div>
                 `).join("")}
-
+<button
+    type="button"
+    class="primary-button"
+    style="margin-top:20px;"
+    onclick="downloadInterviewPdf('${interview.token}')"
+>
+    PDF RAPORU İNDİR
+</button>
                 <button
                     type="button"
                     class="primary-button"
@@ -577,5 +584,182 @@ ${jobFitAnalysis ? `
         `;
 
         console.error(error);
+    }
+}
+async function downloadInterviewPdf(token) {
+    try {
+        const response = await fetch(`/api/hr/interviews/${token}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error("Rapor bilgileri alınamadı.");
+        }
+
+        const interview = data.interview;
+        const answers = data.answers || [];
+        const jobFitAnalysis = (data.job_fit_analysis || "").trim();
+
+        const reportWindow = window.open("", "_blank");
+
+        reportWindow.document.write(`
+            <!DOCTYPE html>
+            <html lang="tr">
+            <head>
+                <meta charset="UTF-8">
+                <title>${interview.name || "Aday"} - ERNASA Mülakat Raporu</title>
+
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        color: #1f2937;
+                        margin: 0;
+                        padding: 35px;
+                    }
+
+                    .report-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        border-bottom: 2px solid #12377c;
+                        padding-bottom: 15px;
+                        margin-bottom: 25px;
+                    }
+
+                    .ernasa-logo {
+                        width: 180px;
+                        max-height: 80px;
+                        object-fit: contain;
+                    }
+
+                    .company-logo {
+                        width: 130px;
+                        height: 70px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        border: 1px dashed #cbd5e1;
+                        color: #64748b;
+                        font-size: 12px;
+                    }
+
+                    h1 {
+                        color: #12377c;
+                        font-size: 22px;
+                        margin-bottom: 5px;
+                    }
+
+                    h2 {
+                        color: #12377c;
+                        font-size: 17px;
+                        margin-top: 25px;
+                    }
+
+                    .candidate-info,
+                    .analysis,
+                    .answer {
+                        border: 1px solid #d9e2ec;
+                        border-radius: 8px;
+                        padding: 15px;
+                        margin-bottom: 15px;
+                    }
+
+                    .analysis {
+                        white-space: pre-wrap;
+                        line-height: 1.6;
+                        background: #f8fafc;
+                    }
+
+                    .answer {
+                        page-break-inside: avoid;
+                    }
+
+                    .question {
+                        font-weight: bold;
+                        margin-bottom: 8px;
+                    }
+
+                    .footer {
+                        margin-top: 35px;
+                        padding-top: 12px;
+                        border-top: 1px solid #d9e2ec;
+                        text-align: center;
+                        font-size: 11px;
+                        color: #64748b;
+                    }
+
+                    @media print {
+                        body {
+                            padding: 10px;
+                        }
+                    }
+                </style>
+            </head>
+
+            <body>
+
+                <div class="report-header">
+                    <img
+                        src="/static/assets/ernasalogo.png"
+                        class="ernasa-logo"
+                        alt="ERNASA"
+                    >
+
+                    <div class="company-logo">
+                        Firma Logosu
+                    </div>
+                </div>
+
+                <h1>Yapay Zekâ Destekli Aday Değerlendirme Raporu</h1>
+
+                <div class="candidate-info">
+                    <strong>Aday:</strong> ${interview.name || "-"}<br>
+                    <strong>Aday No:</strong> ${interview.token || "-"}<br>
+                    <strong>Firma:</strong> ${interview.company || "-"}<br>
+                    <strong>Pozisyon:</strong> ${interview.position || "-"}<br>
+                    <strong>Durum:</strong> ${interview.status || "-"}
+                </div>
+
+                <h2>AI İşe Uygunluk Analizi</h2>
+
+                <div class="analysis">
+                    ${jobFitAnalysis || "Değerlendirme bulunamadı."}
+                </div>
+
+                <h2>Mülakat Soru ve Cevapları</h2>
+
+                ${answers.map(item => `
+                    <div class="answer">
+                        <div class="question">
+                            Soru ${item.question_number}: ${item.question || ""}
+                        </div>
+
+                        <div>
+                            <strong>Cevap:</strong> ${item.answer || ""}
+                        </div>
+                    </div>
+                `).join("")}
+
+                <div class="footer">
+                    ERNASA Yapay Zekâ Destekli İnsan Kaynakları Sistemi<br>
+                    Rapor Tarihi: ${new Date().toLocaleString("tr-TR")}
+                </div>
+
+                <script>
+                    window.onload = function () {
+                        setTimeout(function () {
+                            window.print();
+                        }, 500);
+                    };
+                <\/script>
+
+            </body>
+            </html>
+        `);
+
+        reportWindow.document.close();
+
+    } catch (error) {
+        console.error(error);
+        alert("PDF raporu hazırlanırken bir hata oluştu.");
     }
 }
