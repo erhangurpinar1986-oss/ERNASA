@@ -13,31 +13,142 @@
 <body>
 
     <main class="page">
+        <aside class="dashboard-sidebar">
+
+    <div class="sidebar-brand">
+        <img src="/assets/ernasalogo.png" alt="ERNASA">
+        <div>
+            <strong>ERNASA</strong>
+            <span>İK Yönetim Sistemi</span>
+        </div>
+    </div>
+
+    <nav class="sidebar-menu">
+        <a href="#" class="sidebar-item active">
+            <span>⌂</span>
+            Genel Bakış
+        </a>
+
+        <a href="#cvFile" class="sidebar-item">
+            <span>▣</span>
+            CV Analizi
+        </a>
+
+        <a href="/aday-takip" class="sidebar-item">
+            <span>♙</span>
+            Adaylar
+        </a>
+
+        <a href="#interviewResults" class="sidebar-item">
+            <span>▤</span>
+            Mülakatlar
+        </a>
+    </nav>
+
+    <div class="sidebar-footer">
+        <span>ERNASA</span>
+        <small>İşe Alımın Yeni Nesil Dijital Asistanı</small>
+    </div>
+
+</aside>
 
         <section class="portal-panel">
 
-            <header class="topbar">
+            <header class="topbar dashboard-topbar">
 
-                <div class="brand-area">
+    <div class="brand-area">
+        <img
+            src="/assets/ernasalogo.png"
+            alt="ERNASA Logo"
+            class="dashboard-logo"
+        >
 
-                    <div class="brand-logo">
-                        E
-                    </div>
+        <div>
+            <h1>ERNASA</h1>
+            <p>İnsan Kaynakları Yönetim Merkezi</p>
+        </div>
+    </div>
 
-                    <div>
-                        <h1>ERNASA İK Portalı</h1>
-                        <p>Yapay Zekâ Destekli İnsan Kaynakları Asistanı</p>
-                    </div>
+    <div class="topbar-actions">
+        <a href="/aday-takip" class="candidate-link">
+            Aday Takibi
+        </a>
 
-                </div>
+        <a href="/" class="candidate-link">
+            Ana Sayfa
+        </a>
+    </div>
 
-                <a href="index.html" class="candidate-link">
-                    Aday Portalını Aç
-                </a>
-<a href="/aday-takip" class="candidate-link">
-    Aday Takip Sistemi
-</a>
-            </header>
+</header>
+            <section class="dashboard-home" id="dashboardHome">
+
+    <div class="dashboard-title-row">
+        <div>
+            <h2>Kontrol Paneli</h2>
+            <p>Aday ve mülakat süreçlerinizi tek ekrandan yönetin.</p>
+        </div>
+
+        <a href="#cvAnalysis" class="primary-button dashboard-add-button">
+            + Yeni Aday Ekle
+        </a>
+    </div>
+
+    <div class="dashboard-stats">
+
+        <div class="dashboard-stat-card">
+            <strong id="totalCandidates">0</strong>
+            <span>Toplam Aday</span>
+        </div>
+
+        <div class="dashboard-stat-card">
+            <strong id="completedInterviews">0</strong>
+            <span>Tamamlanan Mülakat</span>
+        </div>
+
+        <div class="dashboard-stat-card">
+            <strong id="activeInterviews">0</strong>
+            <span>Devam Eden</span>
+        </div>
+
+        <div class="dashboard-stat-card">
+            <strong id="waitingEvaluation">0</strong>
+            <span>Değerlendirme Bekliyor</span>
+        </div>
+
+    </div>
+
+    <div class="dashboard-candidates">
+
+        <div class="dashboard-section-title">
+            <h3>Adaylar</h3>
+            <p>Son aday ve mülakat hareketleri</p>
+        </div>
+
+        <div class="dashboard-table-wrap">
+            <table class="dashboard-table">
+                <thead>
+                    <tr>
+                        <th>Aday</th>
+                        <th>Pozisyon</th>
+                        <th>Mülakat Durumu</th>
+                        <th>Tarih</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+
+                <tbody id="dashboardCandidateList">
+                    <tr>
+                        <td colspan="5" class="dashboard-empty">
+                            Aday kayıtları yükleniyor...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+</section>
 
             <section class="upload-card">
 

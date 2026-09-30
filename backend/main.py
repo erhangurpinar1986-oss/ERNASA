@@ -3,7 +3,7 @@ from pathlib import Path
 from uuid import uuid4
 from services.cv_service import extract_text
 from datetime import datetime, timedelta, timezone
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile,Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from database import initialize_database, get_connection
@@ -89,8 +89,39 @@ UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx"}
 MAX_FILE_SIZE = 10 * 1024 * 1024
 
+@app.get("/ik-giris")
+def open_hr_login():
+    return FileResponse(FRONTEND_DIR / "login.html")
+@app.post("/api/ik-login")
+def ik_login(
+    username: str = Form(...),
+    password: str = Form(...)
+):
+    correct_username = os.getenv("IK_USERNAME", "")
+    correct_password = os.getenv("IK_PASSWORD", "")
+
+    username_ok = secrets.compare_digest(
+        username,
+        correct_username
+    )
+
+    password_ok = secrets.compare_digest(
+        password,
+        correct_password
+    )
+
+    if not (username_ok and password_ok):
+        raise HTTPException(
+            status_code=401,
+            detail="Kullanıcı adı veya şifre hatalı."
+        )
+
+    return {
+        "success": True
+    }
+
 @app.get("/ik")
-def open_hr_panel(_username: str = Depends(verify_ik_login)):
+def open_hr_panel():
     return FileResponse(FRONTEND_DIR / "ik.html")
 
 

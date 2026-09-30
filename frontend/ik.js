@@ -475,9 +475,9 @@ const statusLabels = {
 
 loadInterviewResults();
 
-setInterval(() => {
-    loadInterviewResults();
-}, 10000);
+// setInterval(() => {
+//     loadInterviewResults();
+// }, 10000);
 
 async function openInterviewReport(token) {
     const resultsBox = document.getElementById("interviewResults");
@@ -766,3 +766,125 @@ async function downloadInterviewPdf(token) {
 function downloadBackendPdf(token) {
     window.location.href = `/api/hr/interviews/${token}/pdf`;
 }
+
+// ===============================
+// ERNASA KONTROL PANELİ
+// ===============================
+
+async function loadDashboard() {
+    const totalCandidates = document.getElementById("totalCandidates");
+    const completedInterviews = document.getElementById("completedInterviews");
+    const activeInterviews = document.getElementById("activeInterviews");
+    const waitingEvaluation = document.getElementById("waitingEvaluation");
+    const dashboardCandidateList = document.getElementById("dashboardCandidateList");
+
+    // Dashboard bu sayfada yoksa hiçbir işlem yapma.
+    if (!dashboardCandidateList) {
+        return;
+    }
+
+    try {
+        const response = await fetch("/api/hr/interviews");
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error("Aday kayıtları alınamadı.");
+        }
+
+        // API doğrudan dizi veya interviews alanı döndürürse ikisini de destekle.
+        const candidates = Array.isArray(data)
+            ? data
+            : (data.interviews || []);
+
+        const completed = candidates.filter(
+            candidate => candidate.status === "completed"
+        ).length;
+
+        const active = candidates.filter(
+            candidate =>
+                candidate.status === "opened" ||
+                candidate.status === "started"
+        ).length;
+
+        const waiting = candidates.filter(
+    candidate =>
+        candidate.status === "created" ||
+        candidate.status === "waiting"
+).length;
+
+        totalCandidates.textContent = candidates.length;
+        completedInterviews.textContent = completed;
+        activeInterviews.textContent = active;
+        waitingEvaluation.textContent = waiting;
+
+        if (candidates.length === 0) {
+            dashboardCandidateList.innerHTML = `
+                <tr>
+                    <td colspan="5" class="dashboard-empty">
+                        Henüz aday kaydı bulunmuyor.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        dashboardCandidateList.innerHTML = candidates
+            .slice(0, 5)
+            .map(candidate => `
+                <tr>
+                    <td>${candidate.name || "-"}</td>
+                    <td>${candidate.position || "-"}</td>
+                    <td>${getDashboardStatus(candidate.status)}</td>
+                    <td>${formatDashboardDate(
+                        candidate.created_at || candidate.expires_at
+                    )}</td>
+                    <td>
+                        <a href="/aday-takip" class="dashboard-detail-button">
+                            Detay
+                        </a>
+                    </td>
+                </tr>
+            `)
+            .join("");
+
+    } catch (error) {
+        console.error("Dashboard yükleme hatası:", error);
+
+        dashboardCandidateList.innerHTML = `
+            <tr>
+                <td colspan="5" class="dashboard-empty">
+                    Aday kayıtları yüklenemedi.
+                </td>
+            </tr>
+        `;
+    }
+}
+
+function getDashboardStatus(status) {
+    const statusLabels = {
+        waiting: "Başlamadı",
+        opened: "Açıldı",
+        started: "Devam Ediyor",
+        completed: "Tamamlandı",
+        expired: "Süresi Doldu",
+        created: "Başlamadı",
+    };
+
+    return statusLabels[status] || status || "-";
+}
+
+function formatDashboardDate(dateValue) {
+    if (!dateValue) {
+        return "-";
+    }
+
+    const date = new Date(dateValue);
+
+    if (Number.isNaN(date.getTime())) {
+        return "-";
+    }
+
+    return date.toLocaleDateString("tr-TR");
+}
+
+loadDashboard();
