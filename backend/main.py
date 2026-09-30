@@ -120,16 +120,12 @@ def ik_login(
         "success": True
     }
 
+
 @app.get("/ik")
-def open_hr_panel():
-    return FileResponse(FRONTEND_DIR / "ik.html")
-
-
-@app.get("/aday-takip")
-def open_candidate_tracking(
+def open_hr_panel(
     username: str = Depends(verify_ik_login)
 ):
-    return FileResponse(FRONTEND_DIR / "aday-takip.html")
+    return FileResponse(FRONTEND_DIR / "ik.html")
 
 @app.get("/")
 def home():
