@@ -5,13 +5,15 @@ from services.cv_service import extract_text
 from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, File, HTTPException, UploadFile,Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse,RedirectResponse,JSONResponse
 from database import initialize_database, get_connection
 from services.candidate_service import create_interview_identity
 from fastapi.staticfiles import StaticFiles
 from services.ai_service import generate_interview_question, generate_job_fit_analysis
 import os
 import secrets
+import hmac
+import hashlib
 from fastapi import Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi import Request
@@ -30,6 +32,33 @@ app = FastAPI(
     version="1.0.0"
 )
 security = HTTPBasic()
+IK_SESSION_SECRET = os.getenv("IK_SESSION_SECRET", "")
+
+def create_ik_session(username: str) -> str:
+    signature = hmac.new(
+        IK_SESSION_SECRET.encode("utf-8"),
+        username.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+
+    return f"{username}.{signature}"
+
+def verify_ik_session(session_value: str) -> bool:
+    if not session_value or "." not in session_value:
+        return False
+
+    username, received_signature = session_value.rsplit(".", 1)
+
+    expected_signature = hmac.new(
+        IK_SESSION_SECRET.encode("utf-8"),
+        username.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(
+        received_signature,
+        expected_signature
+    )
 
 def verify_ik_login(
     credentials: HTTPBasicCredentials = Depends(security)
@@ -92,8 +121,10 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 @app.get("/ik-giris")
 def open_hr_login():
     return FileResponse(FRONTEND_DIR / "login.html")
+
 @app.post("/api/ik-login")
 def ik_login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...)
 ):
@@ -116,23 +147,38 @@ def ik_login(
             detail="Kullanıcı adı veya şifre hatalı."
         )
 
-    return {
-        "success": True
-    }
+    response = JSONResponse(
+        content={"success": True}
+    )
+
+    response.set_cookie(
+        key="ernasa_ik_session",
+        value=create_ik_session(username),
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        max_age=28800
+    )
+
+    return response
 
 
 @app.get("/ik")
-def open_hr_panel(
-    username: str = Depends(verify_ik_login)
-):
+def open_hr_panel(request: Request):
+    session = request.cookies.get("ernasa_ik_session")
+
+    if not verify_ik_session(session):
+        return RedirectResponse(url="/ik-giris", status_code=302)
+
     return FileResponse(FRONTEND_DIR / "ik.html")
+
+
+
 
 @app.get("/")
 def home():
     return FileResponse(FRONTEND_DIR / "home.html")
-    @app.get("/")
-    def home():
-        return FileResponse(FRONTEND_DIR / "home.html")
+
 
 interview_links = {}
 
