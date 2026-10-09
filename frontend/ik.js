@@ -587,6 +587,7 @@ ${jobFitAnalysis ? `
     }
 }
 async function downloadInterviewPdf(token) {
+    const reportWindow = window.open("", "_blank");
     try {
         const response = await fetch(`/api/hr/interviews/${token}`);
         const data = await response.json();
@@ -599,7 +600,6 @@ async function downloadInterviewPdf(token) {
         const answers = data.answers || [];
         const jobFitAnalysis = (data.job_fit_analysis || "").trim();
 
-        const reportWindow = window.open("", "_blank");
 
         reportWindow.document.write(`
             <!DOCTYPE html>
