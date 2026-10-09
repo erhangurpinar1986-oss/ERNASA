@@ -23,6 +23,7 @@ async function loadCandidates() {
         }
 
         allCandidates = data.interviews || [];
+        updateCandidateStats();
 
         renderCandidates();
 
@@ -31,6 +32,9 @@ async function loadCandidates() {
         console.error(error);
     }
 }
+
+let currentPage = 1;
+const candidatesPerPage = 10;
 
 function renderCandidates() {
     const searchValue = candidateSearch.value.toLowerCase().trim();
@@ -46,8 +50,15 @@ function renderCandidates() {
 
         const matchesSearch = searchableText.includes(searchValue);
 
+        let candidateStatus = candidate.status;
+
+        // Eski "created" kayıtlarını bekleyen aday olarak değerlendir
+        if (candidateStatus === "created") {
+            candidateStatus = "waiting";
+        }
+
         const matchesStatus =
-            !selectedStatus || candidate.status === selectedStatus;
+            !selectedStatus || candidateStatus === selectedStatus;
 
         return matchesSearch && matchesStatus;
     });
@@ -56,62 +67,204 @@ function renderCandidates() {
         `Toplam aday: ${allCandidates.length} | Gösterilen: ${filteredCandidates.length}`;
 
     if (filteredCandidates.length === 0) {
-        candidateList.innerHTML = "Arama kriterlerine uygun aday bulunamadı.";
+        candidateList.innerHTML = `
+            <div class="candidate-empty">
+                Arama kriterlerine uygun aday bulunamadı.
+            </div>
+        `;
         return;
     }
 
-   candidateList.innerHTML = filteredCandidates.map(candidate => `
-    <div class="analysis-result" style="margin-top:12px;">
-        <div style="
-            display:flex;
-            justify-content:space-between;
-            align-items:flex-start;
-            gap:16px;
-            flex-wrap:wrap;
-        ">
-            <div>
-                <strong style="font-size:16px;">
+    const totalPages = Math.ceil(
+        filteredCandidates.length / candidatesPerPage
+    );
+
+    if (currentPage > totalPages) {
+        currentPage = totalPages;
+    }
+
+    const startIndex = (currentPage - 1) * candidatesPerPage;
+    const endIndex = startIndex + candidatesPerPage;
+
+    const pageCandidates = filteredCandidates.slice(
+        startIndex,
+        endIndex
+    );
+
+    const rows = pageCandidates.map((candidate, index) => {
+
+        let candidateStatus = candidate.status;
+
+        if (candidateStatus === "created") {
+            candidateStatus = "waiting";
+        }
+
+        const statusText =
+            statusLabels[candidateStatus] || candidateStatus || "-";
+
+        return `
+            <tr>
+                <td>${startIndex + index + 1}</td>
+
+                <td>
+                    <strong class="candidate-number">
+                        ${candidate.token || "-"}
+                    </strong>
+                </td>
+
+                <td>
                     ${candidate.name || "Ad bilgisi yok"}
-                </strong>
+                </td>
 
-                <div style="margin-top:5px;">
-                    <strong>Aday No:</strong> ${candidate.token}
-                </div>
+                <td>
+                    ${candidate.position || "-"}
+                </td>
 
-                <div style="margin-top:4px;">
-                    <strong>Firma:</strong> ${candidate.company || "-"}
-                </div>
+                <td>
+                    ${candidate.company || "-"}
+                </td>
 
-                <div style="margin-top:4px;">
-                    <strong>Pozisyon:</strong> ${candidate.position || "-"}
-                </div>
-            </div>
+                <td>
+                    <span class="candidate-status status-${candidateStatus}">
+                        ${statusText}
+                    </span>
+                </td>
 
+                <td>
+                    ${formatCandidateDate(candidate.created_at)}
+                </td>
+
+                <td>
+                    ${
+                        candidate.status === "completed"
+                            ? `
+                                <button
+                                    type="button"
+                                    class="candidate-detail-button"
+                                    onclick="openCandidateReport('${candidate.token}')"
+                                >
+                                    Detay
+                                </button>
+                              `
+                            : `<span class="candidate-no-report">-</span>`
+                    }
+                </td>
+            </tr>
+        `;
+    }).join("");
+
+    candidateList.innerHTML = `
+        <div class="candidate-table-header">
             <div>
-                <strong>Durum:</strong>
-                ${statusLabels[candidate.status] || candidate.status || "-"}
+                <h2>Adaylar</h2>
+                <p>Sisteme eklenen adayların listesi ve mülakat durumları.</p>
             </div>
+
+            <span>
+                ${filteredCandidates.length} aday listeleniyor
+            </span>
         </div>
 
-        ${candidate.status === "completed" ? `
-            <button
-                type="button"
-                class="primary-button"
-                style="margin-top:14px;"
-                onclick="openCandidateReport('${candidate.token}')"
-            >
-                RAPORU GÖRÜNTÜLE
-            </button>
-        ` : ""}
-    </div>
-`).join("");
+        <div class="candidate-table-wrapper">
+            <table class="candidate-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Aday No</th>
+                        <th>Ad Soyad</th>
+                        <th>Pozisyon</th>
+                        <th>Firma</th>
+                        <th>Mülakat Durumu</th>
+                        <th>Oluşturma Tarihi</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    ${rows}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="candidate-pagination">
+            <span>
+                ${startIndex + 1}-${Math.min(endIndex, filteredCandidates.length)}
+                / ${filteredCandidates.length} kayıt
+            </span>
+
+            <div>
+                <button
+                    type="button"
+                    onclick="changeCandidatePage(-1)"
+                    ${currentPage === 1 ? "disabled" : ""}
+                >
+                    ‹
+                </button>
+
+                <strong>
+                    ${currentPage} / ${totalPages}
+                </strong>
+
+                <button
+                    type="button"
+                    onclick="changeCandidatePage(1)"
+                    ${currentPage === totalPages ? "disabled" : ""}
+                >
+                    ›
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function changeCandidatePage(direction) {
+    currentPage += direction;
+    renderCandidates();
+}
+
+function formatCandidateDate(dateValue) {
+    if (!dateValue) {
+        return "-";
+    }
+
+    const date = new Date(dateValue);
+
+    if (Number.isNaN(date.getTime())) {
+        return "-";
+    }
+
+    return date.toLocaleDateString("tr-TR");
 }
 
 function openCandidateReport(token) {
-    window.location.href = `/ik#${token}`;
+    showPortalScreen("interviews");
+    openInterviewReport(token);
 }
-
+function filterCandidatesByStatus(status) {
+    statusFilter.value = status;
+    currentPage = 1;
+    renderCandidates();
+}
 candidateSearch.addEventListener("input", renderCandidates);
 statusFilter.addEventListener("change", renderCandidates);
 
 loadCandidates();
+
+function updateCandidateStats() {
+    document.getElementById("statTotal").textContent = allCandidates.length;
+
+    document.getElementById("statWaiting").textContent =
+        allCandidates.filter(candidate => candidate.status === "waiting").length;
+
+    document.getElementById("statOpened").textContent =
+        allCandidates.filter(candidate => candidate.status === "opened").length;
+
+    document.getElementById("statStarted").textContent =
+        allCandidates.filter(candidate => candidate.status === "started").length;
+
+    document.getElementById("statCompleted").textContent =
+        allCandidates.filter(candidate => candidate.status === "completed").length;
+
+    document.getElementById("statExpired").textContent =
+        allCandidates.filter(candidate => candidate.status === "expired").length;
+}

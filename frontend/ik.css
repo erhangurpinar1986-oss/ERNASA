@@ -674,3 +674,280 @@ body{
         flex-direction: column;
     }
 }
+
+/* ===============================
+   ADAY TAKİP - DURUM KARTLARI
+   =============================== */
+
+.candidate-stats {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin: 18px 0 22px;
+}
+
+.candidate-stat {
+    background: #f8fbff;
+    border: 1px solid #dce7f5;
+    border-radius: 12px;
+    padding: 16px 12px;
+    text-align: center;
+}
+
+.candidate-stat strong {
+    display: block;
+    font-size: 24px;
+    font-weight: 700;
+    color: #082653;
+    margin-bottom: 5px;
+}
+
+.candidate-stat span {
+    display: block;
+    font-size: 12px;
+    color: #6b7f9e;
+}
+
+@media (max-width: 1000px) {
+    .candidate-stats {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .candidate-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+/* ===============================
+   ADAY TAKİP - PROFESYONEL TABLO
+   =============================== */
+
+#candidatesScreen .results-card {
+    padding: 24px;
+}
+
+#candidatesScreen .form-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 14px;
+    margin-top: 18px;
+}
+
+#candidatesScreen .form-grid input,
+#candidatesScreen .form-grid select {
+    width: 100%;
+    height: 44px;
+    padding: 0 14px;
+    border: 1px solid #d7e1ef;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #10294d;
+    font-size: 14px;
+    outline: none;
+}
+
+#candidatesScreen .form-grid input:focus,
+#candidatesScreen .form-grid select:focus {
+    border-color: #1769d2;
+    box-shadow: 0 0 0 3px rgba(23, 105, 210, 0.08);
+}
+
+#candidateList {
+    margin-top: 18px;
+    background: #ffffff;
+    border: 1px solid #e0e8f3;
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.candidate-table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 18px 20px 14px;
+}
+
+.candidate-table-header h2 {
+    margin: 0;
+    color: #082653;
+    font-size: 20px;
+}
+
+.candidate-table-header p {
+    margin: 4px 0 0;
+    color: #7386a4;
+    font-size: 13px;
+}
+
+.candidate-table-header > span {
+    color: #6480a9;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.candidate-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.candidate-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.candidate-table thead {
+    background: #f4f7fb;
+}
+
+.candidate-table th {
+    padding: 12px 10px;
+    text-align: left;
+    color: #395372;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    border-bottom: 1px solid #dde6f1;
+}
+
+.candidate-table td {
+    padding: 12px 10px;
+    color: #183153;
+    border-bottom: 1px solid #edf1f6;
+    vertical-align: middle;
+}
+
+.candidate-table tbody tr:hover {
+    background: #f8fbff;
+}
+
+.candidate-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.candidate-number {
+    color: #0b5ec4;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.candidate-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.status-waiting {
+    background: #fff4d6;
+    color: #a66b00;
+    border: 1px solid #ffd778;
+}
+
+.status-opened {
+    background: #e8f2ff;
+    color: #1260bb;
+    border: 1px solid #a9cdf9;
+}
+
+.status-started {
+    background: #f0eaff;
+    color: #6941c6;
+    border: 1px solid #cab9f8;
+}
+
+.status-completed {
+    background: #e1f7eb;
+    color: #137a47;
+    border: 1px solid #a6dfbf;
+}
+
+.status-expired {
+    background: #ffe9e8;
+    color: #c53b34;
+    border: 1px solid #f3b0ac;
+}
+
+.candidate-detail-button {
+    border: 1px solid #bfd2ea;
+    background: #ffffff;
+    color: #075bbb;
+    border-radius: 6px;
+    padding: 6px 13px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.candidate-detail-button:hover {
+    background: #edf5ff;
+}
+
+.candidate-no-report {
+    color: #a1aec0;
+}
+
+.candidate-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 14px 20px;
+    border-top: 1px solid #e7edf5;
+    color: #7184a0;
+    font-size: 12px;
+}
+
+.candidate-pagination > div {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.candidate-pagination button {
+    width: 34px;
+    height: 34px;
+    border: 1px solid #d3dfed;
+    border-radius: 7px;
+    background: #ffffff;
+    color: #0c58b0;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.candidate-pagination button:hover:not(:disabled) {
+    background: #edf5ff;
+}
+
+.candidate-pagination button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.candidate-pagination strong {
+    color: #183153;
+    min-width: 45px;
+    text-align: center;
+}
+
+.candidate-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: #7184a0;
+}
+
+@media (max-width: 900px) {
+    #candidatesScreen .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .candidate-table {
+        min-width: 900px;
+    }
+}
