@@ -161,6 +161,12 @@ def initialize_database():
                 created_at TEXT NOT NULL
             )
         """)
-
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS interview_reports (
+            token TEXT PRIMARY KEY,
+            job_fit_analysis TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
     connection.commit()
     connection.close()

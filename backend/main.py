@@ -691,12 +691,41 @@ def get_hr_interview_detail(token: str):
                 for row in answer_rows
             ]
         )
-
-        job_fit_analysis = generate_job_fit_analysis(
-            cv_text=interview_data.get("cv_text", "") or "",
-            position=interview_data.get("position", "") or "",
-            interview_answers=interview_answers_text
+        cursor.execute(
+            """
+            SELECT job_fit_analysis
+            FROM interview_reports
+            WHERE token = ?
+            """,
+            (token,)
         )
+
+        saved_report = cursor.fetchone()
+        if saved_report:
+            job_fit_analysis = saved_report["job_fit_analysis"]
+        else:
+            job_fit_analysis = generate_job_fit_analysis(
+                cv_text=interview_data.get("cv_text", "") or "",
+                position=interview_data.get("position", "") or "",
+                interview_answers=interview_answers_text
+            )
+            cursor.execute(
+                """
+                INSERT INTO interview_reports
+                    (token, job_fit_analysis, created_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT (token) DO NOTHING
+                """,
+                (
+                    token,
+                    job_fit_analysis,
+                    datetime.now(timezone.utc).isoformat()
+                )
+            )
+
+            connection.commit()
+
+
 
         return {
             "success": True,
