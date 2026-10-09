@@ -171,7 +171,14 @@ def open_hr_panel(request: Request):
         return RedirectResponse(url="/ik-giris", status_code=302)
 
     return FileResponse(FRONTEND_DIR / "ik.html")
+@app.get("/aday-takip")
+def open_candidate_tracking(request: Request):
+    session = request.cookies.get("ernasa_ik_session")
 
+    if not verify_ik_session(session):
+        return RedirectResponse(url="/ik-giris", status_code=302)
+
+    return FileResponse(FRONTEND_DIR / "aday-takip.html")
 
 
 

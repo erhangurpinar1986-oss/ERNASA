@@ -888,3 +888,49 @@ function formatDashboardDate(dateValue) {
 }
 
 loadDashboard();
+
+// ===============================
+// ERNASA PORTAL EKRAN GEÇİŞLERİ
+// ===============================
+
+const dashboardHome = document.getElementById("dashboardHome");
+const cvAnalysisScreen = document.getElementById("cvAnalysisScreen");
+const candidatesScreen = document.getElementById("candidatesScreen");
+const interviewsScreen = document.getElementById("interviewsScreen");
+
+function showPortalScreen(screenName) {
+    dashboardHome.style.display = "none";
+    cvAnalysisScreen.style.display = "none";
+    candidatesScreen.style.display = "none";
+    interviewsScreen.style.display = "none";
+
+    if (screenName === "dashboard") {
+        dashboardHome.style.display = "block";
+    }
+
+    if (screenName === "cv") {
+        cvAnalysisScreen.style.display = "block";
+    }
+    if (screenName === "candidates") {
+        candidatesScreen.style.display = "block";
+    }
+
+    if (screenName === "interviews") {
+        interviewsScreen.style.display = "block";
+    }
+}
+document.querySelectorAll(".sidebar-item[data-screen]").forEach(item => {
+    item.addEventListener("click", event => {
+        event.preventDefault();
+
+        const screenName = item.dataset.screen;
+
+        document.querySelectorAll(".sidebar-item").forEach(menuItem => {
+            menuItem.classList.remove("active");
+        });
+
+        item.classList.add("active");
+
+        showPortalScreen(screenName);
+    });
+});
