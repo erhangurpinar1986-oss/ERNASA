@@ -87,7 +87,8 @@ def get_connection():
 
         connection = psycopg2.connect(
             DATABASE_URL,
-            cursor_factory=DictCursor
+            cursor_factory=DictCursor,
+            connect_timeout=10
         )
 
         return PostgresConnectionWrapper(connection)
