@@ -29,7 +29,7 @@ body{
 
 .portal-panel{
     width:100%;
-    max-width:980px;
+    max-width: 100%;
     background:#fff;
     border-radius:18px;
     overflow:hidden;
@@ -399,7 +399,7 @@ body{
 
 .page {
     width: 100%;
-    max-width: 1500px;
+    max-width: 100%;
     margin: 0 auto;
     padding: 24px;
 
@@ -542,8 +542,8 @@ body{
     }
 
     .sidebar-footer {
-        display: none;
-    }
+    display: flex;
+}
 }
 
 /* ===== ERNASA KONTROL PANELİ ===== */
@@ -950,4 +950,108 @@ body{
     .candidate-table {
         min-width: 900px;
     }
+}
+/* ERNASA V5 - Geniş Kurumsal Panel / Sol Menü */
+
+.dashboard-sidebar {
+    width: 240px;
+    min-width: 240px;
+}
+
+.dashboard-sidebar .sidebar-item {
+    font-size: 15px;
+    padding: 14px 16px;
+}
+
+.dashboard-sidebar .sidebar-item:hover {
+    background: #123b75;
+}
+
+.dashboard-sidebar .sidebar-item.active {
+    background: #1558bd;
+    font-weight: 600;
+}
+/* ERNASA V5 - Kontrol Paneli Okunabilirlik */
+
+.dashboard-home h1,
+.dashboard-home h2 {
+    font-size: 24px;
+}
+
+.dashboard-home .dashboard-stat strong {
+    font-size: 30px;
+}
+
+.dashboard-home .dashboard-stat span {
+    font-size: 14px;
+}
+
+.dashboard-home table {
+    font-size: 14px;
+}
+
+.dashboard-home table th,
+.dashboard-home table td {
+    padding: 14px 16px;
+}
+/* ERNASA V5 - İstatistik Kartları */
+
+.dashboard-home .dashboard-stat-card strong {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.dashboard-home .dashboard-stat-card span {
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.dashboard-home .dashboard-stat-card {
+    padding: 22px 24px;
+}
+/* ERNASA V5 - Sol Menü Alt Bilgi Düzeni */
+
+.dashboard-sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 48px);
+    box-sizing: border-box;
+}
+
+.dashboard-sidebar .sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    margin-top: auto;
+    position: relative;
+}
+/* ERNASA V5 - Kurumsal Alt Bilgi */
+
+.portal-panel > .footer {
+    position: relative;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 24px;
+    padding: 18px 24px;
+    background: #061b3a;
+    color: #ffffff;
+    text-align: center;
+    font-size: 13px;
+    border-radius: 0 0 14px 14px;
+}
+/* ERNASA V5 - Kurumsal Alt Bilgi */
+
+body > .footer {
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
+    background: #061b3a;
+    color: #ffffff;
+    text-align: center;
+    padding: 18px 24px;
+    font-size: 13px;
+    font-weight: 500;
+    margin: 0;
+    border-radius: 0;
 }

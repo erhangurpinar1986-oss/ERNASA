@@ -13,6 +13,55 @@ const statusLabels = {
     expired: "Süresi Doldu"
 };
 
+// ERNASA İK 1.1: Saatler Türkiye saatine göre gösterilir.
+function candidateDate(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function effectiveCandidateStatus(candidate) {
+    const status = candidate.status === "created" ? "waiting" : candidate.status;
+    if (status === "completed" || status === "expired") return status;
+    const expiry = candidateDate(candidate.expires_at);
+    return expiry && expiry.getTime() <= Date.now() ? "expired" : status;
+}
+
+function candidateDateTime(value) {
+    const date = candidateDate(value);
+    return date ? date.toLocaleString("tr-TR", {
+        timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit",
+        year: "numeric", hour: "2-digit", minute: "2-digit"
+    }) : "-";
+}
+
+function candidateCreatedLabel(candidate) {
+    if (candidate.created_at) return candidateDateTime(candidate.created_at);
+    if (candidate.estimated_created_at) {
+        return "≈ " + candidateDateTime(candidate.estimated_created_at) + " (tahmini)";
+    }
+    return "-";
+}
+
+function candidateRemainingLabel(candidate) {
+    const status = effectiveCandidateStatus(candidate);
+    if (status === "completed") return "Tamamlandı";
+    if (status === "expired") return "Süresi doldu";
+    const expiry = candidateDate(candidate.expires_at);
+    if (!expiry) return "-";
+    const seconds = Math.max(0, Math.floor((expiry.getTime() - Date.now()) / 1000));
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return [hours, minutes, secs].map(n => String(n).padStart(2, "0")).join(":");
+}
+
+function candidateEscape(value) {
+    return String(value ?? "-").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[char]));
+}
+
 async function loadCandidates() {
     try {
         const response = await fetch("/api/hr/interviews");
@@ -50,12 +99,7 @@ function renderCandidates() {
 
         const matchesSearch = searchableText.includes(searchValue);
 
-        let candidateStatus = candidate.status;
-
-        // Eski "created" kayıtlarını bekleyen aday olarak değerlendir
-        if (candidateStatus === "created") {
-            candidateStatus = "waiting";
-        }
+        const candidateStatus = effectiveCandidateStatus(candidate);
 
         const matchesStatus =
             !selectedStatus || candidateStatus === selectedStatus;
@@ -93,11 +137,7 @@ function renderCandidates() {
 
     const rows = pageCandidates.map((candidate, index) => {
 
-        let candidateStatus = candidate.status;
-
-        if (candidateStatus === "created") {
-            candidateStatus = "waiting";
-        }
+        const candidateStatus = effectiveCandidateStatus(candidate);
 
         const statusText =
             statusLabels[candidateStatus] || candidateStatus || "-";
@@ -108,20 +148,20 @@ function renderCandidates() {
 
                 <td>
                     <strong class="candidate-number">
-                        ${candidate.token || "-"}
+                        ${candidateEscape(candidate.token)}
                     </strong>
                 </td>
 
                 <td>
-                    ${candidate.name || "Ad bilgisi yok"}
+                    ${candidateEscape(candidate.name || "Ad bilgisi yok")}
                 </td>
 
                 <td>
-                    ${candidate.position || "-"}
+                    ${candidateEscape(candidate.position)}
                 </td>
 
                 <td>
-                    ${candidate.company || "-"}
+                    ${candidateEscape(candidate.company)}
                 </td>
 
                 <td>
@@ -131,8 +171,10 @@ function renderCandidates() {
                 </td>
 
                 <td>
-                    ${formatCandidateDate(candidate.created_at)}
+                    ${candidateEscape(candidateCreatedLabel(candidate))}
                 </td>
+                <td>${candidateEscape(candidateDateTime(candidate.expires_at))}</td>
+                <td>${candidateEscape(candidateRemainingLabel(candidate))}</td>
 
                 <td>
                     ${
@@ -176,6 +218,8 @@ function renderCandidates() {
                         <th>Firma</th>
                         <th>Mülakat Durumu</th>
                         <th>Oluşturma Tarihi</th>
+                        <th>Bitiş</th>
+                        <th>Kalan Süre</th>
                         <th>İşlemler</th>
                     </tr>
                 </thead>
@@ -222,19 +266,6 @@ function changeCandidatePage(direction) {
     renderCandidates();
 }
 
-function formatCandidateDate(dateValue) {
-    if (!dateValue) {
-        return "-";
-    }
-
-    const date = new Date(dateValue);
-
-    if (Number.isNaN(date.getTime())) {
-        return "-";
-    }
-
-    return date.toLocaleDateString("tr-TR");
-}
 
 function openCandidateReport(token) {
     showPortalScreen("interviews");
@@ -254,17 +285,23 @@ function updateCandidateStats() {
     document.getElementById("statTotal").textContent = allCandidates.length;
 
     document.getElementById("statWaiting").textContent =
-        allCandidates.filter(candidate => candidate.status === "waiting").length;
+        allCandidates.filter(candidate => effectiveCandidateStatus(candidate) === "waiting").length;
 
     document.getElementById("statOpened").textContent =
-        allCandidates.filter(candidate => candidate.status === "opened").length;
+        allCandidates.filter(candidate => effectiveCandidateStatus(candidate) === "opened").length;
 
     document.getElementById("statStarted").textContent =
-        allCandidates.filter(candidate => candidate.status === "started").length;
+        allCandidates.filter(candidate => effectiveCandidateStatus(candidate) === "started").length;
 
     document.getElementById("statCompleted").textContent =
-        allCandidates.filter(candidate => candidate.status === "completed").length;
+        allCandidates.filter(candidate => effectiveCandidateStatus(candidate) === "completed").length;
 
     document.getElementById("statExpired").textContent =
-        allCandidates.filter(candidate => candidate.status === "expired").length;
+        allCandidates.filter(candidate => effectiveCandidateStatus(candidate) === "expired").length;
 }
+// Görünür geri sayım ve durumları düzenli yenile; API'deki kayıtlar değiştirilmez.
+setInterval(() => {
+    if (!candidateList || !candidateList.offsetParent) return;
+    renderCandidates();
+    updateCandidateStats();
+}, 1000);

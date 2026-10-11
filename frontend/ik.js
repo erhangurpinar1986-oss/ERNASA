@@ -820,7 +820,7 @@ async function loadDashboard() {
         if (candidates.length === 0) {
             dashboardCandidateList.innerHTML = `
                 <tr>
-                    <td colspan="5" class="dashboard-empty">
+                    <td colspan="6" class="dashboard-empty">
                         Henüz aday kaydı bulunmuyor.
                     </td>
                 </tr>
@@ -832,6 +832,7 @@ async function loadDashboard() {
             .slice(0, 5)
             .map(candidate => `
                 <tr>
+                    <td>${candidate.token || "-"}</td>
                     <td>${candidate.name || "-"}</td>
                     <td>${candidate.position || "-"}</td>
                     <td>${getDashboardStatus(candidate.status)}</td>
@@ -852,7 +853,7 @@ async function loadDashboard() {
 
         dashboardCandidateList.innerHTML = `
             <tr>
-                <td colspan="5" class="dashboard-empty">
+                <td colspan="6" class="dashboard-empty">
                     Aday kayıtları yüklenemedi.
                 </td>
             </tr>
