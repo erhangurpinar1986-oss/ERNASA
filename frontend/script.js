@@ -154,9 +154,18 @@ startInterviewButton.addEventListener("click", () => {
     fetch(`/api/interviews/${interviewToken}/start`, {
         method: "POST"
     })
-        .then(response => {
+        .then(async response => {
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                let detail = "";
+                try {
+                    const body = await response.json();
+                    detail = typeof body.detail === "string" ? body.detail : "";
+                } catch (_) {
+                    // Sunucu JSON dışında yanıt vermiş olabilir.
+                }
+                const error = new Error(detail || `HTTP ${response.status}`);
+                error.status = response.status;
+                throw error;
             }
             return response.json();
         })
@@ -176,29 +185,117 @@ if (data.success) {
         })
         .catch(error => {
             console.error("Mülakat başlatılamadı:", error);
-            alert("Mülakat başlatılırken bir hata oluştu.");
+            if (error.status === 410) {
+                alert(
+                    "MÜLAKAT BAĞLANTINIZIN SÜRESİ DOLDU\n\n" +
+                    "Mülakata başlamak için tanınan 8 saatlik süre sona ermiştir. " +
+                    "Bu bağlantıyla yeni bir mülakat başlatamazsınız.\n\n" +
+                    "Yeni bağlantı için başvurduğunuz kurumun İnsan Kaynakları birimiyle iletişime geçebilirsiniz."
+                );
+                startInterviewButton.style.display = "none";
+                return;
+            }
+            alert("Mülakat başlatılamadı. Lütfen tekrar deneyin veya İnsan Kaynakları birimiyle iletişime geçin.");
+            interviewStarting = false;
+            updateStartButton();
         });
 });
 
 updateStartButton();
 if (interviewToken) {
-    fetch(`https://ernasa.com/api/interview-links/${interviewToken}`)
+    fetch(`/api/interview-links/${interviewToken}`)
         .then(response => response.json())
         .then(data => {
             console.log("Aday Bilgileri:", data);
 
-            if (data.success) {
-                const candidateGreeting = document.getElementById("candidateGreeting");
-                const companyName = document.getElementById("companyName");
+    if (data.success) {
+    const candidateGreeting = document.getElementById("candidateGreeting");
+    const companyName = document.getElementById("companyName");
 
-                if (candidateGreeting) {
-                    candidateGreeting.textContent = data.candidate.name;
-                }
+    if (candidateGreeting && data.candidate) {
+        candidateGreeting.textContent = data.candidate.name || "Sayın Aday";
+    }
 
-                if (companyName) {
-                    companyName.textContent = data.candidate.company;
-                }
-            }
+    if (companyName && data.candidate) {
+        companyName.textContent = data.candidate.company || "-";
+    }
+
+    if (data.expired === true || data.status === "expired") {
+    // Süresi dolmuş adaylarda gereksiz bilgileri gizle
+if (welcomeCard) {
+    const infoGrid = welcomeCard.querySelector(".info-grid");
+    const quietNote = welcomeCard.querySelector(".quiet-note");
+
+    if (infoGrid) {
+        infoGrid.style.display = "none";
+    }
+
+    if (quietNote) {
+        quietNote.style.display = "none";
+    }
+}
+
+if (welcomeCard) {
+    const paragraphs = welcomeCard.querySelectorAll("p");
+
+    paragraphs.forEach(p => {
+        const text = p.textContent.trim();
+
+        if (
+            text.includes("8–10 dakika") ||
+            text.includes("10 soru") ||
+            text.includes("Lütfen sessiz")
+        ) {
+            p.style.display = "none";
+        }
+    });
+}
+    const welcomeTitle = document.getElementById("candidateGreeting");
+
+if (welcomeTitle) {
+    const heading = welcomeTitle.parentElement;
+
+    if (heading) {
+        heading.textContent = "Sayın ";
+
+        const candidateName = document.createElement("span");
+        candidateName.textContent = data.candidate?.name || "Aday";
+        candidateName.style.color = "#3478e5";
+
+        heading.appendChild(candidateName);
+    }
+}
+
+const welcomeDescription = welcomeCard?.querySelector("p");
+
+if (welcomeDescription) {
+    welcomeDescription.textContent =
+        "Mülakat bağlantınızın geçerlilik süresi sona ermiştir.";
+}
+        const expiredMessage = document.createElement("div");
+
+        expiredMessage.style.cssText =
+            "padding:24px;text-align:center;background:#fff;border-radius:12px;margin:20px 0;";
+
+        expiredMessage.innerHTML = `
+            <h2 style="color:#b91c1c;">Mülakat Bağlantınızın Süresi Doldu</h2>
+            <p>Dijital ön mülakata başlamak için tanımlanan 8 saatlik süre sona ermiştir.</p>
+            <p>Yeni bağlantı için başvurduğunuz kurumun İnsan Kaynakları birimiyle iletişime geçebilirsiniz.</p>
+        `;
+
+        const consentCard = document.getElementById("consentCard");
+        const startButton = document.getElementById("startInterviewButton");
+
+        if (consentCard) {
+            consentCard.replaceWith(expiredMessage);
+        }
+
+        if (startButton) {
+            startButton.disabled = true;
+            startButton.style.display = "none";
+        }
+    }
+}
         })
         .catch(error => {
             console.error("Mülakat bilgisi alınamadı:", error);

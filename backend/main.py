@@ -171,6 +171,17 @@ def open_hr_panel(request: Request):
         return RedirectResponse(url="/ik-giris", status_code=302)
 
     return FileResponse(FRONTEND_DIR / "ik.html")
+@app.get("/ik-v5")
+def open_hr_panel_v5(request: Request):
+    session = request.cookies.get("ernasa_ik_session")
+
+    if not verify_ik_session(session):
+        return RedirectResponse(
+            url="/ik-giris",
+            status_code=302
+        )
+
+    return FileResponse(FRONTEND_DIR / "ernasa_v5_ik.html")
 @app.get("/aday-takip")
 def open_candidate_tracking(request: Request):
     session = request.cookies.get("ernasa_ik_session")
@@ -244,7 +255,8 @@ def create_interview_link(candidate: dict):
     security_code = identity["security_code"]
     interview_id = identity["interview_id"]
 
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=8)
+    created_at = datetime.now(timezone.utc)
+    expires_at = created_at + timedelta(hours=8)
 
     connection = get_connection()
     cursor = connection.cursor()
@@ -259,10 +271,11 @@ def create_interview_link(candidate: dict):
             company,
             position,
             expires_at,
+            created_at,
             status,
             cv_text
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?,?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             interview_id,
@@ -272,6 +285,7 @@ def create_interview_link(candidate: dict):
             candidate.get("company", ""),
             candidate.get("position", ""),
             expires_at.isoformat(),
+            created_at.isoformat(),
             "waiting",
             candidate.get("cv_text", "")
         )
@@ -286,158 +300,139 @@ def create_interview_link(candidate: dict):
         "security_code": security_code,
         "interview_id": interview_id,
         "expires_at": expires_at.isoformat(),
+        "created_at": created_at.isoformat(),
+        "validity_hours": 8,
         "status": "waiting",
         "interview_url":
             f"https://ernasa.com/interview/{interview_id}"
     }
-@app.get("/api/interview-links/{token}")
-def get_interview_link(token: str):
-    connection = get_connection()
-    cursor = connection.cursor()
+def _link_deadline_passed(interview: dict) -> bool:
+    """The eight-hour deadline limits STARTING, not finishing."""
+    expires = datetime.fromisoformat(interview["expires_at"])
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) >= expires
 
-    cursor.execute(
-        "SELECT * FROM interview_links WHERE token = %s",
-        (token,)
-    )
 
-    row = cursor.fetchone()
-    connection.close()
-
-    interview = dict(row) if row else None
-
-    if not interview:
-        raise HTTPException(
-            status_code=404,
-            detail="Mülakat bağlantısı bulunamadı."
-        )
-
-    expires_at = datetime.fromisoformat(interview["expires_at"])
-
-    if datetime.now(timezone.utc) > expires_at:
-        raise HTTPException(
-            status_code=410,
-            detail="Mülakat bağlantısının süresi dolmuş."
-        )
-
-    return {
-        "success": True,
-        "candidate": {
-            "name": interview["name"],
-            "phone": interview["phone"],
-            "email": interview["email"],
-            "company": interview["company"],
-            "position": interview["position"]
-        },
-        "expires_at": interview["expires_at"],
-        "status": interview["status"]
-    }
-
-@app.get("/interview/{token}")
-def open_interview(token: str):
-    return FileResponse(FRONTEND_DIR / "index.html")
-@app.post("/api/interviews/{token}/opened")
-def mark_interview_opened(token: str):
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        "SELECT status FROM interview_links WHERE token = ?",
-        (token,)
-    )
-
-    row = cursor.fetchone()
-
-    if not row:
-        connection.close()
-        raise HTTPException(
-            status_code=404,
-            detail="Mülakat bağlantısı bulunamadı."
-        )
-
-    if row["status"] == "waiting":
-        cursor.execute(
-            """
-            UPDATE interview_links
-            SET status = ?
-            WHERE token = ?
-            """,
-            ("opened", token)
-        )
-        connection.commit()
-
-    connection.close()
-
-    return {
-        "success": True
-    }
-@app.post("/api/interviews/{token}/start")
-def start_interview(token: str):
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        "SELECT * FROM interview_links WHERE token = ?",
-        (token,)
-    )
-
-    row = cursor.fetchone()
-
-    if not row:
-        connection.close()
-        raise HTTPException(
-            status_code=404,
-            detail="Mülakat bağlantısı bulunamadı."
-        )
-
-    interview = dict(row)
-
-    expires_at = datetime.fromisoformat(interview["expires_at"])
-
-    if datetime.now(timezone.utc) > expires_at:
-        cursor.execute(
-            """
-            UPDATE interview_links
-            SET status = ?
-            WHERE token = ?
-            """,
-            ("expired", token)
-        )
-        connection.commit()
-        connection.close()
-
-        raise HTTPException(
-            status_code=410,
-            detail="Mülakat bağlantısının süresi dolmuş."
-        )
-
-    cursor.execute(
-        """
-        UPDATE interview_links
-        SET status = ?
-        WHERE token = ?
-        """,
-        ("started", token)
-    )
-
-    connection.commit()
-    connection.close()
-
-    cv_text = interview.get("cv_text", "") or ""
-    position = interview.get("position", "") or ""
-
-    ai_question = (
+def _intro_question() -> str:
+    return (
         "Merhaba, hoş geldiniz. Bu görüşmede sizi ve çalışma deneyimlerinizi "
         "biraz daha yakından tanımaya çalışacağım. Burada doğru ya da yanlış "
         "cevap yok; soruları kendi deneyimlerinize göre rahatça yanıtlayabilirsiniz. "
         "Hazırsanız, öncelikle kendinizden biraz bahseder misiniz?"
     )
 
-    return {
-        "success": True,
-        "status": "started",
-        "question_number": 1,
-        "question": ai_question
-    }
+
+@app.get("/api/interview-links/{token}")
+def get_interview_link(token: str):
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM interview_links WHERE token = ?", (token,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Mülakat bağlantısı bulunamadı.")
+        interview = dict(row)
+        status = interview["status"]
+        expired = status == "expired" or (
+            status in ("waiting", "created", "opened") and _link_deadline_passed(interview)
+        )
+        if expired:
+            # Yalnızca bilgilendirme: başlatma endpoint'i 410 engelini korur.
+            return {
+                "success": True,
+                "candidate": {key: interview.get(key) for key in ("name", "company", "position")},
+                "expires_at": interview["expires_at"],
+                "status": "expired",
+                "can_start": False,
+            }
+        return {
+            "success": True,
+            "candidate": {key: interview.get(key) for key in ("name", "phone", "email", "company", "position")},
+            "expires_at": interview["expires_at"],
+            "status": status,
+        }
+    finally:
+        connection.close()
+
+
+@app.get("/interview/{token}")
+def open_interview(token: str):
+    # The candidate UI validates the token via /api/interview-links/{token}.
+    return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.post("/api/interviews/{token}/opened")
+def mark_interview_opened(token: str):
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM interview_links WHERE token = ?", (token,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Mülakat bağlantısı bulunamadı.")
+        interview = dict(row)
+        status = interview["status"]
+        if status == "expired" or (status in ("waiting", "created", "opened") and _link_deadline_passed(interview)):
+            raise HTTPException(status_code=410, detail="Mülakata başlama süresi dolmuş.")
+        if status in ("waiting", "created"):
+            cursor.execute("UPDATE interview_links SET status = ? WHERE token = ? AND status = ?", ("opened", token, status))
+            connection.commit()
+        return {"success": True}
+    finally:
+        connection.close()
+
+
+@app.post("/api/interviews/{token}/start")
+def start_interview(token: str):
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM interview_links WHERE token = ?", (token,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Mülakat bağlantısı bulunamadı.")
+        interview = dict(row)
+        status = interview["status"]
+        if status == "completed":
+            raise HTTPException(status_code=409, detail="Bu mülakat zaten tamamlandı.")
+        if status == "expired":
+            raise HTTPException(status_code=410, detail="Mülakata başlama süresi dolmuş.")
+        if status != "started":
+            if status not in ("waiting", "created", "opened"):
+                raise HTTPException(status_code=409, detail="Mülakat durumu geçersiz.")
+            if _link_deadline_passed(interview):
+                cursor.execute("UPDATE interview_links SET status = 'expired' WHERE token = ? AND status IN ('waiting', 'created', 'opened')", (token,))
+                connection.commit()
+                raise HTTPException(status_code=410, detail="Mülakata başlama süresi dolmuş.")
+            # Starting is persisted BEFORE the deadline, so later requests can continue.
+            cursor.execute("UPDATE interview_links SET status = 'started' WHERE token = ? AND status IN ('waiting', 'created', 'opened')", (token,))
+            connection.commit()
+
+        # A started candidate may reopen the interview after the 8-hour deadline.
+        cursor.execute("SELECT question_number, question, answer FROM interview_answers WHERE token = ? ORDER BY question_number ASC", (token,))
+        rows = cursor.fetchall()
+        unique = {}
+        for answer_row in rows:
+            unique.setdefault(answer_row["question_number"], answer_row)
+        if len(unique) >= 10:
+            raise HTTPException(status_code=409, detail="Bu mülakat zaten tamamlandı.")
+        if not unique:
+            next_number, question = 1, _intro_question()
+        else:
+            next_number = max(unique) + 1
+            history = "\n".join(f"Soru {r['question_number']}: {r['question']}\nCevap: {r['answer']}" for r in unique.values())
+            question = generate_interview_question(
+                cv_text=interview.get("cv_text", "") or "",
+                position=interview.get("position", "") or "",
+                previous_answers=history,
+                question_number=next_number,
+            )
+        return {"success": True, "status": "started", "question_number": next_number, "question": question}
+    finally:
+        connection.close()
+
+
 @app.post("/api/interviews/{token}/answer")
 def submit_interview_answer(token: str, payload: dict):
     answer = str(payload.get("answer", "")).strip()
@@ -469,6 +464,12 @@ def submit_interview_answer(token: str, payload: dict):
                 detail="Mülakat bağlantısı bulunamadı."
             )
         interview = dict(row)
+        if interview["status"] != "started":
+            raise HTTPException(
+                status_code=409,
+                detail="Cevap göndermek için mülakatın başlamış olması gerekir."
+            )
+        # An already-started interview is allowed to finish after expires_at.
         cv_text = interview.get("cv_text", "") or ""
         position = interview.get("position", "") or ""
         print("MULAKAT CV METNI:", cv_text[:500])
@@ -568,7 +569,8 @@ def get_hr_interviews():
                 company,
                 position,
                 status,
-                expires_at
+                expires_at,
+                created_at
             FROM interview_links
             ORDER BY token DESC
             """
@@ -577,6 +579,11 @@ def get_hr_interviews():
         rows = cursor.fetchall()
         for row in rows:
             token = row["token"]
+            if row["status"] in ("waiting", "created", "opened") and _link_deadline_passed(dict(row)):
+                cursor.execute(
+                    "UPDATE interview_links SET status = 'expired' WHERE token = ? AND status IN ('waiting', 'created', 'opened')",
+                    (token,)
+                )
 
             cursor.execute(
                 """
@@ -589,7 +596,7 @@ def get_hr_interviews():
 
             answer_count = cursor.fetchone()["answer_count"]
 
-            if answer_count >= 10 and row["status"] != "completed":
+            if answer_count >= 10 and row["status"] in ("started", "completed"):
                 cursor.execute(
                     """
                     UPDATE interview_links
@@ -611,17 +618,30 @@ def get_hr_interviews():
                 company,
                 position,
                 status,
-                expires_at
+                expires_at,
+                created_at
             FROM interview_links
             ORDER BY token DESC
             """
         )
 
         rows = cursor.fetchall()
-        return {
-            "success": True,
-            "interviews": [dict(row) for row in rows]
-        }
+        interviews = []
+        for row in rows:
+            item = dict(row)
+            item["validity_hours"] = 8
+            item["created_at_estimated"] = False
+            if not item.get("created_at") and item.get("expires_at"):
+                try:
+                    expiry = datetime.fromisoformat(item["expires_at"])
+                    item["estimated_created_at"] = (expiry - timedelta(hours=8)).isoformat()
+                    item["created_at_estimated"] = True
+                except (TypeError, ValueError):
+                    item["estimated_created_at"] = None
+            else:
+                item["estimated_created_at"] = None
+            interviews.append(item)
+        return {"success": True, "interviews": interviews}
 
     finally:
         connection.close()
@@ -643,6 +663,7 @@ def get_hr_interview_detail(token: str):
                 position,
                 status,
                 expires_at,
+                created_at,
                 cv_text
             FROM interview_links
             WHERE token = ?
