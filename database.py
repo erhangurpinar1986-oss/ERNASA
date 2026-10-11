@@ -112,6 +112,7 @@ def initialize_database():
             company TEXT,
             position TEXT,
             expires_at TEXT,
+            created_at TEXT,
             status TEXT,
             cv_text TEXT
         )
@@ -121,6 +122,15 @@ def initialize_database():
             ALTER TABLE interview_links
             ADD COLUMN IF NOT EXISTS cv_text TEXT
         """)
+
+    # Var olan aday kayıtlarını koruyarak tarih sütununu ekle.
+    if DATABASE_URL:
+        cursor.execute("ALTER TABLE interview_links ADD COLUMN IF NOT EXISTS created_at TEXT")
+    else:
+        cursor.execute("PRAGMA table_info(interview_links)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "created_at" not in columns:
+            cursor.execute("ALTER TABLE interview_links ADD COLUMN created_at TEXT")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS candidate_sequence (
