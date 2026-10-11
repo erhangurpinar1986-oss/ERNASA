@@ -60,6 +60,17 @@ def verify_ik_session(session_value: str) -> bool:
         expected_signature
     )
 
+def require_ik_session(request: Request) -> str:
+    """Require a valid HR session for sensitive API endpoints."""
+    session_value = request.cookies.get("ernasa_ik_session", "")
+    if not verify_ik_session(session_value):
+        raise HTTPException(
+            status_code=401,
+            detail="İK oturumu gerekli. Lütfen yeniden giriş yapın."
+        )
+    return "authenticated"
+
+
 def verify_ik_login(
     credentials: HTTPBasicCredentials = Depends(security)
 ):
@@ -201,7 +212,7 @@ def home():
 interview_links = {}
 
 @app.post("/api/cv/upload")
-async def upload_cv(cv: UploadFile = File(...)):
+async def upload_cv(cv: UploadFile = File(...), _ik: str = Depends(require_ik_session)):
     original_name = cv.filename or "cv"
 
     extension = Path(original_name).suffix.lower()
@@ -248,7 +259,7 @@ async def upload_cv(cv: UploadFile = File(...)):
         "message": "CV başarıyla yüklendi ve analiz edildi."
     }
 @app.post("/api/interview-links")
-def create_interview_link(candidate: dict):
+def create_interview_link(candidate: dict, _ik: str = Depends(require_ik_session)):
     identity = create_interview_identity()
 
     candidate_number = identity["candidate_number"]
@@ -554,7 +565,7 @@ def submit_interview_answer(token: str, payload: dict):
         connection.close()
 
 @app.get("/api/hr/interviews")
-def get_hr_interviews():
+def get_hr_interviews(_ik: str = Depends(require_ik_session)):
     connection = get_connection()
     cursor = connection.cursor()
 
@@ -647,7 +658,7 @@ def get_hr_interviews():
         connection.close()
 
 @app.get("/api/hr/interviews/{token}")
-def get_hr_interview_detail(token: str):
+def get_hr_interview_detail(token: str, _ik: str = Depends(require_ik_session)):
     connection = get_connection()
     cursor = connection.cursor()
 
@@ -758,7 +769,7 @@ def get_hr_interview_detail(token: str):
     finally:
         connection.close()
 @app.get("/api/hr/interviews/{token}/pdf")
-def download_interview_pdf(token: str):
+def download_interview_pdf(token: str, _ik: str = Depends(require_ik_session)):
     connection = get_connection()
     cursor = connection.cursor()
 
