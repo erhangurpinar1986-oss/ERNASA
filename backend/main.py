@@ -315,7 +315,7 @@ def create_interview_link(candidate: dict, _ik: str = Depends(require_ik_session
         "validity_hours": 8,
         "status": "waiting",
         "interview_url":
-            f"https://ernasa.com/interview/{interview_id}"
+            f"{'http://127.0.0.1:8081' if os.getenv('RENDER') is None else 'https://ernasa.com'}/interview/{interview_id}"
     }
 def _link_deadline_passed(interview: dict) -> bool:
     """The eight-hour deadline limits STARTING, not finishing."""

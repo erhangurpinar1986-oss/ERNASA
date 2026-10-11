@@ -529,8 +529,8 @@ ${jobFitAnalysis ? `
     ">
         <h3 style="margin-top:0;">AI İşe Uygunluk Analizi</h3>
 
-        <div style="white-space:pre-wrap; line-height:1.6;">
-            ${jobFitAnalysis}
+        <div style="white-space:pre-line; line-height:1.6; text-align:left;">
+    ${jobFitAnalysis}
         </div>
     </div>
 
@@ -664,9 +664,11 @@ async function downloadInterviewPdf(token) {
                     }
 
                     .analysis {
-                        white-space: pre-wrap;
+                        white-space: pre-line;
                         line-height: 1.6;
+                        text-align: left;
                         background: #f8fafc;
+                        overflow-wrap: anywhere;
                     }
 
                     .answer {
