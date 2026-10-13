@@ -268,7 +268,14 @@ function changeCandidatePage(direction) {
 
 
 function openCandidateReport(token) {
-    showPortalScreen("interviews");
+    const interviewsNav = document.querySelector('.sidebar-item[data-screen="interviews"]');
+
+    if (interviewsNav) {
+        interviewsNav.click();
+    } else {
+        showPortalScreen("interviews");
+    }
+
     openInterviewReport(token);
 }
 function filterCandidatesByStatus(status) {

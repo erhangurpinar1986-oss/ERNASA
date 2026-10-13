@@ -1,0 +1,445 @@
+    <!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>ERNASA İK Portalı</title>
+
+    <link rel="stylesheet" href="/static/ernasa_v5_ik.css">
+</head>
+
+
+<body>
+
+    <main class="page">
+        <aside class="dashboard-sidebar">
+
+    <div class="sidebar-brand">
+        <img src="/assets/ernasalogo.png" alt="ERNASA">
+        <div>
+            <strong>ERNASA</strong>
+            <span>İK Yönetim Sistemi</span>
+        </div>
+    </div>
+
+    <nav class="sidebar-menu">
+        <a href="#" class="sidebar-item active" data-screen="dashboard">
+            <i data-lucide="layout-dashboard"></i>
+            Genel Bakış
+        </a>
+
+        <a href="#" class="sidebar-item" data-screen="cv">
+            <i data-lucide="file-search"></i>
+            CV Analizi
+        </a>
+
+        <a href="#" class="sidebar-item" data-screen="candidates">
+            <i data-lucide="users-round"></i>
+            Adaylar
+        </a>
+
+        <a href="#" class="sidebar-item" data-screen="interviews">
+            <i data-lucide="messages-square"></i>
+            Mülakatlar
+        </a>
+    </nav>
+
+    <div class="sidebar-footer">
+        <span>ERNASA</span>
+        <small>İşe Alımın Yeni Nesil Dijital Asistanı</small>
+    </div>
+
+</aside>
+
+        <section class="portal-panel">
+
+            <header class="topbar dashboard-topbar">
+
+    <div class="brand-area">
+        <img
+            src="/assets/ernasalogo.png"
+            alt="ERNASA Logo"
+            class="dashboard-logo"
+        >
+
+        <div>
+            <h1>ERNASA</h1>
+            <p>İnsan Kaynakları Yönetim Merkezi</p>
+        </div>
+    </div>
+
+    <div class="topbar-actions">
+        <div class="v5-user" aria-label="İK kullanıcı alanı"><span class="v5-avatar">İK</span><span>İK Yönetimi<small>Yönetim paneli</small></span></div>
+        <a href="/" class="candidate-link">
+            Ana Sayfa
+        </a>
+    </div>
+
+</header>
+            <section class="dashboard-home" id="dashboardHome">
+
+    <div class="dashboard-title-row">
+        <div class="v5-heading"><span class="v5-heading-icon"><i data-lucide="layout-dashboard"></i></span><div><h2>Kontrol Paneli</h2><p>Aday ve mülakat süreçlerinizi tek ekrandan yönetin.</p></div></div>
+        <button type="button" class="v5-outline-btn" id="dashboardRefresh">↻ Verileri Yenile</button>
+    </div>
+    <div class="dashboard-stats">
+        <div class="dashboard-stat-card v5-blue"><span class="v5-stat-icon"><i data-lucide="users-round"></i></span><div><strong id="totalCandidates">0</strong><span>Toplam Aday</span></div></div>
+        <div class="dashboard-stat-card v5-green"><span class="v5-stat-icon"><i data-lucide="users-round"></i></span><div><strong id="completedInterviews">0</strong><span>Tamamlanan Mülakat</span></div></div>
+        <div class="dashboard-stat-card v5-orange"><span class="v5-stat-icon"><i data-lucide="users-round"></i></span><div><strong id="activeInterviews">0</strong><span>Devam Eden</span></div></div>
+        <div class="dashboard-stat-card v5-purple"><span class="v5-stat-icon"><i data-lucide="users-round"></i></span><div><strong id="waitingEvaluation">0</strong><span>Henüz Başlamayan</span></div></div>
+    </div>
+    <div class="v5-chart-grid">
+        <section class="v5-widget"><h3>Aday Durumu</h3><div class="v5-donut-layout"><div class="v5-donut" id="dashboardDonut"><div class="v5-donut-center"><strong id="dashboardDonutTotal">0</strong><span>Toplam Aday</span></div></div><div class="v5-legend" id="dashboardStatusLegend"></div></div></section>
+        <section class="v5-widget"><h3>Aylık Aday Trendi</h3><div class="v5-chart-note">Kayıt tarihi bulunan adaylar</div><div id="dashboardTrend" class="v5-trend"></div></section>
+        <section class="v5-widget"><h3>Pozisyon Dağılımı</h3><div id="dashboardPositions" class="v5-positions"></div></section>
+        <section class="v5-widget"><div class="v5-widget-head"><h3>Son Eklenen Adaylar</h3><button type="button" class="v5-text-btn" data-go-candidates>Tümünü Gör →</button></div><div id="dashboardRecent" class="v5-recent"></div></section>
+    </div>
+    <div class="dashboard-candidates">
+        <div class="v5-widget-head"><div class="dashboard-section-title"><h3>Son Adaylar</h3><p>Son aday ve mülakat hareketleri</p></div><button type="button" class="v5-primary-btn" data-go-candidates>Tüm Adayları Gör →</button></div>
+        <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th>Aday No</th><th>Ad Soyad</th><th>Pozisyon</th><th>Mülakat Durumu</th><th>Oluşturma Tarihi</th><th>Bitiş</th><th>Kalan Süre</th><th>İşlemler</th></tr></thead><tbody id="dashboardCandidateList"><tr><td colspan="6" class="dashboard-empty">Aday kayıtları yükleniyor...</td></tr></tbody></table></div>
+    </div>
+
+</section>
+
+<div id="cvAnalysisScreen" style="display:none;">
+
+            <section class="upload-card">
+
+                <div class="section-heading">
+                    <span class="step-number"><i data-lucide="file-up"></i></span>
+
+                    <div>
+                        <h2>CV Yükleme</h2>
+                        <p>
+                            Adayın PDF veya DOCX formatındaki öz geçmişini yükleyiniz.
+                        </p>
+                    </div>
+                </div>
+
+                <label class="upload-area" for="cvFile">
+
+                    <input
+                        type="file"
+                        id="cvFile"
+                        accept=".pdf,.doc,.docx"
+                    >
+
+                    <span class="upload-icon">↑</span>
+
+                    <strong>CV dosyasını seçin</strong>
+
+                    <span>
+                        veya bu alana sürükleyip bırakın
+                    </span>
+
+                    <small>
+                        Desteklenen formatlar: PDF, DOC, DOCX
+                    </small>
+
+                </label>
+
+                <div class="file-status" id="fileStatus">
+                    Henüz CV yüklenmedi.
+                </div>
+
+                <button
+                    type="button"
+                    id="analyzeButton"
+                    class="primary-button"
+                    disabled
+                >
+                    CV'Yİ ANALİZ ET
+                </button>
+
+            </section>
+
+            <section class="candidate-card">
+
+                <div class="section-heading">
+                    <span class="step-number"><i data-lucide="contact-round"></i></span>
+
+                    <div>
+                        <h2>Aday Bilgileri</h2>
+                        <p>
+                            CV'den çıkarılan bilgileri kontrol edip gerektiğinde düzenleyiniz.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="form-grid">
+
+                    <div class="form-group">
+                        <label for="candidateName">Ad Soyad</label>
+                        <input
+                            type="text"
+                            id="candidateName"
+                            placeholder="CV'den otomatik doldurulacak"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="candidatePhone">Telefon</label>
+                        <input
+                            type="tel"
+                            id="candidatePhone"
+                            placeholder="CV'den otomatik doldurulacak"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="candidateEmail">E-posta</label>
+                        <input
+                            type="email"
+                            id="candidateEmail"
+                            placeholder="CV'den otomatik doldurulacak"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="companyName">Firma</label>
+                        <input
+                            type="text"
+                            id="companyName"
+                            value=""
+                        >
+                    </div>
+
+                    <div class="form-group form-group-full">
+                        <label for="positionName">Pozisyon</label>
+                        <input
+                            type="text"
+                            id="positionName"
+                            placeholder="Pozisyon giriniz (Örn: Lojistik Personeli)"
+                            autocomplete="off"
+                            required
+                         >
+                    </div>
+
+                </div>
+
+            </section>
+
+            <section class="analysis-card">
+
+                <div class="section-heading">
+                    <span class="step-number"><i data-lucide="brain-circuit"></i></span>
+
+                    <div>
+                        <h2>Yapay Zekâ Analizi</h2>
+                        <p>
+                            Sistem CV'deki iletişim, eğitim ve deneyim bilgilerini inceleyecektir.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="analysis-box" id="analysisBox">
+
+                    <div class="analysis-empty">
+                        Analizi başlatmak için önce bir CV yükleyiniz.
+                    </div>
+
+                </div>
+
+                <button
+                    type="button"
+                    id="createLinkButton"
+                    class="primary-button"
+                    disabled
+                >
+                    MÜLAKAT LİNKİ OLUŞTUR
+                </button>
+<div id="interviewActions" style="display:none; margin-top:16px;">
+
+    <div style="margin-bottom:10px; font-weight:600;">
+        Aday No:
+        <span id="candidateNumber">-</span>
+    </div>
+
+    <input
+        id="interviewLink"
+        type="text"
+        readonly
+        style="
+            width:100%;
+            box-sizing:border-box;
+            padding:12px;
+            border:1px solid #cfd8dc;
+            border-radius:8px;
+            font-size:15px;
+            background:#f8f9fa;
+            margin-bottom:12px;
+        "
+    >
+
+    <div style="
+        display:flex;
+        gap:10px;
+        flex-wrap:wrap;
+    ">
+
+        <button
+            id="copyLinkButton"
+            type="button"
+            class="primary-button"
+        >
+            📋 Linki Kopyala
+        </button>
+
+        <button
+            id="whatsappButton"
+            type="button"
+            class="primary-button"
+        >
+            📱 WhatsApp
+        </button>
+
+        <button
+            id="emailButton"
+            type="button"
+            class="primary-button"
+        >
+            📧 E-posta
+        </button>
+
+    </div>
+
+    <div
+        id="candidateStatus"
+        style="
+            margin-top:12px;
+            font-weight:600;
+        "
+    >
+        Durum: -
+    </div>
+</div>
+
+</div>
+<div id="candidatesScreen" style="display:none;">
+
+    <section class="results-card">
+
+        <div class="section-heading">
+            <span class="step-number"><i data-lucide="users-round"></i></span>
+
+            <div>
+                <h2>Aday Takip Merkezi</h2>
+                <p>
+                    Adayları arayın, mülakat durumlarını takip edin
+                    ve tamamlanan raporları görüntüleyin.
+                </p>
+            </div>
+        </div>
+
+        <div class="form-grid">
+
+            <input
+                type="text"
+                id="candidateSearch"
+                placeholder="Aday adı, aday numarası veya pozisyon ara..."
+            >
+
+            <select id="statusFilter">
+                <option value="">Tüm Durumlar</option>
+                <option value="waiting">Bekliyor</option>
+                <option value="opened">Link Açıldı</option>
+                <option value="started">Mülakat Başladı</option>
+                <option value="completed">Tamamlandı</option>
+                <option value="expired">Süresi Doldu</option>
+            </select>
+
+        </div>
+
+        <div class="candidate-stats">
+
+    <div class="candidate-stat" onclick="filterCandidatesByStatus('')">
+        <strong id="statTotal">0</strong>
+        <span>Toplam Aday</span>
+    </div>
+
+    <div class="candidate-stat" onclick="filterCandidatesByStatus('waiting')">
+        <strong id="statWaiting">0</strong>
+        <span>Bekliyor</span>
+    </div>
+
+    <div class="candidate-stat" onclick="filterCandidatesByStatus('opened')">
+        <strong id="statOpened">0</strong>
+        <span>Link Açıldı</span>
+    </div>
+
+    <div class="candidate-stat" onclick="filterCandidatesByStatus('started')">
+        <strong id="statStarted">0</strong>
+        <span>Mülakat Başladı</span>
+    </div>
+
+    <div class="candidate-stat" onclick="filterCandidatesByStatus('completed')">
+        <strong id="statCompleted">0</strong>
+        <span>Tamamlandı</span>
+    </div>
+
+    <div class="candidate-stat" onclick="filterCandidatesByStatus('expired')">
+        <strong id="statExpired">0</strong>
+        <span>Süresi Doldu</span>
+    </div>
+
+</div>
+
+<div id="candidateSummary" style="display:none;"></div>
+
+        <div id="candidateList">
+            Adaylar yükleniyor...
+        </div>
+
+    </section>
+
+</div>
+<div id="interviewsScreen" style="display:none;">
+
+<section class="results-card">
+
+    <div class="section-heading">
+        <span class="step-number"><i data-lucide="messages-square"></i></span>
+
+        <div>
+    <h2>Adaylar ve Mülakat Durumları</h2>
+    <p>
+        Sisteme eklenen adayları, mülakat durumlarını ve tamamlanan mülakat sonuçlarını görüntüleyiniz.
+    </p>
+</div>
+    </div>
+
+    <div id="interviewResults">
+
+        <div class="analysis-empty">
+            Mülakat kayıtları yükleniyor...
+        </div>
+
+    </div>
+
+</section>
+
+    </section>
+
+</div>
+
+</section>
+</main>
+
+<footer class="footer">
+    © 2026 ERNASA Yazılım Teknoloji Bilişim A.Ş.
+</footer>
+
+<script src="/static/ernasa_report_format.js"></script>
+<script src="/static/ernasa_v5_ik.js"></script>
+<script src="/static/aday-takip.js"></script>
+<script src="/static/ernasa_v5_dashboard_only.js"></script>
+
+<script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script><script>if(window.lucide)lucide.createIcons();</script></body>
+</html>
+
+
+
+
+
+
