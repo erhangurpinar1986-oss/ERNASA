@@ -181,7 +181,7 @@ def open_hr_panel(request: Request):
     if not verify_ik_session(session):
         return RedirectResponse(url="/ik-giris", status_code=302)
 
-    return FileResponse(FRONTEND_DIR / "ik.html")
+    return RedirectResponse(url="/ik-v5", status_code=302)
 @app.get("/ik-v5")
 def open_hr_panel_v5(request: Request):
     session = request.cookies.get("ernasa_ik_session")
