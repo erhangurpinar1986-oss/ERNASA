@@ -1673,3 +1673,66 @@ body > .footer {
         display: none;
     }
 }
+
+
+/* ERNASA V5 - Kurumsal Kullanici Alani */
+.dashboard-topbar .topbar-actions {
+    gap: 28px;
+}
+
+.dashboard-topbar .v5-user {
+    gap: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.dashboard-topbar .v5-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    border-radius: 50%;
+    background: #17477e;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.dashboard-topbar .v5-user small {
+    font-size: 12px;
+    font-weight: 400;
+    color: #b7c9e3;
+}
+
+.dashboard-topbar #ernasaSecureLogout {
+    min-height: 42px;
+    padding: 0 18px !important;
+}
+
+
+/* ERNASA V5 - Istatistik Kart Metin Duzeni */
+.dashboard-home .dashboard-stat-card > div {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.dashboard-home .dashboard-stat-card > div > strong {
+    display: block;
+    font-size: 30px;
+    line-height: 1.1;
+    margin: 0;
+}
+
+.dashboard-home .dashboard-stat-card > div > span {
+    display: block;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+}
