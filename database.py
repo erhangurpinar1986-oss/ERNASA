@@ -179,5 +179,39 @@ def initialize_database():
             created_at TEXT NOT NULL
         )
     """)
+    # ERNASA Shield - IK giris denemeleri
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ik_login_attempts (
+            id TEXT PRIMARY KEY,
+            ip_hash TEXT NOT NULL,
+            attempted_at TEXT NOT NULL
+        )
+    """)
+
+    # ERNASA Shield - Guvenli IK oturumlari
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ik_sessions (
+            token_hash TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            revoked_at TEXT,
+            last_activity_at TEXT
+        )
+    """)
+
+    if DATABASE_URL:
+        cursor.execute("""
+            ALTER TABLE ik_sessions
+            ADD COLUMN IF NOT EXISTS last_activity_at TEXT
+        """)
+    else:
+        cursor.execute("PRAGMA table_info(ik_sessions)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "last_activity_at" not in columns:
+            cursor.execute(
+                "ALTER TABLE ik_sessions ADD COLUMN last_activity_at TEXT"
+            )
+
     connection.commit()
     connection.close()

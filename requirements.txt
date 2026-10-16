@@ -1,4 +1,4 @@
-fastapi
+﻿fastapi
 uvicorn
 python-multipart
 pydantic
@@ -12,3 +12,4 @@ psycopg2-binary
 python-dotenv
 openai
 reportlab
+itsdangerous==2.2.0

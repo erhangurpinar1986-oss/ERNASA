@@ -1,3 +1,14 @@
+
+function shieldEscapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    }[ch]));
+}
+
 const cvFileInput = document.getElementById("cvFile");
 const uploadArea = document.querySelector(".upload-area");
 const fileStatus = document.getElementById("fileStatus");
@@ -62,7 +73,7 @@ function handleFile(file) {
 
     fileStatus.innerHTML = `
         <strong>✓ CV başarıyla seçildi</strong><br>
-        ${file.name} — ${formatFileSize(file.size)}
+        ${shieldEscapeHtml(file.name)} — ${formatFileSize(file.size)}
     `;
 
     fileStatus.classList.remove("file-error");
@@ -442,17 +453,17 @@ const statusLabels = {
         margin-bottom:12px;
         background:#ffffff;
     ">
-        <strong>${interview.token}</strong><br>
-        ${interview.name || "Ad bilgisi yok"}<br>
-        ${interview.company || "-"} - ${interview.position || "-"}<br>
-        <strong>Durum:</strong> ${statusLabels[interview.status] || interview.status || "-"}
+        <strong>${shieldEscapeHtml(interview.token)}</strong><br>
+        ${shieldEscapeHtml(interview.name || "Ad bilgisi yok")}<br>
+        ${shieldEscapeHtml(interview.company || "-")} - ${shieldEscapeHtml(interview.position || "-")}<br>
+        <strong>Durum:</strong> ${shieldEscapeHtml(statusLabels[interview.status] || interview.status || "-")}
 
         ${interview.status === "completed" ? `
             <div style="margin-top:12px;">
                 <button
                     type="button"
                     class="primary-button"
-                    onclick="openInterviewReport('${interview.token}')"
+                    data-report-token="${shieldEscapeHtml(interview.token)}"
                 >
                     RAPORU GÖRÜNTÜLE
                 </button>
@@ -478,6 +489,20 @@ loadInterviewResults();
 // setInterval(() => {
 //     loadInterviewResults();
 // }, 10000);
+
+
+document.addEventListener("click", function(event) {
+    const reportButton = event.target.closest("[data-report-token]");
+    if (reportButton) {
+        openInterviewReport(reportButton.dataset.reportToken);
+        return;
+    }
+
+    const pdfButton = event.target.closest("[data-pdf-token]");
+    if (pdfButton) {
+        downloadInterviewPdf(pdfButton.dataset.pdfToken);
+    }
+});
 
 async function openInterviewReport(token) {
     const resultsBox = document.getElementById("interviewResults");
@@ -512,14 +537,14 @@ async function openInterviewReport(token) {
             ">
 
                 <h3 style="margin-top:0;">
-                    ${interview.name || "Aday"} - Mülakat Raporu
+                    ${shieldEscapeHtml(interview.name || "Aday")} - Mülakat Raporu
                 </h3>
 
                 <p>
-                    <strong>Aday No:</strong> ${interview.token}<br>
-                    <strong>Firma:</strong> ${interview.company || "-"}<br>
-                    <strong>Pozisyon:</strong> ${interview.position || "-"}<br>
-                    <strong>Durum:</strong> ${interview.status || "-"}
+                    <strong>Aday No:</strong> ${shieldEscapeHtml(interview.token)}<br>
+                    <strong>Firma:</strong> ${shieldEscapeHtml(interview.company || "-")}<br>
+                    <strong>Pozisyon:</strong> ${shieldEscapeHtml(interview.position || "-")}<br>
+                    <strong>Durum:</strong> ${shieldEscapeHtml(interview.status || "-")}
                 </p>
 
                 <hr>
@@ -547,16 +572,16 @@ ${jobFitAnalysis ? `
                         border:1px solid #e0e0e0;
                         border-radius:8px;
                     ">
-                        <strong>Soru ${item.question_number}</strong>
+                        <strong>Soru ${shieldEscapeHtml(item.question_number)}</strong>
 
                         <p>
-                            ${item.question}
+                            ${shieldEscapeHtml(item.question)}
                         </p>
 
                         <strong>Cevap</strong>
 
                         <p>
-                            ${item.answer}
+                            ${shieldEscapeHtml(item.answer)}
                         </p>
                     </div>
                 `).join("")}
@@ -564,7 +589,7 @@ ${jobFitAnalysis ? `
     type="button"
     class="primary-button"
     style="margin-top:20px;"
-    onclick="downloadInterviewPdf('${interview.token}')"
+    data-pdf-token="${shieldEscapeHtml(interview.token)}"
 >
     PDF RAPORU İNDİR
 </button>
@@ -614,7 +639,7 @@ async function downloadInterviewPdf(token) {
             <html lang="tr">
             <head>
                 <meta charset="UTF-8">
-                <title>${interview.name || "Aday"} - ERNASA Mülakat Raporu</title>
+                <title>${shieldEscapeHtml(interview.name || "Aday")} - ERNASA Mülakat Raporu</title>
 
                 <style>
                     body {
@@ -732,11 +757,11 @@ async function downloadInterviewPdf(token) {
                 <h1>Yapay Zekâ Destekli Aday Değerlendirme Raporu</h1>
 
                 <div class="candidate-info">
-                    <strong>Aday:</strong> ${interview.name || "-"}<br>
-                    <strong>Aday No:</strong> ${interview.token || "-"}<br>
-                    <strong>Firma:</strong> ${interview.company || "-"}<br>
-                    <strong>Pozisyon:</strong> ${interview.position || "-"}<br>
-                    <strong>Durum:</strong> ${interview.status || "-"}
+                    <strong>Aday:</strong> ${shieldEscapeHtml(interview.name || "-")}<br>
+                    <strong>Aday No:</strong> ${shieldEscapeHtml(interview.token || "-")}<br>
+                    <strong>Firma:</strong> ${shieldEscapeHtml(interview.company || "-")}<br>
+                    <strong>Pozisyon:</strong> ${shieldEscapeHtml(interview.position || "-")}<br>
+                    <strong>Durum:</strong> ${shieldEscapeHtml(interview.status || "-")}
                 </div>
 
                 <h2>AI İşe Uygunluk Analizi</h2>
@@ -750,11 +775,11 @@ async function downloadInterviewPdf(token) {
                 ${answers.map(item => `
                     <div class="answer">
                         <div class="question">
-                            Soru ${item.question_number}: ${item.question || ""}
+                            Soru ${shieldEscapeHtml(item.question_number)}: ${shieldEscapeHtml(item.question || "")}
                         </div>
 
                         <div>
-                            <strong>Cevap:</strong> ${item.answer || ""}
+                            <strong>Cevap:</strong> ${shieldEscapeHtml(item.answer || "")}
                         </div>
                     </div>
                 `).join("")}

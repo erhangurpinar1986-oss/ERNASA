@@ -70,6 +70,14 @@
     </div>
 
     <div class="topbar-actions">
+<button
+    id="ernasaSecureLogout"
+    type="button"
+    style="padding:10px 16px;cursor:pointer;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#991b1b;font-weight:600;"
+    onclick="ernasaSecureLogout()">
+    G?venli ??k??
+</button>
+
         <div class="v5-user" aria-label="İK kullanıcı alanı"><span class="v5-avatar">İK</span><span>İK Yönetimi<small>Yönetim paneli</small></span></div>
         <a href="/" class="candidate-link">
             Ana Sayfa
@@ -435,7 +443,31 @@
 <script src="/static/aday-takip.js"></script>
 <script src="/static/ernasa_v5_dashboard_only.js"></script>
 
-<script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script><script>if(window.lucide)lucide.createIcons();</script></body>
+<script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script><script>if(window.lucide)lucide.createIcons();</script>
+<script>
+async function ernasaSecureLogout() {
+    const button = document.getElementById("ernasaSecureLogout");
+    button.disabled = true;
+
+    try {
+        const response = await fetch("/api/ik-logout", {
+            method: "POST",
+            credentials: "same-origin"
+        });
+
+        if (!response.ok) {
+            throw new Error("Cikis islemi basarisiz");
+        }
+
+        window.location.replace("/ik-giris");
+    } catch (error) {
+        button.disabled = false;
+        alert("G?venli ??k?? tamamlanamad?. L?tfen tekrar deneyin.");
+    }
+}
+</script>
+
+</body>
 </html>
 
 

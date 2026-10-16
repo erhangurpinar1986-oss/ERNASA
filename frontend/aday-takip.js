@@ -165,8 +165,8 @@ function renderCandidates() {
                 </td>
 
                 <td>
-                    <span class="candidate-status status-${candidateStatus}">
-                        ${statusText}
+                    <span class="candidate-status status-${candidateEscape(candidateStatus)}">
+                        ${candidateEscape(statusText)}
                     </span>
                 </td>
 
@@ -183,7 +183,7 @@ function renderCandidates() {
                                 <button
                                     type="button"
                                     class="candidate-detail-button"
-                                    onclick="openCandidateReport('${candidate.token}')"
+                                    data-candidate-report="${candidateEscape(candidate.token)}"
                                 >
                                     Detay
                                 </button>
@@ -312,3 +312,11 @@ setInterval(() => {
     renderCandidates();
     updateCandidateStats();
 }, 1000);
+
+
+document.addEventListener("click", function(event) {
+    const button = event.target.closest("[data-candidate-report]");
+    if (!button) return;
+
+    openCandidateReport(button.dataset.candidateReport);
+});

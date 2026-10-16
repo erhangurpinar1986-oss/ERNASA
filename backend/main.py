@@ -26,49 +26,98 @@ from reportlab.pdfbase.ttfonts import TTFont
 from io import BytesIO
 
 
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        from fastapi.responses import Response
+        from urllib.parse import unquote
+
+        protected_html = {
+            "aday-takip.html",
+            "ernasa_1_1_panel.html",
+            "ernasa_1_1_panel_duzeltilmis.html",
+            "ernasa_v5_hazir.html",
+            "ernasa_v5_ik.html",
+            "ernasa_v5_ik_shield_backup.html",
+            "ik.html",
+            "ik_yedek.html",
+            "index_yedek.html",
+            "ik_yedek.css",
+            "ik_yedek.js",
+            "script_yedek.js",
+            "style_yedek.css",
+        }
+
+        request_path = unquote(request.scope.get("path", ""))
+
+        if request_path.lower().startswith("/static/"):
+            filename = request_path.rsplit("/", 1)[-1].lower()
+
+            if (
+                filename in protected_html
+                or ".bak" in filename
+            ):
+                return Response(
+                    status_code=403,
+                    headers={
+                        "X-Content-Type-Options": "nosniff",
+                        "X-Frame-Options": "DENY",
+                        "Referrer-Policy": "strict-origin-when-cross-origin",
+                    }
+                )
+
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+
 app = FastAPI(
     title="ERNASA API",
     description="Yapay Zekâ Destekli İnsan Kaynakları Asistanı",
     version="1.0.0"
 )
+app.add_middleware(SecurityHeadersMiddleware)
 security = HTTPBasic()
 IK_SESSION_SECRET = os.getenv("IK_SESSION_SECRET", "")
 
-def create_ik_session(username: str) -> str:
-    signature = hmac.new(
-        IK_SESSION_SECRET.encode("utf-8"),
-        username.encode("utf-8"),
-        hashlib.sha256
-    ).hexdigest()
+from shield_sessions import (
+    create_ik_session,
+    verify_ik_session,
+    revoke_ik_session
+)
+from shield_rate_limit import get_login_identity, hash_login_identity, check_login_limit, register_failed_login_atomically
 
-    return f"{username}.{signature}"
-
-def verify_ik_session(session_value: str) -> bool:
-    if not session_value or "." not in session_value:
-        return False
-
-    username, received_signature = session_value.rsplit(".", 1)
-
-    expected_signature = hmac.new(
-        IK_SESSION_SECRET.encode("utf-8"),
-        username.encode("utf-8"),
-        hashlib.sha256
-    ).hexdigest()
-
-    return hmac.compare_digest(
-        received_signature,
-        expected_signature
-    )
 
 def require_ik_session(request: Request) -> str:
-    """Require a valid HR session for sensitive API endpoints."""
+    """Require a valid HR session and protect state-changing requests."""
     session_value = request.cookies.get("ernasa_ik_session", "")
+
     if not verify_ik_session(session_value):
         raise HTTPException(
             status_code=401,
-            detail="İK oturumu gerekli. Lütfen yeniden giriş yapın."
+            detail="IK oturumu gerekli. Lutfen yeniden giris yapin."
         )
+
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin", "")
+        allowed_origins = {
+            "https://ernasa.com",
+            "https://www.ernasa.com",
+            "http://127.0.0.1:8081",
+            "http://localhost:8081",
+        }
+
+        if origin not in allowed_origins:
+            raise HTTPException(
+                status_code=403,
+                detail="Guvenlik kontrolu: Gecersiz istek kaynagi."
+            )
+
     return "authenticated"
+
 
 
 def verify_ik_login(
@@ -139,8 +188,29 @@ def ik_login(
     username: str = Form(...),
     password: str = Form(...)
 ):
+    allowed_origins = {
+        "https://ernasa.com",
+        "https://www.ernasa.com",
+        "http://127.0.0.1:8081",
+        "http://localhost:8081",
+    }
+
+    origin = request.headers.get("origin", "")
+
+    if origin not in allowed_origins:
+        raise HTTPException(
+            status_code=403,
+            detail="Guvenlik kontrolu: Gecersiz giris kaynagi."
+        )
+
     correct_username = os.getenv("IK_USERNAME", "")
     correct_password = os.getenv("IK_PASSWORD", "")
+
+    if not correct_username or not correct_password:
+        raise HTTPException(
+            status_code=503,
+            detail="IK giris sistemi yapilandirilmamis."
+        )
 
     username_ok = secrets.compare_digest(
         username,
@@ -152,10 +222,23 @@ def ik_login(
         correct_password
     )
 
+    ip_hash = hash_login_identity(get_login_identity(request))
+
+    if check_login_limit(ip_hash):
+        raise HTTPException(
+            status_code=429,
+            detail="Cok fazla hatali giris. 15 dakika sonra tekrar deneyin."
+        )
+
     if not (username_ok and password_ok):
+        if register_failed_login_atomically(ip_hash):
+            raise HTTPException(
+                status_code=429,
+                detail="Cok fazla hatali giris. 15 dakika sonra tekrar deneyin."
+            )
         raise HTTPException(
             status_code=401,
-            detail="Kullanıcı adı veya şifre hatalı."
+            detail="Kullanici adi veya sifre hatali."
         )
 
     response = JSONResponse(
@@ -166,11 +249,28 @@ def ik_login(
         key="ernasa_ik_session",
         value=create_ik_session(username),
         httponly=True,
-        secure=request.url.scheme == "https",
-        samesite="lax",
-        max_age=28800
+        secure=(os.getenv("RENDER") == "true" or request.url.scheme == "https"),
+        samesite="lax"
     )
 
+    return response
+
+
+@app.post("/api/ik-logout")
+def ik_logout(request: Request):
+    token = request.cookies.get("ernasa_ik_session", "")
+
+    if token:
+        revoke_ik_session(token)
+
+    response = JSONResponse(content={"success": True})
+    response.delete_cookie(
+        key="ernasa_ik_session",
+        path="/",
+        samesite="lax",
+        secure=(os.getenv("RENDER") == "true" or request.url.scheme == "https"),
+        httponly=True
+    )
     return response
 
 
@@ -243,17 +343,14 @@ async def upload_cv(cv: UploadFile = File(...), _ik: str = Depends(require_ik_se
     target_path.write_bytes(content)
 
     text = extract_text(str(target_path))
-    print("\n========== OCR METNİ ==========")
-    print(text)
-    print("================================\n")
 
     contact = parser.parse_candidate(text)
-    print(contact)
 
     return {
         "success": True,
         "original_name": original_name,
         "stored_name": safe_name,
+        "text": text,
         "size": len(content),
         "contact": contact,
         "message": "CV başarıyla yüklendi ve analiz edildi."
@@ -264,7 +361,7 @@ def create_interview_link(candidate: dict, _ik: str = Depends(require_ik_session
 
     candidate_number = identity["candidate_number"]
     security_code = identity["security_code"]
-    interview_id = identity["interview_id"]
+    interview_id = secrets.token_urlsafe(32)
 
     created_at = datetime.now(timezone.utc)
     expires_at = created_at + timedelta(hours=8)
@@ -359,7 +456,7 @@ def get_interview_link(token: str):
             }
         return {
             "success": True,
-            "candidate": {key: interview.get(key) for key in ("name", "phone", "email", "company", "position")},
+            "candidate": {key: interview.get(key) for key in ("name", "company", "position")},
             "expires_at": interview["expires_at"],
             "status": status,
         }
@@ -483,7 +580,6 @@ def submit_interview_answer(token: str, payload: dict):
         # An already-started interview is allowed to finish after expires_at.
         cv_text = interview.get("cv_text", "") or ""
         position = interview.get("position", "") or ""
-        print("MULAKAT CV METNI:", cv_text[:500])
 
 
 
