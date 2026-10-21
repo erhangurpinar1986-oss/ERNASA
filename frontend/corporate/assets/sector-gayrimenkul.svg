@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-label="Gayrimenkul için dijital illüstrasyon">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#08192f"/><stop offset=".55" stop-color="#102e51"/><stop offset="1" stop-color="#031020"/></linearGradient>
+<radialGradient id="glow"><stop stop-color="#ffbd79" stop-opacity=".35"/><stop offset="1" stop-color="#ffbd79" stop-opacity="0"/></radialGradient>
+<pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#5ab9ff" stroke-opacity=".10"/></pattern></defs>
+<rect width="640" height="400" fill="url(#bg)"/><rect width="640" height="400" fill="url(#grid)"/>
+<circle cx="355" cy="190" r="245" fill="url(#glow)"/>
+<g stroke="#ffbd79" stroke-opacity=".16" stroke-width="2" fill="none"><circle cx="320" cy="214" r="167"/><circle cx="320" cy="214" r="139"/><path d="M25 356H615M25 43H615"/></g>
+<g fill="#ffbd79" fill-opacity=".16" stroke="#ffbd79" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><rect x="152" y="181" width="126" height="148" rx="4"/><rect x="278" y="117" width="136" height="212" rx="4"/><rect x="414" y="205" width="81" height="124" rx="4"/><path d="M181 215h24m24 0h23m-71 40h24m24 0h23m61-104h23m24 0h23m-70 45h23m24 0h23m-70 45h23m24 0h23"/><path d="M333 329v-55h30v55"/></g>
+<g fill="#d9f8ff" opacity=".6"><circle cx="72" cy="87" r="3"/><circle cx="574" cy="92" r="3"/><circle cx="538" cy="348" r="3"/></g>
+</svg>

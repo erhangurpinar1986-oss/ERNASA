@@ -1,0 +1,1 @@
+V6.1: Üstteki dikey TEKNOLOJİ · İNSAN · GELECEK yazısı kaldırıldı. Tanıtım pencerelerinde görseli karartan kaplama kaldırıldı; sektör fotoğrafları 600px yüksekliğe zorlanmıyor, orijinal oranlarında gösteriliyor. UYARI: 592x256 çözünürlüklü eski fotoğrafların gerçek ayrıntıları geri kazanılamaz; yüksek çözünürlüklü kaynakla değiştirmek gerekir. ERNASA İK değiştirilmedi.

@@ -1,0 +1,1 @@
+ERNASA V4.2: Proje kartları üzerine fareyle gelince yakınlaştırma, ışık takibi ve hafif perspektif hareketi yeniden eklendi. Mobil cihazlarda ve azaltılmış hareket ayarında efekt otomatik kapanır. index.html dosyasını açın. ERNASA İK değiştirilmedi.
