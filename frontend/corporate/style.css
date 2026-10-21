@@ -241,3 +241,8 @@
 @media(max-width:1150px){.nexus-rebuild .nexus-cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:700px){.nexus-rebuild .nexus-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:430px){.nexus-rebuild .nexus-cards{grid-template-columns:1fr}.nexus-rebuild .nexus-portrait{height:330px}}
+
+/* ERNASA V8 - NEXUS 7: prevent portrait image bleed into adjacent cards. */
+.nexus-rebuild .nexus-card { min-width: 0; overflow: hidden; isolation: isolate; }
+.nexus-rebuild .nexus-portrait { position: relative; width: 100%; min-width: 0; overflow: hidden; flex-shrink: 0; }
+.nexus-rebuild .nexus-portrait img { display: block; width: 100%; max-width: 100%; height: 100%; object-fit: cover; object-position: center; }
