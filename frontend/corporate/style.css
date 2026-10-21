@@ -242,7 +242,25 @@
 @media(max-width:700px){.nexus-rebuild .nexus-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:430px){.nexus-rebuild .nexus-cards{grid-template-columns:1fr}.nexus-rebuild .nexus-portrait{height:330px}}
 
-/* ERNASA V8 - NEXUS 7: prevent portrait image bleed into adjacent cards. */
-.nexus-rebuild .nexus-card { min-width: 0; overflow: hidden; isolation: isolate; }
-.nexus-rebuild .nexus-portrait { position: relative; width: 100%; min-width: 0; overflow: hidden; flex-shrink: 0; }
-.nexus-rebuild .nexus-portrait img { display: block; width: 100%; max-width: 100%; height: 100%; object-fit: cover; object-position: center; }
+/* NEXUS 10: 5 + 5 desktop grid, no empty final row; preserve 7 originals. */
+.nexus-rebuild .nexus-cards{grid-template-columns:repeat(5,minmax(0,1fr));max-width:1480px;margin-inline:auto;gap:16px}
+.nexus-rebuild .nexus-card:nth-child(5){grid-column:auto}
+.nexus-ada{--accent:#5de2cb}.nexus-deniz{--accent:#f1b45f}.nexus-eylul{--accent:#ff83a8}
+.nexus-rebuild .nexus-portrait{position:relative;overflow:hidden;isolation:isolate}
+.nexus-rebuild .nexus-portrait img{display:block;max-width:100%;width:100%;height:100%;object-fit:cover}
+/* Crop baked-in neighboring portrait strips on these three legacy source images. */
+.nexus-rebuild .nexus-selin .nexus-portrait img,
+.nexus-rebuild .nexus-kaan .nexus-portrait img,
+.nexus-rebuild .nexus-atlas .nexus-portrait img{width:112%;max-width:none;transform:translateX(-10.7%);object-position:center}
+@media(max-width:1150px){.nexus-rebuild .nexus-cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:850px){.nexus-rebuild .nexus-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:430px){.nexus-rebuild .nexus-cards{grid-template-columns:1fr}}
+
+/* NEXUS 12: six balanced columns, two rows; photographic expert portraits */
+.nexus-rebuild .nexus-cards{grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+.nexus-aras{--accent:#18baff}.nexus-defne{--accent:#aa78ff}.nexus-ada{--accent:#1cdec4}.nexus-deniz{--accent:#ffbd3f}.nexus-eylul{--accent:#ff658d}
+.nexus-rebuild .nexus-portrait{overflow:hidden;isolation:isolate;position:relative}
+.nexus-rebuild .nexus-portrait img{display:block;max-width:100%;object-fit:cover;object-position:center 25%}
+@media(max-width:1150px){.nexus-rebuild .nexus-cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:700px){.nexus-rebuild .nexus-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:430px){.nexus-rebuild .nexus-cards{grid-template-columns:1fr}}
