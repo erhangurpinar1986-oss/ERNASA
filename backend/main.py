@@ -172,6 +172,13 @@ app.mount(
     StaticFiles(directory=FRONTEND_DIR),
     name="static"
 )
+
+app.mount(
+    "/corporate",
+    StaticFiles(directory=FRONTEND_DIR / "corporate", html=True),
+    name="corporate"
+)
+
 UPLOAD_DIRECTORY = Path("uploads")
 UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
