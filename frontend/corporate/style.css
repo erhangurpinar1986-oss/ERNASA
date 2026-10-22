@@ -264,3 +264,17 @@
 @media(max-width:1150px){.nexus-rebuild .nexus-cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:700px){.nexus-rebuild .nexus-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:430px){.nexus-rebuild .nexus-cards{grid-template-columns:1fr}}
+
+
+/* ERNASA solution detail links */
+.solution-link {
+    display: block;
+    height: 100%;
+    color: inherit;
+    text-decoration: none;
+}
+.solution-link:focus-visible {
+    outline: 2px solid #38d9e6;
+    outline-offset: 4px;
+    border-radius: 12px;
+}

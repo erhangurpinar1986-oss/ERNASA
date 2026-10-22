@@ -37,7 +37,8 @@ document.addEventListener('click', function(e){
   if(!card) return;
   const type=card.dataset.project?'project':card.dataset.expert?'expert':'sector';
   const id=card.dataset.project||card.dataset.expert||card.dataset.sector;
-  window.location.href='/corporate/detay/'+type+'-'+id+'.html';
+  const detailBase = ['127.0.0.1', 'localhost'].includes(window.location.hostname) ? '/detay/' : '/corporate/detay/';
+  window.location.href=detailBase+type+'-'+id+'.html';
 });
 document.addEventListener('keydown',function(e){
   if(e.key!=='Enter'&&e.key!==' ')return;
