@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-label="Finans için dijital illüstrasyon">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#08192f"/><stop offset=".55" stop-color="#102e51"/><stop offset="1" stop-color="#031020"/></linearGradient>
+<radialGradient id="glow"><stop stop-color="#8b84ff" stop-opacity=".35"/><stop offset="1" stop-color="#8b84ff" stop-opacity="0"/></radialGradient>
+<pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#5ab9ff" stroke-opacity=".10"/></pattern></defs>
+<rect width="640" height="400" fill="url(#bg)"/><rect width="640" height="400" fill="url(#grid)"/>
+<circle cx="355" cy="190" r="245" fill="url(#glow)"/>
+<g stroke="#8b84ff" stroke-opacity=".16" stroke-width="2" fill="none"><circle cx="320" cy="214" r="167"/><circle cx="320" cy="214" r="139"/><path d="M25 356H615M25 43H615"/></g>
+<g fill="#8b84ff" fill-opacity=".16" stroke="#8b84ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M143 327h375"/><rect x="177" y="239" width="52" height="88" rx="5"/><rect x="263" y="204" width="52" height="123" rx="5"/><rect x="349" y="169" width="52" height="158" rx="5"/><rect x="435" y="126" width="52" height="201" rx="5"/><path d="M160 194l95-47 70 23 82-75 79-29"/></g>
+<g fill="#d9f8ff" opacity=".6"><circle cx="72" cy="87" r="3"/><circle cx="574" cy="92" r="3"/><circle cx="538" cy="348" r="3"/></g>
+</svg>

@@ -1,0 +1,1 @@
+ERNASA NEXUS 7 site güncellemesi. index.html dosyasını açın. Yedi uzman posterindeki isimler, görevler, alanlar ve sözler statik kartlara işlendi. Diğer sayfa bölümleri ve ERNASA İK uygulaması değiştirilmedi. Uzman görselleri önceki V7 varlıklarıdır; posterin yeni yüzleriyle birebir eşleşme garanti edilmez.

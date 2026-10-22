@@ -1,0 +1,1 @@
+ERNASA V8 - NEXUS 7: Yedi temiz tekil portre, 7 esit kart, detay sayfasi baglantilari. Diger bolumler V7 yapisinda korunmustur. index.html aciniz. Portreler onaylanan gorsel kompozisyonundan tekil olarak alinmistir; yeni yuz uretimi yapilmamistir.
