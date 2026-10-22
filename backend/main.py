@@ -319,6 +319,8 @@ def home():
     html = html.replace('="detay/', '="/corporate/detay/')
     html = html.replace('="style.css"', '="/corporate/style.css"')
     html = html.replace('="script.js"', '="/corporate/script.js"')
+    html = html.replace('data-href="detay/', 'data-href="/corporate/detay/')
+    html = html.replace('data-fallback="assets/', 'data-fallback="/corporate/assets/')
     return HTMLResponse(content=html)
 
 
