@@ -1,0 +1,10 @@
+﻿User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /ik
+Disallow: /aday
+Disallow: /docs
+Disallow: /redoc
+Disallow: /openapi.json
+
+Sitemap: https://ernasa.com/sitemap.xml

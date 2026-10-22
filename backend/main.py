@@ -311,6 +311,19 @@ def open_candidate_tracking(request: Request):
 
 
 
+from fastapi.responses import Response
+
+@app.get("/robots.txt", include_in_schema=False)
+def seo_robots():
+    content = (FRONTEND_DIR / "corporate" / "robots.txt").read_text(encoding="utf-8-sig")
+    return Response(content=content, media_type="text/plain")
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def seo_sitemap():
+    content = (FRONTEND_DIR / "corporate" / "sitemap.xml").read_text(encoding="utf-8")
+    return Response(content=content, media_type="application/xml")
+
+
 @app.get("/")
 def home():
     from fastapi.responses import HTMLResponse
