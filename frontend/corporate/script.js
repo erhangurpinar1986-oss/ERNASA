@@ -37,7 +37,7 @@ document.addEventListener('click', function(e){
   if(!card) return;
   const type=card.dataset.project?'project':card.dataset.expert?'expert':'sector';
   const id=card.dataset.project||card.dataset.expert||card.dataset.sector;
-  window.location.href='detay/'+type+'-'+id+'.html';
+  window.location.href='/corporate/detay/'+type+'-'+id+'.html';
 });
 document.addEventListener('keydown',function(e){
   if(e.key!=='Enter'&&e.key!==' ')return;
