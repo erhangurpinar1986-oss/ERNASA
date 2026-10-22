@@ -306,7 +306,7 @@ def open_candidate_tracking(request: Request):
 
 @app.get("/")
 def home():
-    return FileResponse(FRONTEND_DIR / "corporate" / "index.html")
+    return RedirectResponse(url="/corporate/", status_code=302)
 
 
 interview_links = {}
