@@ -313,10 +313,19 @@ def open_candidate_tracking(request: Request):
 
 @app.get("/")
 def home():
-    return RedirectResponse(url="/corporate/", status_code=302)
+    from fastapi.responses import HTMLResponse
+    html = (FRONTEND_DIR / "corporate" / "index.html").read_text(encoding="utf-8")
+    html = html.replace('="assets/', '="/corporate/assets/')
+    html = html.replace('="detay/', '="/corporate/detay/')
+    html = html.replace('="style.css"', '="/corporate/style.css"')
+    html = html.replace('="script.js"', '="/corporate/script.js"')
+    html = html.replace('data-href="detay/', 'data-href="/corporate/detay/')
+    html = html.replace('data-fallback="assets/', 'data-fallback="/corporate/assets/')
+    return HTMLResponse(content=html)
 
 
 interview_links = {}
+
 
 @app.post("/api/cv/upload")
 async def upload_cv(cv: UploadFile = File(...), _ik: str = Depends(require_ik_session)):
