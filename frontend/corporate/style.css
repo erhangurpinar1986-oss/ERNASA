@@ -278,3 +278,23 @@
     outline-offset: 4px;
     border-radius: 12px;
 }
+
+/* ERNASA ILETISIM BUTON DUZENI */
+.ernasa-contact-links {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin: 20px 0;
+}
+
+.ernasa-contact-links .button {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: space-between;
+    text-align: left;
+    white-space: normal;
+}
