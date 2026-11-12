@@ -324,6 +324,18 @@ def seo_sitemap():
     return Response(content=content, media_type="application/xml")
 
 
+# ERNASA_LEGAL_ROUTES_START — yasal sayfa yonlendirmeleri
+@app.get("/kvkk", include_in_schema=False)
+@app.get("/kvkk.html", include_in_schema=False)
+def ernasa_public_kvkk():
+    return FileResponse(FRONTEND_DIR / "kvkk.html", media_type="text/html; charset=utf-8")
+
+@app.get("/gizlilik", include_in_schema=False)
+@app.get("/gizlilik.html", include_in_schema=False)
+def ernasa_public_privacy():
+    return FileResponse(FRONTEND_DIR / "gizlilik.html", media_type="text/html; charset=utf-8")
+# ERNASA_LEGAL_ROUTES_END
+
 @app.get("/")
 def home():
     from fastapi.responses import HTMLResponse

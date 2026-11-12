@@ -50,4 +50,5 @@
 /* Sadece görsel ilerleme çubuğu: mevcut mülakat mantığına dokunmaz. */
 (function(){const area=document.getElementById('interviewQuestionArea'),progress=document.getElementById('questionProgress'),bar=document.getElementById('questionProgressBar');if(!area||!progress||!bar)return;const refresh=()=>{const n=parseInt((progress.textContent||'').match(/\d+/)?.[0]||'1',10);bar.style.width=progress.textContent.includes('Tamamlandı')?'100%':Math.min(100,Math.max(10,n*10))+'%';};new MutationObserver(refresh).observe(progress,{childList:true,subtree:true,characterData:true});refresh();})();
 </script>
+<script defer src="/assets/ernasa-legal.js"></script>
 </body></html>
