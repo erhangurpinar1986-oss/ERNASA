@@ -548,6 +548,9 @@ def mutate(db, actor, path, data):
     elif path == '/abonelikler':
         tenant = number(data,'company_id')
         company(db,tenant)
+        if data.get('action') == 'ernasa_internal_activate':
+            activate_internal_portal(db, actor, tenant)
+            return f'/abonelikler?duzenle={tenant}'
         edit = number(data,'subscription_edit',optional=True)
         if edit is not None and edit != tenant:
             raise Problem(400,'Aboneliğin bağlı olduğu firma değiştirilemez.')
@@ -599,6 +602,45 @@ def mutate(db, actor, path, data):
         audit(db,actor,'Sistem adı güncellendi')
     else:
         raise Problem(405,'Bu ekran düzenleme kabul etmiyor.')
+
+
+def internal_portal(db):
+    return db.execute(
+        "SELECT company_id FROM company_portals WHERE slug=?", ('ernasayazilim',)
+    ).fetchone()
+
+
+def activate_internal_portal(db, actor, tenant):
+    portal = internal_portal(db)
+    if actor['role'] != 'founder' or not portal or portal['company_id'] != tenant:
+        raise Problem(403, 'İç kullanım yalnızca ERNASA portalına tanımlanabilir.')
+    if db.execute(
+        'SELECT 1 FROM service_terms WHERE company_id=? AND price_minor IS NOT NULL',
+        (tenant,),
+    ).fetchone():
+        raise Problem(409, 'Fiyat tanımlı abonelik iç kullanıma çevrilemez.')
+    today = ik_bridge.today()
+    end = (date.fromisoformat(today) + timedelta(days=365)).isoformat()
+    db.execute("UPDATE companies SET status='Aktif' WHERE id=?", (tenant,))
+    db.execute("UPDATE company_profile SET activated=1 WHERE company_id=?", (tenant,))
+    db.execute(
+        """INSERT INTO subscriptions(company_id,package,starts,ends,status) VALUES(?,?,?,?,'Aktif')
+           ON CONFLICT(company_id) DO UPDATE SET package=excluded.package,
+           starts=excluded.starts, ends=excluded.ends,status=excluded.status""",
+        (tenant, PACKAGES[0], today, end),
+    )
+    db.execute(
+        """INSERT INTO service_terms(company_id,product,payment) VALUES(?,?,?)
+           ON CONFLICT(company_id) DO NOTHING""",
+        (tenant, firma.PRODUCT, firma.PAYMENTS[0]),
+    )
+    db.execute(
+        """INSERT INTO ats_subscriptions(company_id,package,starts,ends,status) VALUES(?,?,?,?,'Aktif')
+           ON CONFLICT(company_id) DO UPDATE SET package=excluded.package,
+           starts=excluded.starts, ends=excluded.ends,status=excluded.status""",
+        (tenant, PACKAGES[0], today, end),
+    )
+    audit(db, actor, 'ERNASA iç kullanım erişimi etkinleştirildi', tenant)
 
 
 def e(value):
@@ -973,7 +1015,17 @@ def screen(db, actor, path, q):
             ('Firma','Paket','Başlangıç','Bitiş','Durum','İşlem'),
             ([e(r[k]) for k in ('name','package','starts','ends','status')]+
              [f'<a href="/abonelikler?ats={r["company_id"]}">Düzenle</a>'] for r in ats_rows)))
-        return record_editor(path,actor,fields,'Aboneliği düzenle' if edit else 'Abonelik kaydet',edit)+card('Abonelik kayıtları',table(
+        internal = internal_portal(db)
+        internal_card = ''
+        if internal:
+            internal_fields = (hidden('action', 'ernasa_internal_activate')
+                               + hidden('company_id', internal['company_id']))
+            internal_card = card(
+                'ERNASA iç kullanım',
+                '<p>ERNASA portalı için 365 günlük faturalandırmasız ATS ve AI İK erişimi.</p>'
+                + form(path, actor, internal_fields, 'İç kullanımı etkinleştir'),
+            )
+        return internal_card+record_editor(path,actor,fields,'Aboneliği düzenle' if edit else 'Abonelik kaydet',edit)+card('Abonelik kayıtları',table(
             ('Firma','Paket','Başlangıç','Bitiş','Durum','İşlem'),
             ([e(r[k]) for k in ('name','package','starts','ends','status')]+[edit_link(path,r['company_id'])] for r in rows)))+ats_card
     if path=='/kullanicilar':
