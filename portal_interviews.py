@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from ats_matching import relevant_text
 from database import get_connection
+from interview_assessments import enqueue
 from recruitment import write
 
 
@@ -136,4 +137,5 @@ def submit(token, tenant, payload, intro, generate):
             recorded = answers(cursor, token, total)
             if len(recorded) == total:
                 cursor.execute("UPDATE interview_links SET status='completed' WHERE token=?", (token,))
+                enqueue(cursor,tenant,token)
     return current_question(interview, recorded, intro, generate)

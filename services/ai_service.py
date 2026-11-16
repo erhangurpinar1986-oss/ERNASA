@@ -193,7 +193,7 @@ KURALLAR:
 - Kısa, anlaşılır ve profesyonel yaz.
 """
 
-    response = client.responses.create(
+    response = client.with_options(timeout=90, max_retries=0).responses.create(
         model="gpt-5",
         input=prompt
     )

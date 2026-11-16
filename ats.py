@@ -10,10 +10,11 @@ from typing import Literal
 from uuid import uuid4
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from database import get_connection
 from recruitment import position_name, record, staff_position as require_staff_position, write
+from services.parser import is_cv_heading
 
 
 STAGES = ('new','screening','shortlist','interview','evaluation','offer','hired')
@@ -38,6 +39,11 @@ class ApplicationCreate(Applicant):
     position_id: str = Field(min_length=1,max_length=64)
     source: str = Field(default='Manuel',max_length=80)
     tags: str = Field(default='',max_length=160)
+
+
+class CandidateName(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str = Field(max_length=160)
 
 
 class PublicApplication(Applicant):
@@ -114,10 +120,8 @@ def list_applications(actor, search='', position_id='', stage='', limit=25, offs
 
 def record_application(cursor, tenant, position_id, details, creator, source, tags='', job_id=None,
                        *, allow_missing_email=False, reuse_application=False):
-    name = details.name.strip()
+    name = validate_candidate_name(details.name)
     email = details.email.strip().lower()
-    if not name:
-        raise HTTPException(400,'Adayın ad soyadını girin.')
     if (email or not allow_missing_email) and not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email):
         raise HTTPException(400,'Geçerli bir e-posta girin.')
     person = None
@@ -160,6 +164,26 @@ def assign_application(actor, app_id, assignee):
                        (assignee,now(),app_id,actor.company_id))
         record(cursor,actor,'application_assigned',app_id)
     return {'success':True}
+
+
+def validate_candidate_name(value):
+    name = value.strip()
+    if not name:
+        raise HTTPException(400,'Adayın ad soyadını girin.')
+    if is_cv_heading(name):
+        raise HTTPException(400,'Özgeçmiş başlığı yerine adayın ad soyadını girin.')
+    return name
+
+
+def update_candidate_name(actor, app_id, fields):
+    with write(actor.company_id) as cursor:
+        row = application(cursor,actor,app_id)
+        name = validate_candidate_name(fields.name)
+        if row['name'] != name:
+            cursor.execute('UPDATE ats_candidates SET name=? WHERE company_id=? AND id=?',
+                           (name,actor.company_id,row['candidate_id']))
+            record(cursor,actor,'candidate_name_updated',row['candidate_id'])
+    return {'name':name}
 
 
 def set_position_member(actor, position_id, user_id, enabled):

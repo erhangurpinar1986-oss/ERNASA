@@ -21,6 +21,23 @@ def clean_ocr_line(line: str) -> str:
     return cleaned.strip()
 
 
+CV_HEADINGS = {
+    "kisisel bilgiler", "iletisim", "iletisim bilgileri", "ad soyad",
+    "ozgecmis", "ozgecmis ozeti", "cv", "cv ozeti", "resume",
+    "curriculum vitae", "profil", "hakkimda", "egitim", "egitim durumu", "deneyim",
+    "is deneyimi", "is deneyimleri", "is tecrubeleri", "beceriler", "yetenekler",
+    "referanslar", "yabanci dil ve duzeyi", "kurs ve sertifikalar", "kariyer ozeti",
+    "profesyonel ozet", "ozet", "resume summary", "professional summary", "career summary",
+    "personal profile", "summary",
+    "personal information", "work experience", "education", "skills", "references",
+}
+
+
+def is_cv_heading(value: str) -> bool:
+    normalized = normalize_text(value.casefold().replace("ı", "i"))
+    return " ".join(re.findall(r"[a-z0-9]+", normalized)) in CV_HEADINGS
+
+
 def split_joined_name(value: str) -> str:
     value = re.sub(r"\s+", " ", value).strip()
 
@@ -52,43 +69,21 @@ def extract_labeled_name(lines: list[str]) -> str:
             continue
 
         left, right = clean_line.split(":", 1)
-        normalized_left = normalize_text(left)
+        normalized_left = normalize_text(left.casefold().replace("ı", "i"))
 
-        if any(label in normalized_left for label in labels):
+        if normalized_left in labels:
             candidate_name = split_joined_name(right)
 
-            if len(candidate_name) >= 3:
+            if len(candidate_name) >= 3 and not is_cv_heading(candidate_name):
                 return candidate_name
 
     return ""
 
 
 def extract_fallback_name(lines: list[str]) -> str:
-    ignored_headings = {
-        "kisisel bilgiler",
-        "iletisim",
-        "ozgecmis",
-        "cv",
-        "curriculum vitae",
-        "profil",
-        "hakkimda",
-        "egitim",
-        "egitim durumu",
-        "deneyim",
-        "is deneyimleri",
-        "is tecrubeleri",
-        "beceriler",
-        "yetenekler",
-        "referanslar",
-        "yabanci dil ve duzeyi",
-        "kurs ve sertifikalar"
-    }
-
     for line in lines[:25]:
         clean_line = clean_ocr_line(line)
-        normalized_line = normalize_text(clean_line)
-
-        if normalized_line in ignored_headings:
+        if is_cv_heading(clean_line):
             continue
 
         if ":" in clean_line:

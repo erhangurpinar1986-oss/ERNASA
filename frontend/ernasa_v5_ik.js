@@ -201,6 +201,7 @@ ${jobFitAnalysis ? `
 
             </div>
         `;
+        showAssessmentControls(resultsBox,token,data);
 
     } catch (error) {
         resultsBox.innerHTML = `
@@ -212,6 +213,40 @@ ${jobFitAnalysis ? `
         console.error(error);
     }
 }
+
+function showAssessmentControls(root, token, data) {
+    const status = {
+        not_started:"Başlatılmadı",queued:"Sırada",running:"Devam ediyor",
+        failed:"Başarısız",completed:"Tamamlandı"
+    }[data.assessment_status];
+    if (!status) return;
+    const anchor = root.querySelector("hr");
+    const label = document.createElement("p");
+    label.textContent = "Değerlendirme durumu · " + status;
+    anchor.before(label);
+    const retry = data.can_retry_assessment;
+    if (!retry && !["queued","running"].includes(data.assessment_status)) return;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "primary-button";
+    button.textContent = retry ? (data.assessment_status === "failed" ?
+        "Değerlendirmeyi yeniden dene" : "Değerlendirmeyi başlat") : "Durumu güncelle";
+    const feedback = document.createElement("p");
+    feedback.setAttribute("role","status");
+    anchor.before(button,feedback);
+    button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+            if (retry) await portalJson("/api/hr/interviews/"+encodeURIComponent(token)+"/assessment",
+                {method:"POST"},"Değerlendirme başlatılamadı.");
+            if (button.isConnected) await openInterviewReport(token);
+        } catch (error) {
+            feedback.textContent = error.message;
+        } finally { button.disabled = false; }
+    });
+}
+
 const companyPortalPage = location.hostname.endsWith(".ernasa.com") && location.hostname !== "www.ernasa.com";
 const portalMetadataPromise = companyPortalPage
     ? fetch("/api/ik/portal", {cache: "no-store"}).then(response => response.ok ? response.json() : null).catch(() => null)

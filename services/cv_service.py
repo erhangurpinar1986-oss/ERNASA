@@ -2,7 +2,7 @@ import io
 import os
 import re
 from pathlib import Path
-from services.parser import parse_candidate
+from services.parser import extract_fallback_name, extract_labeled_name
 import pdfplumber
 import pytesseract
 import pymupdf
@@ -40,6 +40,9 @@ def extract_text(file_path: str) -> str:
         document = pymupdf.open(path)
 
         try:
+            languages = pytesseract.get_languages()
+            language = 'tur+eng' if 'tur' in languages and 'eng' in languages else (
+                'tur' if 'tur' in languages else 'eng')
             for page in document:
                 matrix = pymupdf.Matrix(2.5, 2.5)
 
@@ -53,13 +56,14 @@ def extract_text(file_path: str) -> str:
 
                 page_text = pytesseract.image_to_string(
                     image,
-                    lang="eng",
-                    config="--psm 6"
+                    lang=language,
+                    config="--psm 6",
+                    timeout=20
                 )
 
                 ocr_parts.append(page_text)
 
-        except (OSError, pytesseract.TesseractError):
+        except (OSError, RuntimeError, pytesseract.TesseractError):
             if normal_text:
                 return normal_text
             raise
@@ -77,9 +81,6 @@ def extract_text(file_path: str) -> str:
         ).strip()
 
     raise ValueError("Desteklenmeyen dosya türü.")
-
-    raise ValueError("Desteklenmeyen dosya türü.")
-
 
 def extract_contact_info(text: str) -> dict:
     email_match = re.search(
@@ -105,99 +106,10 @@ def extract_contact_info(text: str) -> dict:
         if line.strip()
     ]
 
-    candidate_name = ""
-
-    # 1. Önce isim etiketlerini ara
-    labels = [
-        "isim",
-        "ad soyad",
-        "ad-soyad",
-        "name"
-    ]
-
-    for line in lines:
-
-        clean = " ".join(line.split())
-
-        # OCR karakterlerini temizle
-        clean = clean.replace("●", "")
-        clean = clean.replace("•", "")
-        clean = clean.replace("◉", "")
-        clean = clean.replace("○", "")
-        clean = clean.strip()
-
-        lower = clean.lower()
-
-        for label in labels:
-
-            if ":" in clean and lower.split(":", 1)[0].strip() == label:
-
-                value = clean.split(":", 1)[1].strip()
-
-                value = re.sub(r"\s+", " ", value)
-
-                if len(value) >= 3:
-                    candidate_name = value.title()
-
-                    return {
-                        "name": candidate_name,
-                        "email": email_match.group(0) if email_match else "",
-                        "phone": phone_match.group(0) if phone_match else ""
-                    }
-
-    # 2. Başlıkları ele
-
-    ignored = {
-        "kişisel bilgiler",
-        "kişisel bilgiler:",
-        "iletişim",
-        "özgeçmiş",
-        "cv",
-        "profil",
-        "hakkımda",
-        "eğitim",
-        "deneyim",
-        "iş deneyimi",
-        "beceriler",
-        "yetenekler",
-        "referanslar"
-    }
-
-    for line in lines[:20]:
-
-        clean = " ".join(line.split())
-
-        clean = clean.replace("●", "")
-        clean = clean.replace("•", "")
-        clean = clean.replace("◉", "")
-        clean = clean.replace("○", "")
-        clean = clean.strip()
-
-        if clean.lower() in ignored:
-            continue
-
-        if ":" in clean:
-            continue
-
-        if "@" in clean:
-            continue
-
-        if any(ch.isdigit() for ch in clean):
-            continue
-
-        words = clean.split()
-
-        if 2 <= len(words) <= 4:
-
-            if all(
-                word.replace("-", "").isalpha()
-                for word in words
-            ):
-                candidate_name = clean.title()
-                break
+    candidate_name = extract_labeled_name(lines) or extract_fallback_name(lines)
 
     return {
         "name": candidate_name,
         "email": email_match.group(0) if email_match else "",
-        "phone": phone_match.group(0) if phone_match else ""
+        "phone": phone_match.group(0).strip() if phone_match else ""
     }

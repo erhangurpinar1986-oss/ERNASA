@@ -1,5 +1,25 @@
 "use strict";
 
+function buildInterviewShare(invite) {
+    const expiry = new Intl.DateTimeFormat("tr-TR", {
+        dateStyle:"long",timeStyle:"medium",timeZone:"Europe/Istanbul"
+    }).format(new Date(invite.expires_at)) + " (Türkiye saati)";
+    const subject = invite.company + " · " + invite.position + " mülakat daveti";
+    const message = "Merhaba " + invite.name + ",\n\n" + invite.company + " bünyesindeki " +
+        invite.position + " pozisyonu için mülakat bağlantınız: " + invite.interview_url +
+        "\n\nSon geçerlilik: " + expiry + "\n\nİyi çalışmalar.";
+    const phone = invite.phone || "";
+    let number = phone.replace(/\D/g,"");
+    if (number.startsWith("00")) number = number.slice(2);
+    else if (!phone.startsWith("+") && number.length === 11 && number.startsWith("0")) number = "90" + number.slice(1);
+    else if (!phone.startsWith("+") && number.length === 10) number = "90" + number;
+    const whatsapp = /^[1-9]\d{7,14}$/.test(number) ?
+        "https://wa.me/" + number + "?text=" + encodeURIComponent(message) : "";
+    const email = invite.email ? "mailto:" + encodeURIComponent(invite.email).replace("%40","@") +
+        "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(message) : "";
+    return {expiry,message,whatsapp,email};
+}
+
 (() => {
     const byId = id => document.getElementById(id);
     const upload = byId("cvFile"), uploadArea = upload.closest("label");
@@ -12,9 +32,6 @@
     const actionStatus = byId("inviteShareStatus");
     const linkStatus = {waiting:"Bekliyor",created:"Bekliyor",opened:"Bağlantı açıldı",
         started:"Mülakat başladı",completed:"Tamamlandı",expired:"Süresi doldu"};
-    const expiryFormat = new Intl.DateTimeFormat("tr-TR", {
-        dateStyle:"long",timeStyle:"medium",timeZone:"Europe/Istanbul"
-    });
     let file, requestId, legacyCvText, analyzed = false, busy = false, issued = false;
 
     function setBusy(value) {
@@ -145,14 +162,6 @@
         finally { setBusy(false); }
     });
 
-    function whatsappPhone(value) {
-        let number = value.replace(/\D/g,"");
-        if (number.startsWith("00")) number = number.slice(2);
-        else if (!value.startsWith("+") && number.length === 11 && number.startsWith("0")) number = "90" + number.slice(1);
-        else if (!value.startsWith("+") && number.length === 10) number = "90" + number;
-        return /^[1-9]\d{7,14}$/.test(number) ? number : "";
-    }
-
     function shareAction(id, url, reason) {
         const action = byId(id);
         const feedback = byId(id + "Reason");
@@ -163,22 +172,16 @@
     }
 
     function showInvite(invite) {
-        const expiry = expiryFormat.format(new Date(invite.expires_at)) + " (Türkiye saati)";
+        const {expiry,whatsapp,email:emailUrl} = buildInterviewShare(invite);
         const deadline = byId("inviteExpiry");
         deadline.dateTime = invite.expires_at;
         deadline.textContent = expiry;
         byId("candidateNumber").textContent = invite.candidate_number;
         byId("candidateStatus").textContent = linkStatus[invite.status] || invite.status;
         link.value = invite.interview_url;
-        const subject = invite.company + " · " + invite.position + " mülakat daveti";
-        const message = `Merhaba ${invite.name},\n\n${invite.company} bünyesindeki ${invite.position} pozisyonu için ` +
-            `mülakat bağlantınız: ${invite.interview_url}\n\nSon geçerlilik: ${expiry}\n\nİyi çalışmalar.`;
-        const number = whatsappPhone(invite.phone || "");
-        const address = invite.email || "";
-        shareAction("whatsappButton",number && `https://wa.me/${number}?text=${encodeURIComponent(message)}`,
+        shareAction("whatsappButton",whatsapp,
             invite.phone ? "WhatsApp için geçerli bir aday telefonu gerekli." : "Adayın telefonu eksik.");
-        shareAction("emailButton",address && `mailto:${encodeURIComponent(address).replace("%40","@")}` +
-            `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`,"Adayın e-posta adresi eksik.");
+        shareAction("emailButton",emailUrl,"Adayın e-posta adresi eksik.");
         actions.style.display = "block";
     }
 

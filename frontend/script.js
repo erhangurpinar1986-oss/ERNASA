@@ -361,6 +361,7 @@ submitAnswerButton.addEventListener("click", () => {
 
             answerText.value = "";
             answerText.style.display = "none";
+            document.getElementById("voiceTypingHint").hidden = true;
             submitAnswerButton.style.display = "none";
             return;
         }

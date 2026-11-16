@@ -6,6 +6,7 @@ import partner_interview
 import ats
 import ats_cv_import
 import ik_cv_invites
+import interview_assessments
 import ats_workflow
 import ats_upload_queue
 import ats_matching
@@ -107,12 +108,15 @@ async def lifespan(_app):
     stop = asyncio.Event()
     with render_gateway.start_control() as control_server:
         _app.state.control_server = control_server
-        worker = asyncio.create_task(ats_upload_queue.worker(UPLOAD_DIRECTORY,stop))
+        workers = [
+            asyncio.create_task(ats_upload_queue.worker(UPLOAD_DIRECTORY,stop)),
+            asyncio.create_task(interview_assessments.worker(generate_job_fit_analysis,stop)),
+        ]
         try:
             yield
         finally:
             stop.set()
-            await worker
+            await asyncio.gather(*workers)
 
 
 app = FastAPI(
@@ -238,7 +242,7 @@ app.mount(
     name="corporate"
 )
 
-UPLOAD_DIRECTORY = Path("uploads")
+UPLOAD_DIRECTORY = Path(os.getenv("ERNASA_IK_UPLOAD_DIRECTORY") or "uploads")
 UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx"}
@@ -512,6 +516,12 @@ def create_ats_application(fields: ats.ApplicationCreate, actor: portal_access.A
 @app.get("/api/ik/ats/applications/{application_id}")
 def get_ats_application(application_id: str, actor: portal_access.Actor = Depends(require_ats)):
     return ats.details(actor, application_id)
+
+
+@app.patch("/api/ik/ats/applications/{application_id}/candidate-name")
+def update_ats_candidate_name(application_id: str, fields: ats.CandidateName,
+                              actor: portal_access.Actor = Depends(require_ats_manager)):
+    return ats.update_candidate_name(actor, application_id, fields)
 
 
 @app.post("/api/ik/ats/cv-import/preview")
@@ -1143,6 +1153,7 @@ def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=Fa
                 if application['closure']:
                     raise HTTPException(409, 'Kapalı başvuruda mülakat oluşturulamaz.')
                 candidate = {**{key:application[key] for key in ('name','phone','email')}, **candidate}
+                candidate["name"] = ats.validate_candidate_name(candidate["name"])
                 position_id, position = application['position_id'], application['position']
             elif position_id is not None:
                 if 'ats' not in _ik.products:
@@ -1207,6 +1218,11 @@ def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=Fa
         "created_at": created_at.isoformat(),
         "validity_hours": 8,
         "status": "waiting",
+        "name": candidate.get("name",""),
+        "email": candidate.get("email",""),
+        "phone": candidate.get("phone",""),
+        "company": company_name,
+        "position": position,
         "interview_url": f"{origin}/interview/{interview_id}"
     }
 
@@ -1681,6 +1697,12 @@ def candidate_listing(_ik: portal_access.Actor, ai_only=False):
     finally:
         connection.close()
 
+@app.post("/api/hr/interviews/{token}/assessment")
+def retry_interview_assessment(token: str, actor: portal_access.Actor = Depends(require_manager)):
+    require_ai(actor)
+    return {"assessment_status": interview_assessments.retry(actor,token)}
+
+
 @app.get("/api/hr/interviews/{token}")
 def get_hr_interview_detail(token: str, _ik: portal_access.Actor = Depends(require_ai)):
     scope, params = recruitment.scope(_ik)
@@ -1761,15 +1783,21 @@ def get_hr_interview_detail(token: str, _ik: portal_access.Actor = Depends(requi
         )
 
         saved_report = cursor.fetchone()
+        if _ik.portal:
+            assessment_status = interview_assessments.status(cursor,_ik.company_id,token,bool(saved_report))
+            cursor.execute("SELECT 1 FROM ik_partner_interviews WHERE token=? AND company_id=?", (token,_ik.company_id))
+            can_retry = cursor.fetchone() is None and assessment_status in ("not_started","failed")
+            return {"success": True, "interview": interview_data, "answers": [dict(row) for row in answer_rows],
+                    "job_fit_analysis": saved_report["job_fit_analysis"] if saved_report else "",
+                    "assessment_status":assessment_status, "can_retry_assessment":can_retry}
         if saved_report:
             job_fit_analysis = saved_report["job_fit_analysis"]
         else:
             cv_text = interview_data.get("cv_text", "") or ""
             job_fit_analysis = generate_job_fit_analysis(
-                cv_text=ats_matching.relevant_text(cv_text) if _ik.portal else cv_text,
+                cv_text=cv_text,
                 position=interview_data.get("position", "") or "",
-                interview_answers=(ats_matching.relevant_text(interview_answers_text)
-                                   if _ik.portal else interview_answers_text)
+                interview_answers=interview_answers_text
             )
             cursor.execute(
                 """
@@ -1892,6 +1920,17 @@ def download_interview_pdf(token: str, _ik: portal_access.Actor = Depends(requir
                     message = f"{label}: {value}"
                 story.append(recruitment_pdf.paragraph(message, styles["BodyText"]))
         story.append(recruitment_pdf.paragraph(assessment, styles["Heading2"]))
+        if _ik.portal:
+            state = interview_assessments.status(cursor,_ik.company_id,token,bool(report))
+            assessment_labels = {
+                "not_started": ("Başlatılmadı","Not started"),
+                "queued": ("Sırada","Queued"),
+                "running": ("Devam ediyor","In progress"),
+                "failed": ("Başarısız · İK panelinden yeniden denenebilir","Failed · HR can retry"),
+                "completed": ("Tamamlandı","Completed"),
+            }
+            label = "Assessment status" if english else "Değerlendirme durumu"
+            story.append(recruitment_pdf.paragraph(f"{label}: {assessment_labels[state][int(english)]}",styles["BodyText"]))
         for line in (analysis or absent).splitlines():
             if line.strip():
                 story.append(recruitment_pdf.paragraph(line.strip(), styles["BodyText"]))

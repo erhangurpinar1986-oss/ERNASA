@@ -205,7 +205,7 @@ if (companyPortalPage) {
         }),previewButton,preview);
     }
 
-    function cvImport(root, choices, openPositions, contextPosition, refresh) {
+    function cvImport(root, choices, openPositions, contextPosition, refresh, manualApplication) {
         const limit = 20, maxBytes = 10 * 1024 * 1024;
         const fileInput = input("cv","file","",{accept:".pdf,.docx",multiple:"",required:""});
         const preview = el("div");
@@ -258,6 +258,10 @@ if (companyPortalPage) {
                     row.status = el("span");
                     if (!row.data) {
                         row.status.textContent = "Atlandı · " + row.error;
+                        if (manualApplication && /^CV (okunamadı|içinde okunabilir metin)/.test(row.error)) {
+                            row.status.append(el("p","Manuel başvuruyu oluşturup CV’yi aday detayından ekleyebilirsiniz."),
+                                action("Manuel başvuru oluştur",manualApplication));
+                        }
                         return ["",row.file.name,"","","","",row.status];
                     }
                     row.checked = input("selected","checkbox","1",{"aria-label":row.file.name + " belgesini seç"});
@@ -350,7 +354,7 @@ if (companyPortalPage) {
         const reveal = () => { editor.hidden = false; editor.querySelector("[name=name]")?.focus(); };
         const revealDetails = async id => {
             details.hidden = false;
-            await showApplication(details,id);
+            await showApplication(details,id,draw);
             details.focus();
         };
         let offset = 0, request = 0, visible = [];
@@ -372,7 +376,8 @@ if (companyPortalPage) {
             } catch (error) { notice(error.message); }
         };
         const openPositions = await positions(true);
-        const cvInput = cvImport(importer,choices,openPositions,contextPosition,async () => {offset=0;await draw();});
+        const cvInput = cvImport(importer,choices,openPositions,contextPosition,
+            async () => {offset=0;await draw();},openPositions.length ? reveal : null);
         const actions = el("div","",{class:"saas-actions"});
         if (openPositions.length) actions.append(action("Yeni Aday Ekle",reveal));
         actions.append(action("Başvuruları Listele",async()=>{offset=0;await draw();results.focus();}),action("CV Yükle",()=>{
@@ -399,7 +404,8 @@ if (companyPortalPage) {
         if (openApplication && visible.some(row=>row.id===openApplication)) await revealDetails(openApplication);
     }
 
-    async function showApplication(root,id) {
+    async function showApplication(root,id,onNameChanged) {
+        const reload = () => showApplication(root,id,onNameChanged);
         root.replaceChildren();
         try {
             const data = await api(appRoute(id));
@@ -407,18 +413,32 @@ if (companyPortalPage) {
             root.append(el("h3",row.name+" · "+row.position),el("p",(row.email || "—")+" · "+(row.phone || "—")),
                         el("p",stageLabels[row.stage]+" · "+(row.tags || "Etiket yok")));
             if (manager()) {
+                const name = input("name","text",row.name,{required:"",maxlength:160});
+                const editName = form([field("Ad soyad",name)],"Kaydet",async fields => {
+                    await api(appRoute(id)+"/candidate-name","PATCH",fields);
+                    await Promise.all([reload(),onNameChanged()]);
+                    notice("Adayın ad soyadı güncellendi.");
+                });
+                editName.hidden = true;
+                const editButton = action("Ad soyadı düzenle",button => {
+                    editName.hidden = !editName.hidden;
+                    button.setAttribute("aria-expanded",String(!editName.hidden));
+                    if (!editName.hidden) name.focus();
+                });
+                editButton.setAttribute("aria-expanded","false");
+                root.append(editButton,editName);
                 const {users} = await api("assignees");
                 const assigned = select("assignee",[["","Atanmadı"],...users.map(user => [user.id,user.name])],row.assigned_user_id || "");
                 root.append(form([field("İK sorumlusu",assigned)],"Ata",async data => {
                     await api(appRoute(id)+"/assignment","PATCH",{assigned_user_id:Number(data.assignee) || null});
-                    await showApplication(root,id);
+                    await reload();
                     notice("İK sorumlusu güncellendi.");
                 }));
             }
             root.append(el("h4","Notlar"),...data.notes.map(item => el("p",day(item.created_at)+" · "+item.note)));
             root.append(form([field("Aday notu",textarea("note","",4000))],"Not ekle",async body => {
                 await api(appRoute(id)+"/notes","POST",body);
-                await showApplication(root,id);
+                await reload();
                 notice("Aday notu kaydedildi.");
             }));
             root.append(el("h4","Belgeler"));
@@ -465,7 +485,7 @@ if (companyPortalPage) {
                         continue;
                     }
                     errors.push(...selected.filter(job=>job.status==="failed").map(job=>job.filename+" · "+job.error));
-                    await showApplication(root,id);
+                    await reload();
                     if (root.isConnected) notice(ready+" CV yüklendi."+(errors.length ? " " + errors.join(" | ") : ""),errors.length>0);
                     return;
                 }
@@ -508,9 +528,24 @@ if (companyPortalPage) {
                     root.append(item);
                 }
                 const docs = [["","CV kullanma"],...data.documents.map(doc => [doc.id,doc.filename])];
-                root.append(form([field("CV",select("document_id",docs))],"AI mülakat bağlantısı oluştur",async fields => {
-                    await api(appRoute(id)+"/ai-interview","POST",{document_id:fields.document_id || null});
-                    await showApplication(root,id);
+                root.append(form([el("p","Davet edilecek aday · " + row.name),
+                    field("CV",select("document_id",docs))],"AI mülakat bağlantısı oluştur",async fields => {
+                    const invite = await api(appRoute(id)+"/ai-interview","POST",{document_id:fields.document_id || null});
+                    await reload();
+                    const shared = buildInterviewShare(invite);
+                    const preview = el("section","",{class:"saas-panel",tabindex:"-1"});
+                    const message = textarea("invite_message",shared.message);
+                    message.readOnly = true;
+                    message.rows = 6;
+                    const draft = el("div","",{class:"saas-form"});
+                    draft.append(field("Davet mesajı",message));
+                    const actions = el("div","",{class:"saas-actions"});
+                    actions.append(link("Mülakat bağlantısı",invite.interview_url));
+                    if (shared.whatsapp) actions.append(link("WhatsApp",shared.whatsapp));
+                    if (shared.email) actions.append(link("E-posta",shared.email));
+                    preview.append(el("h4","Davet oluşturuldu"),draft,actions);
+                    root.prepend(preview);
+                    preview.focus();
                 }));
             }
             if (data.history.length) root.append(el("h4","Aşama geçmişi"),table(["Önceki","Sonraki","Tarih"],
@@ -869,6 +904,8 @@ if (companyPortalPage) {
         const data = await api("history");
         const label = {
             application_stage_changed:"Başvuru aşaması değiştirildi",application_created:"Başvuru oluşturuldu",
+            candidate_name_updated:"Adayın ad soyadı güncellendi",
+            interview_assessment_requested:"Mülakat değerlendirmesi istendi",
             position_created:"Pozisyon oluşturuldu",position_closed:"Pozisyon kapatıldı",department_created:"Departman eklendi",
             department_renamed:"Departman güncellendi",job_published:"İlan yayınlandı",offer_drafted:"Teklif taslağı oluşturuldu",
             evaluation_completed:"Değerlendirme tamamlandı",evaluation_approved:"Değerlendirme onaylandı",

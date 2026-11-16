@@ -73,6 +73,11 @@ DDL = (
         company_id BIGINT NOT NULL, user_id BIGINT NOT NULL, request_id TEXT NOT NULL,
         token TEXT NOT NULL REFERENCES interview_links ON DELETE CASCADE, candidate_number TEXT NOT NULL,
         PRIMARY KEY(company_id,user_id,request_id))""",
+    """CREATE TABLE IF NOT EXISTS ik_interview_assessments (
+        token TEXT PRIMARY KEY REFERENCES interview_links ON DELETE CASCADE,
+        company_id BIGINT NOT NULL, status TEXT NOT NULL, updated_at TEXT NOT NULL,
+        claim_id TEXT, lease_until TEXT)""",
+    "CREATE INDEX IF NOT EXISTS ik_interview_assessments_queue ON ik_interview_assessments(status,updated_at)",
     """CREATE TABLE IF NOT EXISTS ats_upload_jobs (
         id TEXT PRIMARY KEY, company_id BIGINT NOT NULL, application_id TEXT NOT NULL REFERENCES ats_applications,
         user_id BIGINT NOT NULL, slug TEXT NOT NULL, access_version TEXT NOT NULL, filename TEXT NOT NULL,
