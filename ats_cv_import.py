@@ -38,8 +38,25 @@ def read_cv(filename, content):
     return text
 
 
+_CV_SECTION_HEADINGS = {
+    'cv', 'resume', 'curriculum vitae', 'resume summary',
+    'professional summary', 'career summary', 'personal profile',
+    '\u00f6zge\u00e7mi\u015f', '\u00f6zge\u00e7mi\u015f \u00f6zeti',
+    'kariyer \u00f6zeti', 'profesyonel \u00f6zet', 'i\u015f deneyimi',
+    'ki\u015fisel bilgiler', 'ileti\u015fim bilgileri', 'ad soyad',
+}
+
+
+def is_missing_candidate_name(value):
+    normalized = ' '.join((value or '').strip().rstrip(':').casefold().split())
+    return not normalized or normalized in _CV_SECTION_HEADINGS
+
+
 def preview(filename, content):
-    return {'import_id': ats.uid(), **extract_contact_info(read_cv(filename, content))}
+    contact = extract_contact_info(read_cv(filename, content))
+    if is_missing_candidate_name(contact.get('name')):
+        contact['name'] = ''
+    return {'import_id': ats.uid(), **contact}
 
 
 def save(root, actor, fields, filename, content):
@@ -55,6 +72,8 @@ def save(root, actor, fields, filename, content):
             if cursor.fetchone():
                 return {'status': 'saved'}
 
+            if is_missing_candidate_name(fields.name):
+                raise HTTPException(422, 'Ad soyad\u0131 kontrol edin.')
             media = ats.document_media(name, content)
             if not fields.position_id:
                 raise HTTPException(400, 'Pozisyon seçin.')

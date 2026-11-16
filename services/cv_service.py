@@ -88,10 +88,16 @@ def extract_contact_info(text: str) -> dict:
         re.IGNORECASE
     )
 
-    phone_match = re.search(
-        r"(?:\+90|0)?\s*5\d{2}[\s\.-]?\d{3}[\s\.-]?\d{2}[\s\.-]?\d{2}",
-        text
-    )
+    phone_matches = {}
+    for match in re.finditer(
+        r"(?<![\w+])(?:(?:\+90|0090|90|0)[\s.\-]*)?"
+        r"(?:\(5[0-9]{2}\)|5[0-9]{2})[\s.\-]*[0-9]{3}"
+        r"[\s.\-]*[0-9]{2}[\s.\-]*[0-9]{2}(?!\w)",
+        text,
+    ):
+        digits = re.sub(r"[^0-9]", "", match.group(0))
+        phone_matches.setdefault(digits[-10:], match)
+    phone_match = next(iter(phone_matches.values())) if len(phone_matches) == 1 else None
 
     lines = [
         line.strip()
