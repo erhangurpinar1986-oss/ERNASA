@@ -1,4 +1,5 @@
 import io
+import os
 import re
 from pathlib import Path
 from services.parser import parse_candidate
@@ -11,9 +12,9 @@ from docx import Document
 
 print(">>>> YENİ CV_SERVICE ÇALIŞTI <<<<")
 
-pytesseract.pytesseract.tesseract_cmd = (
-    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
+windows_tesseract = Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+if os.name == "nt" and windows_tesseract.is_file():
+    pytesseract.pytesseract.tesseract_cmd = str(windows_tesseract)
 
 def extract_text(file_path: str) -> str:
     path = Path(file_path)
@@ -58,10 +59,14 @@ def extract_text(file_path: str) -> str:
 
                 ocr_parts.append(page_text)
 
+        except (OSError, pytesseract.TesseractError):
+            if normal_text:
+                return normal_text
+            raise
         finally:
             document.close()
 
-        return "\n".join(ocr_parts).strip()
+        return "\n".join(ocr_parts).strip() or normal_text
 
     if extension == ".docx":
         document = Document(path)
@@ -77,10 +82,8 @@ def extract_text(file_path: str) -> str:
 
 
 def extract_contact_info(text: str) -> dict:
-    import re
-
     email_match = re.search(
-        r"[\w\.-]+@[\w\.-]+\.\w+",
+        r"[\w.+-]+@[\w.-]+\.\w+",
         text,
         re.IGNORECASE
     )
@@ -121,7 +124,7 @@ def extract_contact_info(text: str) -> dict:
 
         for label in labels:
 
-            if label in lower and ":" in clean:
+            if ":" in clean and lower.split(":", 1)[0].strip() == label:
 
                 value = clean.split(":", 1)[1].strip()
 
@@ -186,9 +189,6 @@ def extract_contact_info(text: str) -> dict:
             ):
                 candidate_name = clean.title()
                 break
-
-    print("ADAY İSİM =", candidate_name)
-
 
     return {
         "name": candidate_name,

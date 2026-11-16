@@ -4,6 +4,7 @@ import recruitment
 import portal_interviews
 import partner_interview
 import ats
+import ats_cv_import
 import ats_workflow
 import ats_upload_queue
 import ats_matching
@@ -510,6 +511,27 @@ def create_ats_application(fields: ats.ApplicationCreate, actor: portal_access.A
 @app.get("/api/ik/ats/applications/{application_id}")
 def get_ats_application(application_id: str, actor: portal_access.Actor = Depends(require_ats)):
     return ats.details(actor, application_id)
+
+
+@app.post("/api/ik/ats/cv-import/preview")
+def preview_ats_cv(cv: UploadFile = File(...), actor: portal_access.Actor = Depends(require_ats)):
+    return ats_cv_import.preview(cv.filename or 'cv', cv.file.read(ats.MAX_DOCUMENT + 1))
+
+
+@app.post("/api/ik/ats/cv-import/save")
+def save_ats_cv(selection: str = Form(..., max_length=4096), cv: UploadFile = File(...),
+                actor: portal_access.Actor = Depends(require_ats)):
+    try:
+        fields = ats_cv_import.Selection.model_validate_json(selection)
+    except ValidationError as error:
+        raise HTTPException(422, 'Önizleme alanlarını kontrol edin.') from error
+    try:
+        return ats_cv_import.save(UPLOAD_DIRECTORY, actor, fields, cv.filename or 'cv',
+                                  cv.file.read(ats.MAX_DOCUMENT + 1))
+    except HTTPException as error:
+        if error.status_code == 409:
+            return {'status': 'skipped', 'message': error.detail}
+        raise
 
 
 @app.patch("/api/ik/ats/applications/{application_id}/assignment")

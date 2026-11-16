@@ -1741,6 +1741,8 @@ body > .footer {
 .saas-module { margin: 12px 0; min-width: 0; }
 .saas-module[hidden], .saas-form[hidden] { display: none; }
 .saas-table-wrap { max-width: 100%; overflow-x: auto; margin: 16px 0; }
+.ats-cv-preview { border: 0; padding: 0; min-inline-size: 0; }
+.ats-cv-preview td input:not([type=checkbox]), .ats-cv-preview td select { min-width: 9rem; width: 100%; }
 .saas-table { width: 100%; border-collapse: collapse; min-width: 640px; }
 .saas-table td, .saas-table th { padding: 10px 12px; border-bottom: 1px solid #dfe8f4; text-align: left; overflow-wrap: anywhere; }
 .saas-table th { background: #edf3ff; color: #173761; }

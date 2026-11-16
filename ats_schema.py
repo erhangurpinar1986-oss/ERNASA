@@ -65,6 +65,10 @@ DDL = (
     """CREATE TABLE IF NOT EXISTS ats_interview_cv_sources (
         token TEXT PRIMARY KEY REFERENCES interview_links, company_id BIGINT NOT NULL,
         document_id TEXT NOT NULL REFERENCES ats_documents ON DELETE CASCADE)""",
+    """CREATE TABLE IF NOT EXISTS ats_cv_imports (
+        company_id BIGINT NOT NULL, user_id BIGINT NOT NULL, import_id TEXT NOT NULL,
+        document_id TEXT NOT NULL REFERENCES ats_documents ON DELETE CASCADE,
+        PRIMARY KEY(company_id,user_id,import_id))""",
     """CREATE TABLE IF NOT EXISTS ats_upload_jobs (
         id TEXT PRIMARY KEY, company_id BIGINT NOT NULL, application_id TEXT NOT NULL REFERENCES ats_applications,
         user_id BIGINT NOT NULL, slug TEXT NOT NULL, access_version TEXT NOT NULL, filename TEXT NOT NULL,

@@ -112,13 +112,18 @@ def list_applications(actor, search='', position_id='', stage='', limit=25, offs
         return {'applications':[dict(row) for row in cursor.fetchall()],'total':total}
 
 
-def record_application(cursor, tenant, position_id, details, creator, source, tags='', job_id=None):
+def record_application(cursor, tenant, position_id, details, creator, source, tags='', job_id=None,
+                       *, allow_missing_email=False):
     name = details.name.strip()
     email = details.email.strip().lower()
-    if not name or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email):
-        raise HTTPException(400,'Geçerli bir aday adı ve e-posta girin.')
-    cursor.execute('SELECT id FROM ats_candidates WHERE company_id=? AND email=?',(tenant,email))
-    person = cursor.fetchone()
+    if not name:
+        raise HTTPException(400,'Adayın ad soyadını girin.')
+    if (email or not allow_missing_email) and not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email):
+        raise HTTPException(400,'Geçerli bir e-posta girin.')
+    person = None
+    if email:
+        cursor.execute('SELECT id FROM ats_candidates WHERE company_id=? AND email=?',(tenant,email))
+        person = cursor.fetchone()
     candidate_id = person['id'] if person else uid()
     if person:
         cursor.execute('SELECT 1 FROM ats_applications WHERE company_id=? AND candidate_id=? AND position_id=?',
@@ -127,7 +132,7 @@ def record_application(cursor, tenant, position_id, details, creator, source, ta
             raise HTTPException(409,'Bu adayın pozisyon için başvurusu zaten var.')
     else:
         cursor.execute("""INSERT INTO ats_candidates(id,company_id,name,email,phone,source,tags,created_by,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?)""",(candidate_id,tenant,name,email,details.phone.strip(),source,tags,creator,now()))
+            VALUES (?,?,?,?,?,?,?,?,?)""",(candidate_id,tenant,name,email or None,details.phone.strip(),source,tags,creator,now()))
     app_id = uid()
     cursor.execute("""INSERT INTO ats_applications
         (id,company_id,candidate_id,position_id,job_id,stage,created_by,created_at,changed_at)
@@ -292,6 +297,21 @@ def document_path(root, tenant, document_id):
     return root / 'companies' / str(tenant) / 'ats' / document_id
 
 
+def document_name(filename):
+    path = Path(Path(filename.replace('\\', '/')).name)
+    if path.suffix.lower() in ('.pdf', '.docx'):
+        return path.stem[:200 - len(path.suffix)] + path.suffix
+    return path.name[:200]
+
+
+def record_document(cursor, actor, app_id, document_id, name, media, content):
+    cursor.execute('INSERT INTO ats_documents VALUES (?,?,?,?,?,?,?,?)',
+                   (document_id,actor.company_id,app_id,name,media,len(content),actor.user_id,now()))
+    cursor.execute('INSERT INTO ats_document_digests VALUES (?,?,?,?)',
+                   (actor.company_id,app_id,sha256(content).hexdigest(),document_id))
+    record(cursor,actor,'application_document_added',app_id)
+
+
 def upload_document(root, actor, app_id, filename, content, job_id=None):
     name = Path(filename).name[:200]
     document_id = job_id or uid()
@@ -318,11 +338,7 @@ def upload_document(root, actor, app_id, filename, content, job_id=None):
             with path.open('wb' if job_id else 'xb') as output:
                 created = True
                 output.write(content)
-            cursor.execute('INSERT INTO ats_documents VALUES (?,?,?,?,?,?,?,?)',
-                           (document_id,actor.company_id,app_id,name,media,len(content),actor.user_id,now()))
-            cursor.execute('INSERT INTO ats_document_digests VALUES (?,?,?,?)',
-                           (actor.company_id,app_id,digest,document_id))
-            record(cursor,actor,'application_document_added',app_id)
+            record_document(cursor,actor,app_id,document_id,name,media,content)
             if job_id:
                 cursor.execute("UPDATE ats_upload_jobs SET status='ready',payload=NULL WHERE id=?", (job_id,))
     except Exception:
