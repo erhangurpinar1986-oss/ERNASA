@@ -602,7 +602,7 @@
         Devam etmek için kullanıcı adı ve şifrenizi giriniz.
     </p>
 
-    <form>
+    <form onsubmit="event.preventDefault(); loginIK();">
 
         <div class="field">
             <label for="username">Kullanıcı Adı</label>
@@ -646,7 +646,11 @@
             </a>
         </div>
 
-        <button type="button" class="login-button" onclick="loginIK()">
+        <div class="field" id="newPasswordField" hidden>
+            <label for="newPassword">Yeni parola (12–128 karakter)</label>
+            <input id="newPassword" type="password" autocomplete="new-password" maxlength="128">
+        </div>
+        <button type="submit" class="login-button">
             Giriş Yap
         </button>
 
@@ -687,6 +691,15 @@
     const formData = new FormData();
     formData.append("username", username);
     formData.append("password", password);
+    const newPasswordField = document.getElementById("newPasswordField");
+    const newPassword = document.getElementById("newPassword");
+    if (!newPasswordField.hidden) {
+        if (newPassword.value.length < 12 || newPassword.value.length > 128) {
+            alert("Yeni parola 12–128 karakter olmalıdır.");
+            return;
+        }
+        formData.append("new_password", newPassword.value);
+    }
 
     try {
         const response = await fetch("/api/ik-login", {
@@ -696,11 +709,18 @@
 
         const data = await response.json();
 
+        if (response.ok && data.password_change_required) {
+            newPasswordField.hidden = false;
+            newPassword.focus();
+            return;
+        }
         if (!response.ok || !data.success) {
             alert(data.detail || "Kullanıcı adı veya şifre hatalı.");
             return;
         }
 
+        document.getElementById("password").value = "";
+        newPassword.value = "";
         window.location.href = "/ik";
 
     } catch (error) {

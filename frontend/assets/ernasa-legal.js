@@ -34,7 +34,7 @@
       '<a href="/gizlilik">Gizlilik Politikası</a> sayfalarını inceleyin.</p>'+
       '<p><small>Bu bir açık rıza veya çerez izni istemi değildir.</small></p>'+
       '<button type="button" id="ernasa-legal-close">Kapat</button>';
-    document.body.appendChild(pane);
+    document.body.insertBefore(pane, document.body.firstChild);
     document.getElementById('ernasa-legal-close').addEventListener('click',function(){
       pane.remove();
       try {sessionStorage.setItem('ernasa_legal_notice_closed','1');} catch(e) {}

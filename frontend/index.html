@@ -12,6 +12,7 @@
 <header class="topbar">
   <div class="brand-area">
     <div class="brand-logo"><img src="/assets/ernasalogo.png" alt="ERNASA Logosu" onerror="this.hidden=true;this.parentElement.classList.add('logo-fallback')"></div>
+    <img id="candidateCompanyLogo" alt="Firma logosu" width="56" height="56" style="object-fit:contain" hidden>
     <div class="brand-text"><h1>ERNASA</h1><p>Yapay Zekâ Destekli İşe Alım Platformu</p></div>
   </div>
   <div class="header-right"><span class="secure-pill"><span class="secure-dot"></span> Güvenli Mülakat</span><div class="client-area"><span>Başvuru Yapılan Kurum</span><strong id="companyName">-</strong></div></div>
@@ -45,10 +46,7 @@
 </section>
 </main>
 <div class="modal-overlay" id="modalOverlay" hidden><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-header"><h2 id="modalTitle">Bilgilendirme Metni</h2><button type="button" id="closeModalButton" class="close-button" aria-label="Pencereyi kapat">×</button></div><div class="modal-content" id="modalContent"></div><div class="modal-footer"><button type="button" id="modalCloseAction" class="modal-action-button">Kapat</button></div></section></div>
+<script src="/static/candidate_locale.js"></script>
 <script src="/static/script.js"></script>
-<script>
-/* Sadece görsel ilerleme çubuğu: mevcut mülakat mantığına dokunmaz. */
-(function(){const area=document.getElementById('interviewQuestionArea'),progress=document.getElementById('questionProgress'),bar=document.getElementById('questionProgressBar');if(!area||!progress||!bar)return;const refresh=()=>{const n=parseInt((progress.textContent||'').match(/\d+/)?.[0]||'1',10);bar.style.width=progress.textContent.includes('Tamamlandı')?'100%':Math.min(100,Math.max(10,n*10))+'%';};new MutationObserver(refresh).observe(progress,{childList:true,subtree:true,characterData:true});refresh();})();
-</script>
 <script defer src="/assets/ernasa-legal.js"></script>
 </body></html>

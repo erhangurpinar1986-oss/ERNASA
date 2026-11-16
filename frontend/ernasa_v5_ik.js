@@ -145,7 +145,7 @@ currentCvText = uploadResult.text || "";
 
 if (!uploadResponse.ok) {
     throw new Error(
-        uploadResult.detail || "CV backend'e yüklenemedi."
+        uploadResult.detail || "CV sunucuya yüklenemedi."
     );
 }
 document.getElementById("candidateName").value =
@@ -220,6 +220,7 @@ document.getElementById("candidateEmail").value =
     }, 650);
 });
 createLinkButton.addEventListener("click", async () => {
+    const selectedPosition = document.getElementById("portalPosition");
     const candidate = {
         name: document.getElementById("candidateName").value.trim(),
         phone: document.getElementById("candidatePhone").value.trim(),
@@ -228,6 +229,13 @@ createLinkButton.addEventListener("click", async () => {
         position: document.getElementById("positionName").value.trim(),
         cv_text: currentCvText
     };
+    if (companyPortalPage && selectedPosition?.style.display !== "none") {
+        if (!selectedPosition?.value) {
+            alert("Açık bir pozisyon seçin.");
+            return;
+        }
+        candidate.position_id = selectedPosition.value;
+    }
         if (candidate.position.length < 3) {
     alert("Lütfen geçerli bir pozisyon giriniz.");
     return;
@@ -255,7 +263,7 @@ createLinkButton.addEventListener("click", async () => {
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify(candidate)
+                body: JSON.stringify(companyPortalPage ? {...candidate, company: undefined} : candidate)
             }
         );
 
@@ -290,7 +298,7 @@ createLinkButton.addEventListener("click", async () => {
         console.log("Geçerlilik süresi:", result.expires_at);
 
     } catch (error) {
-        alert(error.message);
+        alert(error instanceof TypeError ? "Sunucuya bağlanılamadı. Lütfen tekrar deneyin." : error.message);
 
     } finally {
         createLinkButton.disabled = false;
@@ -484,7 +492,9 @@ const statusLabels = {
     }
 }
 
-loadInterviewResults();
+document.addEventListener("DOMContentLoaded", async () => {
+    if (!companyPortalPage || (await portalMetadataPromise)?.products?.includes("ai")) loadInterviewResults();
+});
 
 // setInterval(() => {
 //     loadInterviewResults();
@@ -615,7 +625,40 @@ ${jobFitAnalysis ? `
         console.error(error);
     }
 }
+const companyPortalPage = location.hostname.endsWith(".ernasa.com") && location.hostname !== "www.ernasa.com";
+const portalMetadataPromise = companyPortalPage
+    ? fetch("/api/ik/portal", {cache: "no-store"}).then(response => response.ok ? response.json() : null).catch(() => null)
+    : Promise.resolve(null);
+if (companyPortalPage) {
+    document.documentElement.classList.add("company-portal");
+    document.getElementById("portalHomeLink")?.setAttribute("href", "/ik");
+    document.getElementById("portalOverviewLink")?.setAttribute("href", "/ik");
+    window.addEventListener("pagehide", event => {
+        if (event.persisted) document.documentElement.style.visibility = "hidden";
+    });
+    window.addEventListener("pageshow", event => {
+        if (event.persisted) window.location.reload();
+    });
+    const logo = document.getElementById("hrCompanyLogo");
+    if (logo) {
+        const fallback = document.getElementById("companyLogoPlaceholder");
+        document.getElementById("companyLogoSlot").hidden = false;
+        logo.onload = () => { logo.hidden = false; fallback.hidden = true; };
+        logo.onerror = () => { logo.hidden = true; fallback.hidden = false; };
+        logo.src = "/api/ik/company-logo";
+    }
+}
+
 async function downloadInterviewPdf(token) {
+    if (companyPortalPage) {
+        const metadata = await fetch("/api/ik/portal");
+        if (!metadata.ok || !(await metadata.json()).can_pdf) {
+            alert("PDF raporu için yetkiniz yok.");
+            return;
+        }
+        window.location.href = `/api/hr/interviews/${encodeURIComponent(token)}/pdf`;
+        return;
+    }
     const reportWindow = window.open("", "_blank");
     try {
         const response = await fetch(`/api/hr/interviews/${token}`);
@@ -829,7 +872,7 @@ async function loadDashboard() {
     }
 
     try {
-        const response = await fetch("/api/hr/interviews");
+        const response = await fetch(companyPortalPage ? "/api/ik/candidates" : "/api/hr/interviews");
         const data = await response.json();
 
         if (!response.ok) {
@@ -915,8 +958,6 @@ function formatDashboardDate(dateValue) {
     return date.toLocaleDateString("tr-TR");
 }
 
-loadDashboard();
-
 // ===============================
 // ERNASA PORTAL EKRAN GEÇİŞLERİ
 // ===============================
@@ -925,12 +966,182 @@ const dashboardHome = document.getElementById("dashboardHome");
 const cvAnalysisScreen = document.getElementById("cvAnalysisScreen");
 const candidatesScreen = document.getElementById("candidatesScreen");
 const interviewsScreen = document.getElementById("interviewsScreen");
+const personnelScreen = document.getElementById("personnelScreen");
+const personnelEditor = document.getElementById("personnelEditor");
+const personnelMessage = document.getElementById("personnelMessage");
+const personnelCreateForm = document.getElementById("personnelCreate");
+let canManagePersonnel = false;
+let editingPersonnelId = null;
+
+async function portalJson(path, options, fallback) {
+    let response;
+    try {
+        response = await fetch(path, {cache: "no-store", ...options});
+    } catch {
+        throw new Error("Sunucuya bağlanılamadı. Lütfen tekrar deneyin.");
+    }
+    if (response.status === 401) {
+        window.location.replace("/ik-giris");
+        throw new Error("Oturum süresi doldu.");
+    }
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result) {
+        const detail = result?.detail;
+        throw new Error(typeof detail === "string" && !["Not Found","Method Not Allowed","Internal Server Error","Forbidden","Unauthorized"].includes(detail)
+            ? detail : fallback);
+    }
+    return result;
+}
+
+async function personnelRequest(path = "", options = {}) {
+    return portalJson("/api/ik/personnel" + path, options, "Personel işlemi tamamlanamadı.");
+}
+
+function personnelDate(value) {
+    return value ? new Date(value.replace(" ", "T") + "Z").toLocaleString("tr-TR") : "—";
+}
+
+async function resetPersonnelPassword(userId, button) {
+    if (!window.confirm("Bu hesabın parolası yenilensin mi? Açık oturumları kapatılacak.")) return;
+    button.disabled = true;
+    try {
+        await personnelRequest(`/${userId}/password-reset`, {method: "POST"});
+        personnelMessage.textContent = "Parola kurulum bilgisi personelin ayrı teslim kanalına iletildi.";
+    } catch (error) {
+        personnelMessage.textContent = error.message;
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function loadPersonnel() {
+    personnelMessage.textContent = "";
+    personnelEditor.hidden = true;
+    try {
+        const result = await personnelRequest();
+        document.getElementById("personnelSummary").textContent =
+            `Toplam ${result.total} · Aktif ${result.active} · Pasif ${result.inactive}`;
+        const rows = document.getElementById("personnelRows");
+        rows.replaceChildren();
+        for (const person of result.users) {
+            const cellRow = rows.insertRow();
+            const roles = {supervisor: "Süpervizör", hr_manager: "İK Müdürü", hr_staff: "İK Personeli"};
+            for (const value of [person.name, person.email, roles[person.role],
+                                person.active ? "Aktif" : "Pasif", personnelDate(person.created_at),
+                                personnelDate(person.last_login_at)]) {
+                cellRow.insertCell().textContent = value;
+            }
+            const actions = cellRow.insertCell();
+            if (person.role !== "supervisor") {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.textContent = "Düzenle";
+                button.addEventListener("click", () => {
+                    editingPersonnelId = person.id;
+                    for (const field of ["name", "email", "role", "active"]) {
+                        personnelEditor.elements.namedItem(field).value = person[field];
+                    }
+                    const grants = document.getElementById("personnelGrants");
+                    grants.hidden = !(window.ikSaasAccess?.ats && person.role === "hr_staff");
+                    for (const code of ["ats_stage", "ats_schedule"]) {
+                        personnelEditor.elements.namedItem(code).checked = (person.permissions || "").split(",").includes(code);
+                    }
+                    personnelEditor.hidden = false;
+                });
+                const resetButton = document.createElement("button");
+                resetButton.type = "button";
+                resetButton.textContent = "Parola yenile";
+                resetButton.addEventListener("click", () => resetPersonnelPassword(person.id, resetButton));
+                actions.append(button, resetButton);
+            } else {
+                actions.textContent = "Süpervizör hesabı · Parola profilden değiştirilir";
+            }
+        }
+    } catch (error) {
+        document.getElementById("personnelRows").replaceChildren();
+        document.getElementById("personnelSummary").textContent = "";
+        personnelMessage.textContent = error.message;
+    }
+}
+
+personnelEditor?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const submit = personnelEditor.querySelector("button[type=submit]");
+    submit.disabled = true;
+    try {
+        const {name, email, role, active} = Object.fromEntries(new FormData(personnelEditor));
+        const fields = {name, email, role, active: active === "1"};
+        await personnelRequest(`/${editingPersonnelId}`, {
+            method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify(fields)
+        });
+        await loadPersonnel();
+    } catch (error) {
+        personnelMessage.textContent = error.message;
+    } finally {
+        submit.disabled = false;
+    }
+});
+
+document.getElementById("personnelGrantsSave")?.addEventListener("click", async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+        const permissions = ["ats_stage","ats_schedule"].filter(code => personnelEditor.elements.namedItem(code).checked);
+        await personnelRequest(`/${editingPersonnelId}/permissions`, {
+            method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({permissions})
+        });
+        await loadPersonnel();
+    } catch (error) {
+        personnelMessage.textContent = error.message;
+    } finally {
+        button.disabled = false;
+    }
+});
+
+personnelCreateForm?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const submit = personnelCreateForm.querySelector("button[type=submit]");
+    submit.disabled = true;
+    try {
+        const fields = Object.fromEntries(new FormData(personnelCreateForm));
+        await personnelRequest("", {
+            method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(fields)
+        });
+        personnelCreateForm.reset();
+        document.getElementById("personnelCreateDetails").open = false;
+        await loadPersonnel();
+        personnelMessage.textContent = "Personel oluşturuldu. İlk giriş bilgisi ayrı teslim kanalına iletildi.";
+    } catch (error) {
+        personnelMessage.textContent = error.message;
+    } finally {
+        submit.disabled = false;
+    }
+});
+
+if (companyPortalPage) {
+    const companyNameField = document.getElementById("companyName");
+    companyNameField.readOnly = true;
+    companyNameField.placeholder = "Firma bilgisi yükleniyor";
+    portalMetadataPromise.then(metadata => {
+        canManagePersonnel = Boolean(metadata?.can_manage_personnel);
+        if (canManagePersonnel) document.getElementById("personnelMenu").style.removeProperty("display");
+        companyNameField.value = metadata?.company_name || "";
+        if (metadata?.company_name) document.getElementById("portalCompanyTitle").textContent = metadata.company_name;
+        if (metadata?.user_name) document.getElementById("portalUserName").textContent = metadata.user_name;
+        const roles = {supervisor: "Süpervizör", hr_manager: "İK Müdürü", hr_staff: "İK Personeli"};
+        if (roles[metadata?.role]) document.getElementById("portalUserRole").textContent = roles[metadata.role];
+        companyNameField.placeholder = "Firma bilgisi alınamadı";
+    }).catch(() => { companyNameField.placeholder = "Firma bilgisi alınamadı"; });
+}
 
 function showPortalScreen(screenName) {
     dashboardHome.style.display = "none";
     cvAnalysisScreen.style.display = "none";
     candidatesScreen.style.display = "none";
     interviewsScreen.style.display = "none";
+    if (personnelScreen) personnelScreen.hidden = true;
+    document.getElementById("positionsScreen").hidden = screenName !== "positions";
+    document.getElementById("usageScreen").hidden = screenName !== "usage";
 
     if (screenName === "dashboard") {
         dashboardHome.style.display = "block";
@@ -946,9 +1157,15 @@ function showPortalScreen(screenName) {
     if (screenName === "interviews") {
         interviewsScreen.style.display = "block";
     }
+    if (screenName === "personnel" && canManagePersonnel) {
+        personnelScreen.hidden = false;
+        loadPersonnel();
+    }
+    document.dispatchEvent(new CustomEvent("ik-portal-screen", {detail: screenName}));
 }
 document.querySelectorAll(".sidebar-item[data-screen]").forEach(item => {
     item.addEventListener("click", event => {
+        if (companyPortalPage && item.id === "portalOverviewLink") return;
         event.preventDefault();
 
         const screenName = item.dataset.screen;

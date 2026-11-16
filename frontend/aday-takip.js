@@ -2,16 +2,21 @@ const candidateList = document.getElementById("candidateList");
 const candidateSummary = document.getElementById("candidateSummary");
 const candidateSearch = document.getElementById("candidateSearch");
 const statusFilter = document.getElementById("statusFilter");
+const positionFilter = document.getElementById("candidatePositionFilter");
+const evaluationFilter = document.getElementById("candidateEvaluationFilter");
+const candidateCompanyPortal = location.hostname.endsWith(".ernasa.com") && location.hostname !== "www.ernasa.com";
 
 let allCandidates = [];
 
 const statusLabels = {
+    new: "Yeni",
     waiting: "Bekliyor",
     opened: "Link Açıldı",
     started: "Mülakat Başladı",
     completed: "Tamamlandı",
     expired: "Süresi Doldu"
 };
+const evaluationLabels = {new:"Yeni",review:"Değerlendirmede",positive:"Olumlu",negative:"Olumsuz"};
 
 // ERNASA İK 1.1: Saatler Türkiye saatine göre gösterilir.
 function candidateDate(value) {
@@ -22,7 +27,7 @@ function candidateDate(value) {
 
 function effectiveCandidateStatus(candidate) {
     const status = candidate.status === "created" ? "waiting" : candidate.status;
-    if (status === "completed" || status === "expired") return status;
+    if (!["waiting", "opened"].includes(status)) return status;
     const expiry = candidateDate(candidate.expires_at);
     return expiry && expiry.getTime() <= Date.now() ? "expired" : status;
 }
@@ -47,6 +52,7 @@ function candidateRemainingLabel(candidate) {
     const status = effectiveCandidateStatus(candidate);
     if (status === "completed") return "Tamamlandı";
     if (status === "expired") return "Süresi doldu";
+    if (status === "started") return "Devam ediyor";
     const expiry = candidateDate(candidate.expires_at);
     if (!expiry) return "-";
     const seconds = Math.max(0, Math.floor((expiry.getTime() - Date.now()) / 1000));
@@ -64,7 +70,7 @@ function candidateEscape(value) {
 
 async function loadCandidates() {
     try {
-        const response = await fetch("/api/hr/interviews");
+        const response = await fetch(candidateCompanyPortal ? "/api/ik/candidates" : "/api/hr/interviews");
         const data = await response.json();
 
         if (!response.ok || !data.success) {
@@ -72,6 +78,14 @@ async function loadCandidates() {
         }
 
         allCandidates = data.interviews || [];
+        if (positionFilter) {
+            const selected = positionFilter.value;
+            positionFilter.replaceChildren(new Option("Tüm Pozisyonlar", ""));
+            const positions = new Map(allCandidates.filter(row => row.position).map(row =>
+                [row.position_id || row.position, row.position]));
+            for (const [id, label] of positions) positionFilter.add(new Option(label, id));
+            if (positions.has(selected)) positionFilter.value = selected;
+        }
         updateCandidateStats();
 
         renderCandidates();
@@ -86,7 +100,7 @@ let currentPage = 1;
 const candidatesPerPage = 10;
 
 function renderCandidates() {
-    const searchValue = candidateSearch.value.toLowerCase().trim();
+    const searchValue = candidateSearch.value.toLocaleLowerCase("tr-TR").trim();
     const selectedStatus = statusFilter.value;
 
     const filteredCandidates = allCandidates.filter(candidate => {
@@ -95,16 +109,17 @@ function renderCandidates() {
             ${candidate.name || ""}
             ${candidate.company || ""}
             ${candidate.position || ""}
-        `.toLowerCase();
+        `.toLocaleLowerCase("tr-TR");
 
         const matchesSearch = searchableText.includes(searchValue);
 
         const candidateStatus = effectiveCandidateStatus(candidate);
 
-        const matchesStatus =
-            !selectedStatus || candidateStatus === selectedStatus;
-
-        return matchesSearch && matchesStatus;
+        const matchesStatus = !selectedStatus || candidateStatus === selectedStatus ||
+            (selectedStatus === "pending" && ["waiting", "opened"].includes(candidateStatus));
+        const matchesPosition = !positionFilter?.value || (candidate.position_id || candidate.position) === positionFilter.value;
+        const matchesEvaluation = !evaluationFilter?.value || (candidate.evaluation_status || "new") === evaluationFilter.value;
+        return matchesSearch && matchesStatus && matchesPosition && matchesEvaluation;
     });
 
     candidateSummary.textContent =
@@ -169,16 +184,17 @@ function renderCandidates() {
                         ${candidateEscape(statusText)}
                     </span>
                 </td>
+                ${candidateCompanyPortal ? `<td>${candidateEscape(evaluationLabels[candidate.evaluation_status || "new"])}</td>` : ""}
 
                 <td>
                     ${candidateEscape(candidateCreatedLabel(candidate))}
                 </td>
                 <td>${candidateEscape(candidateDateTime(candidate.expires_at))}</td>
-                <td>${candidateEscape(candidateRemainingLabel(candidate))}</td>
+                <td data-candidate-clock="${candidateEscape(candidate.token)}">${candidateEscape(candidateRemainingLabel(candidate))}</td>
 
                 <td>
                     ${
-                        candidate.status === "completed"
+                        candidate.status === "completed" && (!candidateCompanyPortal || window.ikSaasAccess?.report)
                             ? `
                                 <button
                                     type="button"
@@ -190,6 +206,7 @@ function renderCandidates() {
                               `
                             : `<span class="candidate-no-report">-</span>`
                     }
+                    ${window.ikSaasAccess?.manager ? `<button type="button" data-manage-candidate="${candidateEscape(candidate.token)}">Yönet</button>` : ""}
                 </td>
             </tr>
         `;
@@ -217,6 +234,7 @@ function renderCandidates() {
                         <th>Pozisyon</th>
                         <th>Firma</th>
                         <th>Mülakat Durumu</th>
+                        ${candidateCompanyPortal ? "<th>Değerlendirme</th>" : ""}
                         <th>Oluşturma Tarihi</th>
                         <th>Bitiş</th>
                         <th>Kalan Süre</th>
@@ -283,8 +301,14 @@ function filterCandidatesByStatus(status) {
     currentPage = 1;
     renderCandidates();
 }
-candidateSearch.addEventListener("input", renderCandidates);
-statusFilter.addEventListener("change", renderCandidates);
+function applyCandidateFilters() {
+    currentPage = 1;
+    renderCandidates();
+}
+candidateSearch.addEventListener("input", applyCandidateFilters);
+statusFilter.addEventListener("change", applyCandidateFilters);
+positionFilter?.addEventListener("change", applyCandidateFilters);
+evaluationFilter?.addEventListener("change", applyCandidateFilters);
 
 loadCandidates();
 
@@ -292,7 +316,10 @@ function updateCandidateStats() {
     document.getElementById("statTotal").textContent = allCandidates.length;
 
     document.getElementById("statWaiting").textContent =
-        allCandidates.filter(candidate => effectiveCandidateStatus(candidate) === "waiting").length;
+        allCandidates.filter(candidate => {
+            const status = effectiveCandidateStatus(candidate);
+            return status === "waiting" || (status === "opened" && Boolean(statusFilter.querySelector('[value="pending"]')));
+        }).length;
 
     document.getElementById("statOpened").textContent =
         allCandidates.filter(candidate => effectiveCandidateStatus(candidate) === "opened").length;
@@ -309,8 +336,18 @@ function updateCandidateStats() {
 // Görünür geri sayım ve durumları düzenli yenile; API'deki kayıtlar değiştirilmez.
 setInterval(() => {
     if (!candidateList || !candidateList.offsetParent) return;
-    renderCandidates();
-    updateCandidateStats();
+    const visible = new Map(allCandidates.map(candidate => [candidate.token, candidate]));
+    for (const cell of candidateList.querySelectorAll("[data-candidate-clock]")) {
+        const candidate = visible.get(cell.dataset.candidateClock);
+        if (!candidate) continue;
+        const label = candidateRemainingLabel(candidate);
+        if (label === "Süresi doldu" && cell.textContent !== label) {
+            renderCandidates();
+            updateCandidateStats();
+            break;
+        }
+        cell.textContent = label;
+    }
 }, 1000);
 
 

@@ -1,5 +1,5 @@
 let dashboardCandidatesCache = [];
-const dashboardStatusNames = {waiting:"Başlamadı",created:"Başlamadı",opened:"Link Açıldı",started:"Devam Ediyor",completed:"Tamamlandı",expired:"Süresi Doldu"};
+const dashboardStatusNames = {new:"Yeni",waiting:"Başlamadı",created:"Başlamadı",opened:"Link Açıldı",started:"Devam Ediyor",completed:"Tamamlandı",expired:"Süresi Doldu"};
 const dashboardColors = {waiting:"#1673ed",active:"#f6a21a",completed:"#19a663",expired:"#ef5363"};
 function dashboardEscape(value) {
     return String(value ?? "-").replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -24,7 +24,7 @@ function dashboardExpiryLabel(candidate) {
     return date ? date.toLocaleString("tr-TR", {timeZone:"Europe/Istanbul",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "-";
 }
 function dashboardRemainingLabel(candidate) {
-    if (["completed", "expired"].includes(candidate.status)) return getDashboardStatus(candidate.status);
+    if (["new", "started", "completed", "expired"].includes(candidate.status)) return getDashboardStatus(candidate.status);
     const date = dashboardDate(candidate.expires_at);
     if (!date) return "-";
     const seconds = Math.floor((date.getTime() - Date.now())/1000);
@@ -40,14 +40,16 @@ function dashboardGoCandidates() {
 function dashboardRender() {
     const query = (document.getElementById("dashboardSearch")?.value || "").toLocaleLowerCase("tr-TR").trim();
     const all = dashboardCandidatesCache;
-    const count = key => all.filter(c => dashboardStatusKey(c.status) === key).length;
-    const active = count("started") + count("opened");
+    const count = key => all.filter(c => effectiveCandidateStatus(c) === key).length;
+    const active = count("started");
+    const pending = count("waiting") + count("opened");
     document.getElementById("totalCandidates").textContent = all.length;
     document.getElementById("completedInterviews").textContent = count("completed");
     document.getElementById("activeInterviews").textContent = active;
-    document.getElementById("waitingEvaluation").textContent = count("waiting");
+    document.getElementById("waitingEvaluation").textContent = pending;
     const segments = [
-        {label:"Henüz Başlamayan",n:count("waiting"),color:dashboardColors.waiting},
+        {label:"Yeni",n:count("new"),color:"#7389a6"},
+        {label:"Henüz Başlamayan",n:pending,color:dashboardColors.waiting},
         {label:"Mülakat Aşamasında",n:active,color:dashboardColors.active},
         {label:"Tamamlanan",n:count("completed"),color:dashboardColors.completed},
         {label:"Süresi Dolan",n:count("expired"),color:dashboardColors.expired}
@@ -82,10 +84,11 @@ async function loadDashboard() {
     const list=document.getElementById("dashboardCandidateList");
     if(!list)return;
     try {
-        const response=await fetch("/api/hr/interviews");
+        const response=await fetch(companyPortalPage ? "/api/ik/candidates" : "/api/hr/interviews");
         if(!response.ok)throw new Error("Aday kayıtları alınamadı.");
         const data=await response.json();
-        dashboardCandidatesCache=Array.isArray(data)?data:(Array.isArray(data.interviews)?data.interviews:[]);
+        const records=Array.isArray(data)?data:(Array.isArray(data.interviews)?data.interviews:[]);
+        dashboardCandidatesCache=records.map(candidate => ({...candidate,status:effectiveCandidateStatus(candidate)}));
         dashboardRender();
     } catch(err) {
         console.error("Dashboard yükleme hatası:",err);
@@ -108,7 +111,7 @@ document.addEventListener("click", event => {
 
         if (!candidate) return;
 
-        if (candidate.status === "completed") {
+        if (candidate.status === "completed" && (!companyPortalPage || window.ikSaasAccess?.report)) {
             openCandidateReport(token);
         } else {
             dashboardGoCandidates();

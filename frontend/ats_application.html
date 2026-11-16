@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="tr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ERNASA ATS Başvuru</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#edf3fb;color:#132948;font:16px system-ui}main{max-width:640px;margin:32px auto;padding:24px;background:#fff;border-radius:14px}label{display:grid;gap:6px;margin:14px 0}input,button{font:inherit;padding:10px}label.check{display:flex;gap:8px}p#notice{white-space:pre-wrap}button{background:#153969;color:white;border:0;border-radius:7px}img{width:58px}button:disabled{opacity:.55}
+</style>
+<main>
+<img src="/assets/ernasalogo.png" alt="ERNASA">
+<p id="employer"></p><h1 id="title">Başvuru</h1><p id="summary"></p>
+<section id="postingQualifications" hidden><h2>Aranan nitelikler</h2><p></p></section>
+<section id="postingConditions" hidden><h2>Çalışma koşulları</h2><p></p></section>
+<p id="message" role="status"></p>
+<form id="applyForm" hidden>
+<label>Ad soyad <input name="name" autocomplete="name" required maxlength="160"></label>
+<label>E-posta <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
+<label>Telefon <input name="phone" type="tel" autocomplete="tel" maxlength="50"></label>
+<h2>Aday aydınlatma metni</h2><p id="notice"></p>
+<label class="check"><input name="acknowledge" type="checkbox" required>Aydınlatma metnini okudum.</label>
+<button type="submit">Başvuruyu kaydet</button>
+</form>
+</main>
+<script>
+const jobId = location.pathname.split("/").pop();
+const route = "/api/ats/jobs/" + encodeURIComponent(jobId);
+const form = document.getElementById("applyForm");
+const message = document.getElementById("message");
+let version = "";
+fetch(route,{cache:"no-store"}).then(async response => {
+    if (!response.ok) throw new Error("Başvuru bağlantısı kullanılamıyor.");
+    const data = await response.json();
+    document.getElementById("employer").textContent = data.company_name;
+    document.getElementById("title").textContent = data.title;
+    document.getElementById("summary").textContent = data.summary;
+    for (const [id,value] of [["postingQualifications",data.qualifications],["postingConditions",data.work_conditions]]) {
+        const section=document.getElementById(id);
+        section.hidden=!value;
+        section.querySelector("p").textContent=value || "";
+    }
+    document.getElementById("notice").textContent = data.notice;
+    version = data.notice_version;
+    form.hidden = false;
+}).catch(error => { message.textContent = error.message; });
+form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    const fields = Object.fromEntries(new FormData(form));
+    try {
+        const response = await fetch(route + "/apply", {method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({...fields,acknowledge:fields.acknowledge === "on",notice_version:version})});
+        if (!response.ok) throw new Error("Başvuru tamamlanamadı. Form ve ilan bilgilerini kontrol edin.");
+        form.reset();
+        form.hidden = true;
+        message.textContent = "Başvuru alındı.";
+    } catch(error) {
+        message.textContent = error.message;
+    } finally {
+        button.disabled = false;
+    }
+});
+</script>
+</html>

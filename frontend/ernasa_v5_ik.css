@@ -1736,3 +1736,40 @@ body > .footer {
     font-size: 13px;
     line-height: 1.4;
 }
+
+.saas-nav-label { padding: 12px 13px 3px; color: #b9cbe7; font-size: 10px; letter-spacing: .08em; }
+.saas-module { margin: 12px 0; min-width: 0; }
+.saas-module[hidden], .saas-form[hidden] { display: none; }
+.saas-table-wrap { max-width: 100%; overflow-x: auto; margin: 16px 0; }
+.saas-table { width: 100%; border-collapse: collapse; min-width: 640px; }
+.saas-table td, .saas-table th { padding: 10px 12px; border-bottom: 1px solid #dfe8f4; text-align: left; overflow-wrap: anywhere; }
+.saas-table th { background: #edf3ff; color: #173761; }
+.saas-editor { margin-block: 16px; }
+.saas-editor summary { cursor: pointer; color: #153e72; font-weight: 650; }
+.saas-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; margin-block: 14px; align-items: end; }
+.saas-form label { display: grid; gap: 5px; }
+.saas-form input, .saas-form select, .saas-form textarea { min-width: 0; width: 100%; }
+.saas-form textarea { min-height: 76px; }
+.saas-form button, .saas-table button, #candidateManagerDialog button, #temporaryPasswordDialog button {
+    background: #eef4ff; color: #153e72; border: 1px solid #c9d9ef; border-radius: 7px; padding: 8px 12px; cursor: pointer;
+}
+.saas-table button + button { margin-inline-start: 5px; }
+#temporaryPasswordDialog, #candidateManagerDialog { max-width: min(92vw, 460px); padding: 22px; border: 1px solid #dae4f2; border-radius: 12px; }
+#temporaryPasswordValue { display: block; overflow-wrap: anywhere; padding: 10px; margin-block: 10px; background: #eef4ff; }
+#portalCompanyTitle { overflow-wrap: anywhere; }
+
+.ats-kanban{display:grid;grid-template-columns:repeat(7,minmax(190px,1fr));gap:10px;overflow-x:auto;padding:12px 0}
+.ats-kanban-column{min-height:220px;padding:10px;background:#eef4fc;border:1px solid #d9e6f4;border-radius:8px}
+.ats-kanban-card{padding:10px;margin:8px 0;background:white;border:1px solid #d9e6f4;border-radius:7px;overflow-wrap:anywhere}
+.ats-kanban-card[draggable=true]{cursor:grab}.ats-kanban-card .saas-form{grid-template-columns:1fr;margin:6px 0}
+#atsSuiteScreen a,#atsSuiteScreen button{margin-inline-end:8px}
+#atsDashboardMetrics[hidden]{display:none}.saas-form input[type=checkbox]{width:auto}
+@media(max-width:650px){.ats-kanban{grid-template-columns:repeat(7,minmax(160px,1fr))}.saas-table{min-width:540px}}
+.portal-company-logo{width:82px;height:58px;object-fit:contain;flex:0 0 auto}
+.portal-company-logo[hidden],.portal-profile-actions[hidden]{display:none}
+.portal-profile{position:relative}.portal-profile summary{cursor:pointer;color:inherit}
+.portal-profile summary small{display:block}
+.portal-profile-actions{position:absolute;right:0;top:100%;z-index:20;background:white;border:1px solid #c9d9ef;border-radius:8px;padding:8px;min-width:155px}
+.portal-profile-actions button{display:block;padding:6px;width:100%;border:0;background:#fff;color:#153e72;text-align:left}
+#profileDialog{max-width:min(92vw,460px);padding:22px;border:1px solid #dae4f2;border-radius:12px}
+@media(max-width:650px){.portal-company-logo{width:63px;height:44px}.dashboard-topbar .portal-profile{display:block}}

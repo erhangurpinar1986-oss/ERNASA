@@ -1,0 +1,51 @@
+{
+  "downloaded_utc": "2026-11-14T19:42:20.178300+00:00",
+  "turkiyeapi": {
+    "dataset": "2025",
+    "documented_last_update": "2026-05-21",
+    "project_license": "MIT",
+    "dataset_terms": "https://github.com/ubeydeozdmr/turkiye-api/blob/main/TERMS.md"
+  },
+  "pycountry": {
+    "release": "24.6.1",
+    "project_license": "LGPL-2.1"
+  },
+  "counts": {
+    "provinces": 81,
+    "district_records": 973,
+    "countries": 249,
+    "subdivisions": 5046
+  },
+  "files": {
+    "provinces.json": {
+      "url": "https://api.turkiyeapi.dev/v2/datasets/2025/provinces.json",
+      "http_status": 200,
+      "bytes": 48728,
+      "sha256": "b33c69236d680aa3a13f66b96c70fb45037a0e88061b6cb05e8b68a2d3f59169"
+    },
+    "districts.json": {
+      "url": "https://api.turkiyeapi.dev/v2/datasets/2025/districts.json",
+      "http_status": 200,
+      "bytes": 278610,
+      "sha256": "daface7da3c0b6b8d882bae8e59156332461c6076872eb29d4117f7dbbafb794"
+    },
+    "iso3166-1.json": {
+      "url": "https://raw.githubusercontent.com/pycountry/pycountry/refs/tags/24.6.1/src/pycountry/databases/iso3166-1.json",
+      "http_status": 200,
+      "bytes": 43284,
+      "sha256": "f01b812b57fba9f31ff621bf33e7c7570a01964dbeb5be2167e94decf538c89f"
+    },
+    "iso3166-2.json": {
+      "url": "https://raw.githubusercontent.com/pycountry/pycountry/refs/tags/24.6.1/src/pycountry/databases/iso3166-2.json",
+      "http_status": 200,
+      "bytes": 498094,
+      "sha256": "4dddd6dc5ea7cc7dba1ee289c659c94c61d45813f0e5f797363de28bf3e8e29a"
+    },
+    "pycountry-LICENSE.txt": {
+      "url": "https://raw.githubusercontent.com/pycountry/pycountry/refs/tags/24.6.1/LICENSE.txt",
+      "http_status": 200,
+      "bytes": 24463,
+      "sha256": "3fa39c6e18a3a4411082b64c164deae1d8f47b03a4d45304c1f0ae478626e382"
+    }
+  }
+}

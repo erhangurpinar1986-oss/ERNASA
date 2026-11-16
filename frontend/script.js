@@ -13,6 +13,7 @@ const consentCheckbox = document.getElementById("consentCheckbox");
 const accuracyCheckbox = document.getElementById("accuracyCheckbox");
 const interviewQuestionArea = document.getElementById("interviewQuestionArea");
 const questionProgress = document.getElementById("questionProgress");
+const questionProgressBar = document.getElementById("questionProgressBar");
 const questionText = document.getElementById("questionText");
 const answerText = document.getElementById("answerText");
 const submitAnswerButton = document.getElementById("submitAnswerButton");
@@ -115,6 +116,13 @@ function updateStartButton() {
     startInterviewButton.disabled = !allApproved;
 }
 
+function showCandidateQuestion(data) {
+    questionProgress.dataset.number = data.question_number;
+    questionProgress.textContent = candidateText("Soru ", "Question ") + data.question_number;
+    questionProgressBar.style.width = (data.question_number * 100 / (data.question_count || 10)) + "%";
+    questionText.textContent = data.question;
+}
+
 openKvkkButton.addEventListener("click", () => {
     openModal("KVKK Aydınlatma Metni", kvkkText);
 });
@@ -175,8 +183,7 @@ startInterviewButton.addEventListener("click", () => {
 if (data.success) {
     interviewQuestionArea.style.display = "block";
 
-    questionProgress.textContent = `Soru ${data.question_number}`;
-    questionText.textContent = data.question;
+    showCandidateQuestion(data);
 
     consentCard.style.display = "none";
     welcomeCard.style.display = "none";
@@ -206,9 +213,17 @@ if (interviewToken) {
     fetch(`/api/interview-links/${interviewToken}`)
         .then(response => response.json())
         .then(data => {
-            console.log("Aday Bilgileri:", data);
-
     if (data.success) {
+    setCandidateLocale(data.language || "tr");
+    if (data.question_count > 10) {
+        document.querySelector(".info-tile:nth-child(2) b").textContent = data.question_count + " soru";
+    }
+    if (location.hostname.endsWith(".ernasa.com") && location.hostname !== "www.ernasa.com") {
+        const logo = document.getElementById("candidateCompanyLogo");
+        logo.onload = () => { logo.hidden = false; };
+        logo.onerror = () => { logo.hidden = true; };
+        logo.src = `/api/interview-links/${encodeURIComponent(interviewToken)}/company-logo`;
+    }
     const candidateGreeting = document.getElementById("candidateGreeting");
     const companyName = document.getElementById("companyName");
 
@@ -309,12 +324,10 @@ submitAnswerButton.addEventListener("click", () => {
         return;
     }
 
-    const currentQuestionNumber = Number(
-        questionProgress.textContent.replace("Soru", "").trim()
-    );
+    const currentQuestionNumber = Number(questionProgress.dataset.number);
 
     submitAnswerButton.disabled = true;
-    submitAnswerButton.textContent = "GÖNDERİLİYOR...";
+    submitAnswerButton.textContent = candidateText("GÖNDERİLİYOR...", "Sending…");
 
     fetch(`/api/interviews/${interviewToken}/answer`, {
         method: "POST",
@@ -338,9 +351,13 @@ submitAnswerButton.addEventListener("click", () => {
     if (data.success) {
 
         if (data.completed) {
-            questionProgress.textContent = "Mülakat Tamamlandı";
+            questionProgress.textContent = candidateText("Mülakat Tamamlandı", "Interview complete");
+            questionProgressBar.style.width = "100%";
+            document.querySelector(".question-heading").style.display = "none";
+            document.querySelector(".answer-label").style.display = "none";
             questionText.textContent =
-                "Teşekkür ederiz. Mülakatınızı başarıyla tamamladınız. Yanıtlarınız değerlendirilmek üzere ilgili birime iletilmiştir.";
+                candidateText("Teşekkür ederiz. Mülakatınızı başarıyla tamamladınız. Yanıtlarınız değerlendirilmek üzere ilgili birime iletilmiştir.",
+                    "Thank you. Your interview is complete and your answers have been submitted for review.");
 
             answerText.value = "";
             answerText.style.display = "none";
@@ -348,18 +365,17 @@ submitAnswerButton.addEventListener("click", () => {
             return;
         }
 
-        questionProgress.textContent = `Soru ${data.question_number}`;
-        questionText.textContent = data.question;
+        showCandidateQuestion(data);
         answerText.value = "";
         answerText.focus();
     }
 })
         .catch(error => {
             console.error("Cevap gönderilemedi:", error);
-            alert("Cevap gönderilirken bir hata oluştu.");
+            alert(candidateText("Cevap gönderilirken bir hata oluştu.", "We could not submit your answer. Try again."));
         })
         .finally(() => {
             submitAnswerButton.disabled = false;
-            submitAnswerButton.textContent = "CEVABI GÖNDER";
+            submitAnswerButton.textContent = candidateText("CEVABI GÖNDER", "Submit answer");
         });
 });

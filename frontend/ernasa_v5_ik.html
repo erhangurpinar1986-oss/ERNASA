@@ -7,6 +7,7 @@
     <title>ERNASA İK Portalı</title>
 
     <link rel="stylesheet" href="/static/ernasa_v5_ik.css">
+    <link rel="stylesheet" href="/static/portal-polish.css">
 </head>
 
 
@@ -23,31 +24,50 @@
         </div>
     </div>
 
-    <nav class="sidebar-menu">
-        <a class="sidebar-item" href="/">
+    <nav class="sidebar-menu" id="portalSidebar">
+        <a class="sidebar-item" id="portalHomeLink" href="/">
             <i data-lucide="house"></i>
             Ana Sayfa
         </a>
         
-        <a href="#" class="sidebar-item active" data-screen="dashboard">
+        <a href="#dashboard" class="sidebar-item active" id="portalOverviewLink" data-screen="dashboard">
             <i data-lucide="layout-dashboard"></i>
             Genel Bakış
         </a>
 
-        <a href="#" class="sidebar-item" data-screen="cv">
+        <a href="#" class="sidebar-item" data-screen="cv" data-product="ai">
             <i data-lucide="file-search"></i>
             CV Analizi
         </a>
 
-        <a href="#" class="sidebar-item" data-screen="candidates">
+        <a href="#" class="sidebar-item" data-screen="candidates" id="portalCandidatesLink">
             <i data-lucide="users-round"></i>
-            Adaylar
+            <span id="portalCandidatesLabel">Adaylar</span>
         </a>
 
-        <a href="#" class="sidebar-item" data-screen="interviews">
+        <a href="#" class="sidebar-item" data-screen="interviews" data-product="ai">
             <i data-lucide="messages-square"></i>
             Mülakatlar
         </a>
+        <a href="#" class="sidebar-item" id="positionsMenu" data-screen="positions" style="display:none">
+            <i data-lucide="briefcase"></i> Pozisyonlar
+        </a>
+        <a href="#" class="sidebar-item" id="jobsMenu" data-screen="suite_jobs" style="display:none"><i data-lucide="file-up"></i> İş İlanları</a>
+        <a href="#" class="sidebar-item" id="poolMenu" data-screen="suite_pool" style="display:none"><i data-lucide="users-round"></i> Aday Havuzu</a>
+        <a href="#" class="sidebar-item" id="kanbanMenu" data-screen="suite_kanban" style="display:none"><i data-lucide="layout-dashboard"></i> İşe Alım Panosu</a>
+        <a href="#" class="sidebar-item" id="calendarMenu" data-screen="suite_calendar" style="display:none"><i data-lucide="calendar"></i> Görüşme Takvimi</a>
+        <a href="#" class="sidebar-item" id="evaluationsMenu" data-screen="suite_evaluations" style="display:none"><i data-lucide="clipboard"></i> Değerlendirmeler</a>
+        <a href="#" class="sidebar-item" id="offersMenu" data-screen="suite_offers" style="display:none"><i data-lucide="file-up"></i> Teklifler</a>
+        <a href="#" class="sidebar-item" id="reportsMenu" data-screen="suite_reports" style="display:none"><i data-lucide="chart-bar"></i> AI Değerlendirme Raporları</a>
+        <a href="#" class="sidebar-item" id="usageMenu" data-screen="usage" style="display:none">
+            <i data-lucide="chart-bar"></i> Paket ve Kullanım
+        </a>
+        <a href="#" class="sidebar-item" id="personnelMenu" data-screen="personnel" style="display:none">
+            <i data-lucide="users"></i>
+            Personel Yönetimi
+        </a>
+        <a href="#" class="sidebar-item" id="settingsMenu" data-screen="suite_settings" style="display:none"><i data-lucide="settings"></i> Firma Ayarları</a>
+        <a href="#" class="sidebar-item" id="historyMenu" data-screen="suite_history" style="display:none"><i data-lucide="clipboard"></i> İşlem Geçmişi</a>
     </nav>
 
     <div class="sidebar-footer">
@@ -70,12 +90,22 @@
 
         <div>
             <h1>ERNASA</h1>
-            <p>İnsan Kaynakları Yönetim Merkezi</p>
+            <p id="portalCompanyTitle">İnsan Kaynakları Yönetim Merkezi</p>
         </div>
     </div>
 
+    <div id="companyLogoSlot" class="portal-logo-slot" hidden>
+        <img id="hrCompanyLogo" class="portal-company-logo" alt="Firma logosu" hidden>
+        <span id="companyLogoPlaceholder" class="portal-logo-placeholder">Firma logosu</span>
+    </div>
     <div class="topbar-actions">
-<div class="v5-user" aria-label="İK kullanıcı alanı"><span class="v5-avatar">İK</span><span>İK Yönetimi<small>Yönetim paneli</small></span></div>
+<details class="v5-user portal-profile" aria-label="İK kullanıcı alanı">
+    <summary><span id="portalUserName">İK Yönetimi</span><small id="portalUserRole">Yönetim paneli</small></summary>
+    <div id="portalProfileActions" class="portal-profile-actions" hidden>
+        <button type="button" id="profileOpen">Profilim</button>
+        <button type="button" id="passwordOpen">Parola Değiştir</button>
+    </div>
+</details>
         <button
     id="ernasaSecureLogout"
     type="button"
@@ -95,7 +125,7 @@
     </div>
     <div class="dashboard-stats">
         <div class="dashboard-stat-card v5-blue"><span class="v5-stat-icon"><i data-lucide="users-round"></i></span><div><strong id="totalCandidates">0</strong><span>Toplam Aday</span></div></div>
-        <div class="dashboard-stat-card v5-green"><span class="v5-stat-icon"><i data-lucide="users-round"></i></span><div><strong id="completedInterviews">0</strong><span>Tamamlanan Mülakat</span></div></div>
+        <div class="dashboard-stat-card v5-green"><span class="v5-stat-icon"><i data-lucide="users-round"></i></span><div><strong id="completedInterviews">0</strong><span>Tamamlanan AI Mülakatı</span></div></div>
         <div class="dashboard-stat-card v5-orange"><span class="v5-stat-icon"><i data-lucide="users-round"></i></span><div><strong id="activeInterviews">0</strong><span>Devam Eden</span></div></div>
         <div class="dashboard-stat-card v5-purple"><span class="v5-stat-icon"><i data-lucide="users-round"></i></span><div><strong id="waitingEvaluation">0</strong><span>Henüz Başlamayan</span></div></div>
     </div>
@@ -105,6 +135,7 @@
         <section class="v5-widget"><h3>Pozisyon Dağılımı</h3><div id="dashboardPositions" class="v5-positions"></div></section>
         <section class="v5-widget"><div class="v5-widget-head"><h3>Son Eklenen Adaylar</h3><button type="button" class="v5-text-btn" data-go-candidates>Tümünü Gör →</button></div><div id="dashboardRecent" class="v5-recent"></div></section>
     </div>
+    <section id="atsDashboardMetrics" class="v5-widget" hidden aria-label="ATS özeti"></section>
     <div class="dashboard-candidates">
         <div class="v5-widget-head"><div class="dashboard-section-title"><h3>Son Adaylar</h3><p>Son aday ve mülakat hareketleri</p></div><button type="button" class="v5-primary-btn" data-go-candidates>Tüm Adayları Gör →</button></div>
         <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th>Aday No</th><th>Ad Soyad</th><th>Pozisyon</th><th>Mülakat Durumu</th><th>Oluşturma Tarihi</th><th>Bitiş</th><th>Kalan Süre</th><th>İşlemler</th></tr></thead><tbody id="dashboardCandidateList"><tr><td colspan="6" class="dashboard-empty">Aday kayıtları yükleniyor...</td></tr></tbody></table></div>
@@ -224,6 +255,7 @@
                             autocomplete="off"
                             required
                          >
+                        <select id="portalPosition" style="display:none" aria-label="Açık pozisyon"></select>
                     </div>
 
                 </div>
@@ -352,11 +384,20 @@
 
             <select id="statusFilter">
                 <option value="">Tüm Durumlar</option>
-                <option value="waiting">Bekliyor</option>
+                <option value="new">Yeni</option>
+                <option value="pending">Henüz Başlamayan</option>
                 <option value="opened">Link Açıldı</option>
-                <option value="started">Mülakat Başladı</option>
-                <option value="completed">Tamamlandı</option>
+                <option value="started">Devam Eden</option>
+                <option value="completed">Tamamlanan</option>
                 <option value="expired">Süresi Doldu</option>
+            </select>
+            <select id="candidatePositionFilter" aria-label="Pozisyona göre filtrele">
+                <option value="">Tüm Pozisyonlar</option>
+            </select>
+            <select id="candidateEvaluationFilter" aria-label="Değerlendirmeye göre filtrele">
+                <option value="">Tüm Değerlendirmeler</option>
+                <option value="new">Yeni</option><option value="review">Değerlendirmede</option>
+                <option value="positive">Olumlu</option><option value="negative">Olumsuz</option>
             </select>
 
         </div>
@@ -368,9 +409,9 @@
         <span>Toplam Aday</span>
     </div>
 
-    <div class="candidate-stat" onclick="filterCandidatesByStatus('waiting')">
+    <div class="candidate-stat" onclick="filterCandidatesByStatus('pending')">
         <strong id="statWaiting">0</strong>
-        <span>Bekliyor</span>
+        <span>Henüz Başlamayan</span>
     </div>
 
     <div class="candidate-stat" onclick="filterCandidatesByStatus('opened')">
@@ -395,7 +436,32 @@
 
 </div>
 
-<div id="candidateSummary" style="display:none;"></div>
+<details id="atsCandidateDetails" style="display:none" class="saas-editor">
+    <summary>Aday ekle</summary>
+    <form id="atsCandidateForm" class="saas-form">
+        <label>Ad soyad <input name="name" required maxlength="160"></label>
+        <label>E-posta <input name="email" type="email" maxlength="254"></label>
+        <label>Telefon <input name="phone" type="tel" maxlength="50"></label>
+        <label>Pozisyon <select name="position_id" required></select></label>
+        <button type="submit">Adayı kaydet</button>
+    </form>
+</details>
+<p id="atsCandidateMessage" role="status"></p>
+<dialog id="candidateManagerDialog" aria-labelledby="candidateManagerTitle">
+    <h3 id="candidateManagerTitle">Adayı yönet</h3>
+    <form id="candidateManagerForm" class="saas-form">
+        <label>Değerlendirme <select name="evaluation_status">
+            <option value="new">Yeni</option><option value="review">Değerlendirmede</option>
+            <option value="positive">Olumlu</option><option value="negative">Olumsuz</option>
+        </select></label>
+        <button type="submit" name="evaluation">Değerlendirmeyi kaydet</button>
+        <label>Atanan personel <select name="assigned_user_id"></select></label>
+        <button type="submit" name="assignment">Atamayı kaydet</button>
+        <p id="candidateManagerMessage" role="status"></p>
+        <button type="button" id="candidateManagerClose">Kapat</button>
+    </form>
+</dialog>
+<div id="candidateSummary"></div>
 
         <div id="candidateList">
             Adaylar yükleniyor...
@@ -429,6 +495,113 @@
 
 </section>
 
+</div>
+
+    <section id="positionsScreen" class="results-card saas-module" hidden>
+        <header class="saas-module-heading"><h2>Pozisyonlar</h2><button type="button" class="saas-primary" id="newPositionButton" hidden>Yeni Pozisyon</button></header>
+        <p id="positionsMessage" role="status"></p>
+        <a id="positionDepartmentLink" href="#firma-ayarlari" hidden>Firma Ayarları’nda departman ekle</a>
+        <div class="saas-editor" id="positionEditor" hidden>
+            <h3 id="positionEditorTitle">Pozisyon aç</h3>
+            <label>Hazır pozisyon şablonu <select id="positionTemplate"><option value="">Firmaya özel pozisyon</option></select></label>
+            <form id="positionForm" class="saas-form position-form">
+                <fieldset class="saas-fieldset"><legend>Temel bilgiler</legend><div class="saas-fields">
+                <label>Pozisyon adı <input name="name" required maxlength="160"></label>
+                <label>Pozisyon kodu <input name="code" maxlength="36"></label>
+                <label>Departman <select name="department_id" required></select></label>
+                <label>İş ailesi <input name="job_family" maxlength="100"></label>
+                <label>Çalışan grubu <input name="worker_group" maxlength="100"></label>
+                <label>Çalışma yeri <input name="location" maxlength="120"></label>
+                <label>Çalışma biçimi <input name="work_mode" maxlength="40"></label>
+                <label>Çalışma türü <input name="employment_type" maxlength="40"></label>
+                </div></fieldset>
+                <fieldset class="saas-fieldset"><legend>Pozisyon gereksinimleri</legend><div class="saas-fields position-requirements">
+                <label class="saas-wide">İş tanımı <textarea name="description" maxlength="4000"></textarea></label>
+                <label class="saas-wide">Aranan nitelikler <textarea name="qualifications" maxlength="4000"></textarea></label>
+                <label class="saas-wide">Ağırlıklı eşleşme kriterleri
+                    <textarea name="matching_criteria" maxlength="6000" placeholder="Yetkinlik | Depo planlama | 40 | depo planlama"></textarea>
+                    <small>Her satıra kategori, kriter, ağırlık ve virgülle ayrılan kanıt ifadelerini dikey çizgiyle ayırarak girin. Kategoriler Yetkinlik, Mesleki deneyim, Eğitim ve Sertifika.</small>
+                </label>
+                <label>Eğitim <input name="education" maxlength="300"></label>
+                <label>Gerekli sertifikalar <input name="certifications" maxlength="300"></label>
+                <label>Deneyim <input name="experience" maxlength="300"></label>
+                <label>Kıdem seviyesi <input name="seniority" maxlength="100"></label>
+                </div></fieldset>
+                <fieldset class="saas-fieldset"><legend>Yönetim</legend><div class="saas-fields">
+                <label>İşe alım sorumlusu <input name="hiring_contact" maxlength="120"></label>
+                <label>Kontenjan <input type="number" name="openings" min="1" max="10000" value="1" required></label>
+                <label>Ücret aralığı <input name="salary_range" maxlength="120"></label>
+                <label>Açılış tarihi <input type="date" name="opens_on"></label>
+                <label>Kapanış tarihi <input type="date" name="closes_on"></label>
+                <label>Durum <select name="state"><option value="open">Açık</option><option value="draft">Taslak</option><option value="paused">Duraklatıldı</option><option value="closed">Kapandı</option></select></label>
+                </div></fieldset>
+                <div class="saas-actions"><button type="submit" class="saas-primary">Kaydet</button>
+                <button type="reset">Formu temizle</button></div>
+            </form>
+        </div>
+        <div class="saas-table-wrap"><table class="saas-table">
+            <thead><tr><th>Pozisyon</th><th>Departman</th><th>Çalışma yeri</th><th>Durum</th><th>Oluşturulma</th><th>Aday</th><th>İşlem</th></tr></thead>
+            <tbody id="positionsRows"></tbody>
+        </table></div>
+        <div id="positionMembersPanel"></div>
+    </section>
+    <section id="usageScreen" class="results-card saas-module" hidden>
+        <h2>Paket ve Kullanım</h2>
+        <p id="usageMessage" role="status"></p>
+        <div id="usageCards" class="saas-usage-grid"></div>
+        <div class="saas-table-wrap"><table class="saas-table">
+            <thead><tr><th>Ürün</th><th>Paket</th><th>Durum</th><th>Başlangıç</th><th>Bitiş</th><th>Aktif kullanıcı</th><th>Aylık mülakat</th></tr></thead>
+            <tbody id="usageRows"></tbody>
+        </table></div>
+    </section>
+    <section id="personnelScreen" class="results-card saas-module" hidden>
+        <h2>Personel Yönetimi</h2>
+        <p id="personnelSummary" role="status"></p>
+        <p id="personnelMessage" role="status"></p>
+        <details id="personnelCreateDetails">
+            <summary>Personel ekle</summary>
+            <form id="personnelCreate" class="saas-form">
+                <label>Ad soyad <input name="name" required maxlength="120"></label>
+                <label>E-posta <input name="email" type="email" required maxlength="254"></label>
+                <label>Rol <select name="role"><option value="hr_staff">İK Personeli</option><option value="hr_manager">İK Müdürü</option></select></label>
+                <p>İlk giriş bilgisi personele ayrı bir kanaldan iletilir.</p>
+                <button type="submit">Personel oluştur</button>
+            </form>
+        </details>
+        <div class="saas-table-wrap">
+            <table class="saas-table">
+                <thead><tr><th>Ad soyad</th><th>E-posta</th><th>Rol</th><th>Durum</th><th>Oluşturulma</th><th>Son giriş</th><th>İşlem</th></tr></thead>
+                <tbody id="personnelRows"></tbody>
+            </table>
+        </div>
+        <form id="personnelEditor" class="saas-form" hidden>
+            <h3>Personeli düzenle</h3>
+            <label>Ad soyad <input name="name" required maxlength="120"></label>
+            <label>E-posta <input name="email" type="email" required maxlength="254"></label>
+            <label>Rol <select name="role"><option value="hr_staff">İK Personeli</option><option value="hr_manager">İK Müdürü</option></select></label>
+            <label>Durum <select name="active"><option value="1">Aktif</option><option value="0">Pasif</option></select></label>
+            <button type="submit">Kaydet</button>
+            <fieldset id="personnelGrants" hidden>
+                <legend>ATS ek izinleri</legend>
+                <label><input type="checkbox" name="ats_stage"> Aşama güncelleme</label>
+                <label><input type="checkbox" name="ats_schedule"> Görüşme planlama</label>
+                <button type="button" id="personnelGrantsSave">Ek izinleri kaydet</button>
+            </fieldset>
+        </form>
+    </section>
+    <section id="atsSuiteScreen" class="results-card saas-module" hidden></section>
+    <dialog id="profileDialog" aria-labelledby="profileDialogTitle">
+        <h3 id="profileDialogTitle">Profilim</h3>
+        <p id="profileIdentity"></p>
+        <form id="ownPasswordForm" class="saas-form" hidden>
+            <label>Mevcut parola <input required name="current_password" type="password" maxlength="128" autocomplete="current-password"></label>
+            <label>Yeni parola <input required name="new_password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>
+            <label>Yeni parola tekrarı <input required name="confirm_password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>
+            <button type="submit">Parolayı değiştir</button>
+        </form>
+        <p id="profileMessage" role="status"></p>
+        <form method="dialog"><button type="submit">Kapat</button></form>
+    </dialog>
     </section>
 
 </div>
@@ -444,8 +617,9 @@
 <script src="/static/ernasa_v5_ik.js"></script>
 <script src="/static/aday-takip.js"></script>
 <script src="/static/ernasa_v5_dashboard_only.js"></script>
-
-<script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script><script>if(window.lucide)lucide.createIcons();</script>
+<script src="/static/saas_portal.js"></script>
+<script src="/static/ats_suite.js"></script>
+<script src="/static/portal_icons.js"></script>
 <script>
 async function ernasaSecureLogout() {
     const button = document.getElementById("ernasaSecureLogout");
@@ -458,13 +632,13 @@ async function ernasaSecureLogout() {
         });
 
         if (!response.ok) {
-            throw new Error("Cikis islemi basarisiz");
+            throw new Error("Çıkış işlemi başarısız.");
         }
 
         window.location.replace("/ik-giris");
     } catch (error) {
         button.disabled = false;
-        alert("G?venli ??k?? tamamlanamad?. L?tfen tekrar deneyin.");
+        alert("Güvenli çıkış tamamlanamadı. Lütfen tekrar deneyin.");
     }
 }
 </script>

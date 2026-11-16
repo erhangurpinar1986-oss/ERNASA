@@ -13,3 +13,4 @@ python-dotenv
 openai
 reportlab
 itsdangerous==2.2.0
+httpx

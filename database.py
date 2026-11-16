@@ -1,6 +1,7 @@
 import os
 import re
 import sqlite3
+import ats_schema
 from pathlib import Path
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -132,6 +133,64 @@ def initialize_database():
         if "created_at" not in columns:
             cursor.execute("ALTER TABLE interview_links ADD COLUMN created_at TEXT")
 
+    if DATABASE_URL:
+        cursor.execute("ALTER TABLE interview_links ADD COLUMN IF NOT EXISTS company_id BIGINT")
+    else:
+        cursor.execute("PRAGMA table_info(interview_links)")
+        if "company_id" not in {row[1] for row in cursor.fetchall()}:
+            cursor.execute("ALTER TABLE interview_links ADD COLUMN company_id BIGINT")
+    cursor.execute("CREATE INDEX IF NOT EXISTS interview_links_company ON interview_links(company_id, token)")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS company_positions (
+            id TEXT PRIMARY KEY, company_id BIGINT NOT NULL, name TEXT NOT NULL,
+            department TEXT NOT NULL, location TEXT NOT NULL, description TEXT NOT NULL,
+            qualifications TEXT NOT NULL, open INTEGER NOT NULL CHECK(open IN (0,1)),
+            created_at TEXT NOT NULL
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS company_positions_tenant ON company_positions(company_id)")
+    ats_schema.initialize(cursor)
+    columns = {
+        'position_id': 'TEXT REFERENCES company_positions(id)',
+        'created_by': 'BIGINT',
+        'assigned_user_id': 'BIGINT',
+        'evaluation_status': "TEXT NOT NULL DEFAULT 'new'",
+        'application_id': 'TEXT REFERENCES ats_applications(id)',
+    }
+    if not DATABASE_URL:
+        cursor.execute("PRAGMA table_info(interview_links)")
+        existing_columns = {row["name"] for row in cursor.fetchall()}
+    for column, definition in columns.items():
+        if DATABASE_URL:
+            cursor.execute(f"ALTER TABLE interview_links ADD COLUMN IF NOT EXISTS {column} {definition}")
+        elif column not in existing_columns:
+            cursor.execute(f"ALTER TABLE interview_links ADD COLUMN {column} {definition}")
+    cursor.execute("CREATE INDEX IF NOT EXISTS interview_links_position ON interview_links(company_id,position_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS interview_links_usage ON interview_links(company_id,created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS interview_links_application ON interview_links(company_id,application_id)")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS recruitment_audit (
+            id TEXT PRIMARY KEY, company_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+            event TEXT NOT NULL, target TEXT NOT NULL, recorded_at TEXT NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS interview_questions (
+            token TEXT NOT NULL REFERENCES interview_links(token),
+            question_number INTEGER NOT NULL CHECK(question_number BETWEEN 1 AND 10),
+            question TEXT NOT NULL, PRIMARY KEY(token,question_number)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ik_portal_sessions (
+            token_hash TEXT PRIMARY KEY,
+            slug TEXT NOT NULL,
+            company_id BIGINT NOT NULL,
+            user_id BIGINT NOT NULL,
+            access_version TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+        )
+    """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS candidate_sequence (
             id INTEGER PRIMARY KEY,

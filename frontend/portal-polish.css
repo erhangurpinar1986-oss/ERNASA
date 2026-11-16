@@ -1,0 +1,141 @@
+.company-portal {
+    --portal-navy: #102d52;
+    --portal-blue: #155abd;
+    --portal-line: #dfe8f4;
+    --portal-muted: #526b87;
+}
+.company-portal [hidden] { display: none !important; }
+.company-portal main.page { grid-template-columns: 240px minmax(0, 1fr); }
+.company-portal .saas-module {
+    margin: 0; padding: clamp(18px, 3vw, 32px); background: #f5f8fc;
+    border-top: 1px solid var(--portal-line); border-radius: 0 0 16px 16px;
+    color: var(--portal-navy); min-width: 0; overflow-wrap: break-word;
+}
+.company-portal .saas-module h2 { margin: 0 0 12px; font-size: clamp(23px, 2.2vw, 30px); }
+.company-portal .saas-module h3 { margin: 20px 0 10px; font-size: 17px; }
+.company-portal .saas-module p { line-height: 1.48; }
+.saas-module-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.company-portal .saas-editor, .company-portal .saas-module > form.saas-form {
+    padding: 18px; background: white; border: 1px solid var(--portal-line); border-radius: 12px;
+}
+.company-portal .saas-form, .saas-fields {
+    display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px 16px;
+    align-items: start; margin: 12px 0;
+}
+.company-portal .saas-form label, .saas-fields label {
+    display: flex; flex-direction: column; gap: 6px; min-width: 0;
+    color: var(--portal-navy); font-weight: 600; font-size: 13px;
+}
+.company-portal .saas-form input:not([type=checkbox]), .company-portal .saas-form select,
+.company-portal .saas-form textarea, .company-portal .saas-calendar-toolbar select {
+    width: 100%; min-width: 0; min-height: 42px; box-sizing: border-box;
+    background: white; color: #142b4a; border: 1px solid #c8d6e7; border-radius: 8px;
+    padding: 9px 11px; font: inherit; font-weight: normal;
+}
+.company-portal .saas-form textarea { min-height: 94px; resize: vertical; }
+.company-portal .saas-form input[type=checkbox] { align-self: flex-start; }
+.company-portal :is(button,input,select,textarea,a,summary):focus-visible { outline: 2px solid #0066cb; outline-offset: 3px; }
+.company-portal .position-form { grid-template-columns: 1fr; }
+.saas-fieldset { margin: 0; min-width: 0; padding: 8px 14px 13px; border: 1px solid var(--portal-line); border-radius: 10px; }
+.saas-fieldset legend { padding: 0 7px; font-size: 14px; font-weight: 700; }
+.saas-fields .saas-wide { grid-column: span 2; }
+.saas-fields.position-requirements { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.position-requirements .saas-wide { grid-column: 1 / -1; }
+.saas-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.saas-panel { min-width: 0; margin-block: 16px; padding: 16px; background: #fff; border: 1px solid var(--portal-line); border-radius: 12px; }
+.company-portal .saas-panel h3:first-child { margin-top: 0; }
+.company-portal .saas-form.saas-application-picker { display: block; max-width: 36rem; }
+.company-portal .ats-kanban { grid-template-columns: repeat(7,minmax(225px,1fr)); max-width: 100%; }
+.company-portal .ats-kanban-card .saas-form { grid-template-columns: minmax(0,1fr); }
+.company-portal .ats-kanban-card label, .company-portal .ats-kanban-card button { overflow-wrap: normal; word-break: normal; }
+.ats-only-overview > .dashboard-stats, .ats-only-overview > .v5-chart-grid, .ats-only-overview > .dashboard-candidates { display: none; }
+.ats-overview-stats .dashboard-stat-card { display: grid; min-height: 88px; align-content: center; justify-content: start; padding: 12px; gap: 5px; }
+.ats-overview-stats .dashboard-stat-card strong { font-size: 26px; }
+#atsDashboardMetrics button { font: inherit; color: #174e9c; background: #f1f6ff; padding: 6px 10px; border: 1px solid #c8d9ef; border-radius: 7px; cursor: pointer; }
+.company-portal .saas-module button, .company-portal #profileDialog button {
+    min-height: 36px; padding: 8px 11px; border: 1px solid #c8d9ef; border-radius: 8px;
+    background: #edf4ff; color: var(--portal-navy); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.company-portal .saas-module button.saas-primary, .company-portal .saas-form > button[type=submit],
+.company-portal #profileDialog button.saas-primary {
+    background: var(--portal-blue); border-color: var(--portal-blue); color: white;
+}
+.company-portal .saas-module button:disabled { opacity: .5; cursor: default; }
+.company-portal .saas-table-wrap { border: 1px solid var(--portal-line); border-radius: 10px; background: white; }
+.company-portal .saas-table th { white-space: nowrap; }
+.company-portal .saas-table td, .company-portal .saas-table th { padding: 10px 12px; font-size: 13px; }
+.company-portal .saas-table tbody tr:nth-child(even) { background: #f8fafd; }
+.company-portal .saas-module .v5-empty { border: 1px dashed #b9cce3; background: #fff; padding: 16px; border-radius: 8px; color: var(--portal-muted); text-align: left; }
+.company-portal .saas-module [role=status]:not(:empty), .company-portal #profileMessage:not(:empty) {
+    padding: 10px 12px; border-radius: 8px; border: 1px solid #c5d9f1; background: #eaf3ff; margin: 10px 0; color: #143f70;
+}
+.company-portal .saas-module .saas-error:not(:empty) { background: #fff0f0; border-color: #fac9c9; color: #8a2029; }
+.company-portal .saas-module [role=status]:empty, .company-portal #profileMessage:empty { display: none; }
+.portal-logo-slot { flex: 0 0 clamp(164px,19vw,246px); height: 78px; padding: 3px 6px; display: grid; place-items: center; box-sizing: border-box; }
+.company-portal .portal-company-logo { display: block; width: 100%; height: 70px; object-fit: contain; }
+.portal-logo-placeholder { font-size: 12px; color: #d1e0f3; border: 1px dashed #7791b0; border-radius: 8px; padding: 12px; }
+.company-portal #portalCompanyTitle { color: #d6e5f8; font-size: 15px; font-weight: 600; }
+.company-portal .dashboard-topbar .portal-profile { display: block; }
+.company-portal #profileDialog {
+    position: fixed; inset: 0; margin: auto; box-sizing: border-box; width: min(480px, calc(100% - 28px));
+    max-height: 88dvh; padding: 22px; border: 1px solid var(--portal-line); border-radius: 14px;
+    color: var(--portal-navy); box-shadow: 0 24px 55px #0b254550;
+}
+.company-portal #profileDialog::backdrop { background: #081c38a8; }
+.company-portal #profileDialog .saas-form { grid-template-columns: 1fr; }
+.company-portal #portalCandidatesLabel { width: auto; font-size: inherit; text-align: left; }
+.saas-usage-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,235px),1fr)); gap: 12px; margin: 12px 0; }
+.saas-usage-card { background: white; border: 1px solid var(--portal-line); border-radius: 10px; padding: 14px; }
+.saas-usage-card meter { width: 100%; height: 10px; accent-color: #155abd; }
+.saas-calendar-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.saas-calendar-grid { display: grid; gap: 4px; overflow-x: auto; border: 1px solid var(--portal-line); padding: 6px; border-radius: 10px; background: white; }
+.saas-calendar-grid.week-grid { grid-template-columns: repeat(7,minmax(34px,1fr)); }
+.saas-calendar-cell { min-height: 62px; padding: 5px; border: 1px solid #e6edf6; border-radius: 5px; font-size: 12px; }
+.saas-calendar-cell.off-month { opacity: .45; }
+.saas-calendar-event { display: block; margin: 4px 0; padding: 3px; background: #eaf3ff; border-radius: 4px; overflow-wrap: anywhere; }
+.saas-inline-preview { border: 1px solid var(--portal-line); background: #fff; padding: 14px; border-radius: 10px; margin-block: 12px; }
+.saas-inline-preview img { display: block; width: 132px; height: 64px; object-fit: contain; }
+.saas-settings-section { margin-block: 14px; padding: 16px; border: 1px solid var(--portal-line); border-radius: 12px; background: white; }
+.company-portal .saas-settings-section h3 { margin-block-start: 0; }
+.saas-settings-section button + button { margin-inline-start: 8px; }
+.company-portal [data-manage-candidate] {
+    min-height: 36px; padding: 7px 12px; border: 1px solid #b9cce3; border-radius: 8px;
+    color: var(--portal-navy); background: #edf4ff; font: inherit; font-weight: 600; cursor: pointer;
+}
+@media (max-width: 1050px) {
+    .company-portal .saas-form, .saas-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .company-portal .position-form, .company-portal #profileDialog .saas-form { grid-template-columns: 1fr; }
+}
+@media (max-width: 900px) {
+    .company-portal main.page { display: block; padding: 10px; }
+    .company-portal .page > .dashboard-sidebar {
+        position: static; width: 100%; min-width: 0; min-height: 0; height: auto;
+        margin: 0 0 10px; padding: 10px 12px;
+    }
+    .company-portal .sidebar-brand { padding: 4px 0; margin: 0 0 4px; border: 0; }
+    .company-portal .sidebar-brand img { width: 30px; height: 30px; }
+    .company-portal .sidebar-menu { display: flex; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: 5px; padding: 4px 0; }
+    .company-portal .sidebar-menu .sidebar-item, .company-portal .saas-nav-label { flex: 0 0 auto; white-space: nowrap; }
+    .company-portal .sidebar-menu .sidebar-item { min-height: 34px; padding: 6px 8px; }
+    .company-portal .saas-nav-label { margin: auto 2px; padding: 0; }
+    .company-portal .dashboard-sidebar .sidebar-footer { display: none; }
+}
+@media (max-width: 680px) {
+    .company-portal .saas-form, .saas-fields, .saas-fields.position-requirements { grid-template-columns: 1fr; }
+    .saas-fields .saas-wide { grid-column: auto; }
+    .company-portal .dashboard-topbar {
+        display: grid; grid-template-columns: minmax(0,1fr) 108px;
+        padding: 12px 14px; gap: 12px; min-height: 0; height: auto;
+    }
+    .company-portal .dashboard-topbar .brand-area { min-width: 0; gap: 8px; }
+    .company-portal .dashboard-topbar .dashboard-logo { width: 40px; height: 40px; }
+    .company-portal .dashboard-topbar .brand-area h1 { font-size: 20px; }
+    .company-portal .dashboard-topbar #portalCompanyTitle { font-size: 13px; }
+    .portal-logo-slot { flex-basis: 108px; height: 68px; }
+    .company-portal .portal-company-logo { height: 64px; }
+    .company-portal .dashboard-topbar .topbar-actions { grid-column: 1 / -1; width: 100%; justify-content: space-between; gap: 8px; }
+    .company-portal #ernasa-legal-notice {
+        position: static; width: auto; margin: 10px; box-shadow: none;
+    }
+    .saas-calendar-cell { min-height: 36px; padding: 3px; font-size: 11px; }
+}
