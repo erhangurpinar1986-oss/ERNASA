@@ -1879,11 +1879,18 @@ def download_interview_pdf(token: str, _ik: portal_access.Actor = Depends(requir
                            (token,_ik.company_id))
             source = cursor.fetchone()
             if source:
-                cv = ats_matching.evidence_match(UPLOAD_DIRECTORY,_ik,interview["application_id"],source["document_id"])
-                label = "CV–position match score" if english else "CV–pozisyon eşleşme puanı"
-                value = f'%{cv["match_score"]:g}' if cv["match_score"] is not None else (
-                    "No score" if english else "Puan oluşmadı")
-                story.append(recruitment_pdf.paragraph(f"{label}: {value}",styles["BodyText"]))
+                try:
+                    cv = ats_matching.evidence_match(UPLOAD_DIRECTORY,_ik,interview["application_id"],source["document_id"])
+                except HTTPException as error:
+                    if error.status_code != 404:
+                        raise
+                    message = ("CV match unavailable: the linked document could not be found." if english else "CV eşleşmesi gösterilemedi: bağlı belge bulunamadı.")
+                else:
+                    label = "CV–position match score" if english else "CV–pozisyon eşleşme puanı"
+                    value = f'%{cv["match_score"]:g}' if cv["match_score"] is not None else (
+                        "No score" if english else "Puan oluşmadı")
+                    message = f"{label}: {value}"
+                story.append(recruitment_pdf.paragraph(message, styles["BodyText"]))
         story.append(recruitment_pdf.paragraph(assessment, styles["Heading2"]))
         for line in (analysis or absent).splitlines():
             if line.strip():
