@@ -163,7 +163,7 @@
                     <input
                         type="file"
                         id="cvFile"
-                        accept=".pdf,.doc,.docx"
+                        accept=".pdf,.docx"
                     >
 
                     <span class="upload-icon">↑</span>
@@ -175,7 +175,7 @@
                     </span>
 
                     <small>
-                        Desteklenen formatlar: PDF, DOC, DOCX
+                        PDF veya DOCX, en fazla 10 MB
                     </small>
 
                 </label>
@@ -190,7 +190,7 @@
                     class="primary-button"
                     disabled
                 >
-                    CV'Yİ ANALİZ ET
+                    CV Analiz Et
                 </button>
 
             </section>
@@ -215,6 +215,7 @@
                         <input
                             type="text"
                             id="candidateName"
+                            maxlength="160"
                             placeholder="CV'den otomatik doldurulacak"
                         >
                     </div>
@@ -224,6 +225,7 @@
                         <input
                             type="tel"
                             id="candidatePhone"
+                            maxlength="50"
                             placeholder="CV'den otomatik doldurulacak"
                         >
                     </div>
@@ -233,6 +235,7 @@
                         <input
                             type="email"
                             id="candidateEmail"
+                            maxlength="254"
                             placeholder="CV'den otomatik doldurulacak"
                         >
                     </div>
@@ -251,6 +254,7 @@
                         <input
                             type="text"
                             id="positionName"
+                            maxlength="160"
                             placeholder="Pozisyon giriniz (Örn: Lojistik Personeli)"
                             autocomplete="off"
                             required
@@ -268,14 +272,11 @@
                     <span class="step-number"><i data-lucide="brain-circuit"></i></span>
 
                     <div>
-                        <h2>Yapay Zekâ Analizi</h2>
-                        <p>
-                            Sistem CV'deki iletişim, eğitim ve deneyim bilgilerini inceleyecektir.
-                        </p>
+                        <h2>Mülakat Daveti</h2>
                     </div>
                 </div>
 
-                <div class="analysis-box" id="analysisBox">
+                <div class="analysis-box" id="analysisBox" role="status">
 
                     <div class="analysis-empty">
                         Analizi başlatmak için önce bir CV yükleyiniz.
@@ -289,7 +290,7 @@
                     class="primary-button"
                     disabled
                 >
-                    MÜLAKAT LİNKİ OLUŞTUR
+                    Mülakat Bağlantısı Oluştur
                 </button>
 <div id="interviewActions" style="display:none; margin-top:16px;">
 
@@ -302,6 +303,7 @@
         id="interviewLink"
         type="text"
         readonly
+        aria-label="Mülakat bağlantısı"
         style="
             width:100%;
             box-sizing:border-box;
@@ -325,36 +327,34 @@
             type="button"
             class="primary-button"
         >
-            📋 Linki Kopyala
+            Bağlantıyı Kopyala
         </button>
 
-        <button
+        <a
             id="whatsappButton"
-            type="button"
             class="primary-button"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-describedby="whatsappButtonReason"
         >
-            📱 WhatsApp
-        </button>
+            WhatsApp
+        </a>
 
-        <button
+        <a
             id="emailButton"
-            type="button"
             class="primary-button"
+            aria-describedby="emailButtonReason"
         >
-            📧 E-posta
-        </button>
+            E-posta
+        </a>
 
     </div>
 
-    <div
-        id="candidateStatus"
-        style="
-            margin-top:12px;
-            font-weight:600;
-        "
-    >
-        Durum: -
-    </div>
+    <p id="whatsappButtonReason"></p>
+    <p id="emailButtonReason"></p>
+    <p id="inviteShareStatus" role="status"></p>
+    <p>Durum · <strong id="candidateStatus"></strong></p>
+    <p>Son geçerlilik · <time id="inviteExpiry"></time></p>
 </div>
 
 </div>
@@ -615,6 +615,7 @@
 
 <script src="/static/ernasa_report_format.js"></script>
 <script src="/static/ernasa_v5_ik.js"></script>
+<script src="/static/ik_cv_invites.js"></script>
 <script src="/static/aday-takip.js"></script>
 <script src="/static/ernasa_v5_dashboard_only.js"></script>
 <script src="/static/saas_portal.js"></script>

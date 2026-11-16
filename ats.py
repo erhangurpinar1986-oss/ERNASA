@@ -113,7 +113,7 @@ def list_applications(actor, search='', position_id='', stage='', limit=25, offs
 
 
 def record_application(cursor, tenant, position_id, details, creator, source, tags='', job_id=None,
-                       *, allow_missing_email=False):
+                       *, allow_missing_email=False, reuse_application=False):
     name = details.name.strip()
     email = details.email.strip().lower()
     if not name:
@@ -126,9 +126,13 @@ def record_application(cursor, tenant, position_id, details, creator, source, ta
         person = cursor.fetchone()
     candidate_id = person['id'] if person else uid()
     if person:
-        cursor.execute('SELECT 1 FROM ats_applications WHERE company_id=? AND candidate_id=? AND position_id=?',
+        cursor.execute('SELECT id FROM ats_applications WHERE company_id=? AND candidate_id=? AND position_id=?',
                        (tenant,candidate_id,position_id))
-        if cursor.fetchone():
+        existing = cursor.fetchone()
+        if existing:
+            if reuse_application:
+                return {'id':existing['id'],'candidate_id':candidate_id,'existing_candidate':True,
+                        'existing_application':True}
             raise HTTPException(409,'Bu adayın pozisyon için başvurusu zaten var.')
     else:
         cursor.execute("""INSERT INTO ats_candidates(id,company_id,name,email,phone,source,tags,created_by,created_at)

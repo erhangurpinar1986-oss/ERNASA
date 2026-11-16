@@ -5,10 +5,11 @@ import portal_interviews
 import partner_interview
 import ats
 import ats_cv_import
+import ik_cv_invites
 import ats_workflow
 import ats_upload_queue
 import ats_matching
-from contextlib import asynccontextmanager, closing
+from contextlib import asynccontextmanager, closing, nullcontext
 import asyncio
 from control import render_gateway
 from base64 import b64encode
@@ -1072,6 +1073,33 @@ def create_interview_link(candidate: dict, _ik: portal_access.Actor = Depends(re
     return save_interview_link(candidate, _ik)
 
 
+def require_company_ai(actor: portal_access.Actor = Depends(require_company)):
+    return require_ai(actor)
+
+
+@app.get("/api/ik/ai/cv/positions")
+def interview_cv_positions(actor: portal_access.Actor = Depends(require_company_ai)):
+    return {"positions": [
+        {"id": row["id"], "name": row["name"]} for row in recruitment.positions(actor) if row["open"]
+    ]}
+
+
+@app.post("/api/ik/ai/cv/preview")
+def preview_interview_cv(cv: UploadFile = File(...), actor: portal_access.Actor = Depends(require_company_ai)):
+    return ats_cv_import.preview(cv.filename or 'cv', cv.file.read(ats.MAX_DOCUMENT + 1))
+
+
+@app.post("/api/ik/ai/cv/invite")
+def invite_from_cv(selection: str = Form(..., max_length=4096), cv: UploadFile = File(...),
+                   actor: portal_access.Actor = Depends(require_company_ai)):
+    try:
+        fields = ik_cv_invites.Selection.model_validate_json(selection)
+    except ValidationError as error:
+        raise HTTPException(422, 'Aday bilgilerini ve pozisyonu kontrol edin.') from error
+    return ik_cv_invites.save(UPLOAD_DIRECTORY, actor, fields, cv.filename or 'cv',
+                              cv.file.read(ats.MAX_DOCUMENT + 1), save_interview_link)
+
+
 class LinkedInterview(BaseModel):
     document_id: str | None = Field(default=None,max_length=64)
 
@@ -1094,16 +1122,12 @@ def match_ats_document(application_id: str, document_id: str,
 
 
 def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=False, partner_questions=None,
-                        draft_id=None, cv_evidence=(), cv_document_id=None):
+                        draft_id=None, cv_evidence=(), cv_document_id=None, active_cursor=None):
     company_name = _ik.company_name if _ik.portal else candidate.get("company", "")
     if _ik.portal and not company_name:
         raise HTTPException(503, "Doğrulanmış firma unvanı alınamadı.")
     if _ik.portal and "company" in candidate and candidate["company"] != company_name:
         raise HTTPException(422, "Firma bilgisi doğrulanmış portal unvanıyla eşleşmiyor.")
-    identity = create_interview_identity()
-
-    candidate_number = identity["candidate_number"]
-    security_code = identity["security_code"]
     interview_id = secrets.token_urlsafe(32)
 
     created_at = datetime.now(timezone.utc)
@@ -1111,13 +1135,14 @@ def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=Fa
 
     position_id = candidate.get("position_id") if _ik.portal else None
     position = candidate.get("position", "")
-    with recruitment.write(_ik.company_id) as cursor:
+    transaction = recruitment.write(_ik.company_id) if active_cursor is None else nullcontext(active_cursor)
+    with transaction as cursor:
         if _ik.portal:
             if application_id is not None:
                 application = ats.application(cursor,_ik,application_id)
                 if application['closure']:
                     raise HTTPException(409, 'Kapalı başvuruda mülakat oluşturulamaz.')
-                candidate = {**candidate, **{key:application[key] for key in ('name','phone','email')}}
+                candidate = {**{key:application[key] for key in ('name','phone','email')}, **candidate}
                 position_id, position = application['position_id'], application['position']
             elif position_id is not None:
                 if 'ats' not in _ik.products:
@@ -1134,6 +1159,7 @@ def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=Fa
                     AND created_by=? AND expires_at>?""",(draft_id,_ik.company_id,_ik.user_id,created_at.isoformat()))
                 if cursor.rowcount != 1:
                     raise HTTPException(409,"CV soru taslağı kullanılmış veya süresi dolmuş.")
+        identity = create_interview_identity(cursor)
         cursor.execute("""
             INSERT INTO interview_links (
                 token, name, phone, email, company, position, expires_at,
@@ -1174,8 +1200,8 @@ def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=Fa
     origin = _ik.portal.origin if _ik.portal else legacy_ik_origin()
     return {
         "success": True,
-        "candidate_number": candidate_number,
-        "security_code": security_code,
+        "candidate_number": identity["candidate_number"],
+        "security_code": identity["security_code"],
         "interview_id": interview_id,
         "expires_at": expires_at.isoformat(),
         "created_at": created_at.isoformat(),

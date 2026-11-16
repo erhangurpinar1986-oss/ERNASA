@@ -22,7 +22,7 @@ class Selection(BaseModel):
     phone: str = Field(default='', max_length=50)
 
 
-def preview(filename, content):
+def read_cv(filename, content):
     name = ats.document_name(filename)
     ats.document_media(name, content)
     try:
@@ -35,7 +35,11 @@ def preview(filename, content):
         raise HTTPException(422, 'CV okunamadı.') from error
     if not text:
         raise HTTPException(422, 'CV içinde okunabilir metin bulunamadı.')
-    return {'import_id': ats.uid(), **extract_contact_info(text)}
+    return text
+
+
+def preview(filename, content):
+    return {'import_id': ats.uid(), **extract_contact_info(read_cv(filename, content))}
 
 
 def save(root, actor, fields, filename, content):

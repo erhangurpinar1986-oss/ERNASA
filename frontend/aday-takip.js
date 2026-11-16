@@ -311,6 +311,12 @@ positionFilter?.addEventListener("change", applyCandidateFilters);
 evaluationFilter?.addEventListener("change", applyCandidateFilters);
 
 loadCandidates();
+document.addEventListener("ik-portal-screen", event => {
+    if (candidateCompanyPortal && event.detail === "candidates") loadCandidates();
+});
+document.addEventListener("visibilitychange", () => {
+    if (candidateCompanyPortal && !document.hidden && candidateList?.getClientRects().length) loadCandidates();
+});
 
 function updateCandidateStats() {
     document.getElementById("statTotal").textContent = allCandidates.length;

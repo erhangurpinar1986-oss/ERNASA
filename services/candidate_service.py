@@ -2,29 +2,22 @@ from database import get_connection
 import secrets
 import string
 
-def generate_candidate_number():
+def next_candidate_number(cursor):
+    cursor.execute("""
+        UPDATE candidate_sequence SET last_number = last_number + 1
+        WHERE id = 1 RETURNING last_number
+    """)
+    return f"ERN-{cursor.fetchone()['last_number']:03d}"
+
+
+def generate_candidate_number(cursor=None):
+    if cursor is not None:
+        return next_candidate_number(cursor)
     connection = get_connection()
-    cursor = connection.cursor()
-
     try:
-        cursor.execute("""
-            SELECT last_number
-            FROM candidate_sequence
-            WHERE id = 1
-        """)
-
-        row = cursor.fetchone()
-        next_number = row["last_number"] + 1
-
-        cursor.execute("""
-            UPDATE candidate_sequence
-            SET last_number = ?
-            WHERE id = 1
-        """, (next_number,))
-
+        number = next_candidate_number(connection.cursor())
         connection.commit()
-
-        return f"ERN-{next_number:03d}"
+        return number
 
     except Exception:
         connection.rollback()
@@ -38,8 +31,8 @@ def generate_security_code(length=4):
     return "".join(secrets.choice(characters) for _ in range(length))
 
 
-def create_interview_identity():
-    candidate_number = generate_candidate_number()
+def create_interview_identity(cursor=None):
+    candidate_number = generate_candidate_number(cursor)
     security_code = generate_security_code()
 
     interview_id = f"{candidate_number}-{security_code}"

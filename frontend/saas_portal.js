@@ -39,7 +39,6 @@ if (companyPortalPage) {
             const [{positions},{departments}] = await Promise.all([api("positions"),api("departments")]);
             options(positionForm.elements.namedItem("department_id"), departments, "Departman seçin");
             const open = positions.filter(row => row.open);
-            options(byId("portalPosition"), open, "Açık pozisyon seçin");
             options(candidateForm.elements.namedItem("position_id"), open, "Açık pozisyon seçin");
             const rows = byId("positionsRows");
             rows.replaceChildren();
@@ -160,10 +159,6 @@ if (companyPortalPage) {
         }
     }
 
-    byId("portalPosition").addEventListener("change", event => {
-        const selection = event.target;
-        byId("positionName").value = selection.value ? selection.selectedOptions[0].text : "";
-    });
     positionForm.addEventListener("reset", () => {
         editingPosition = "";
         byId("positionEditorTitle").textContent = "Pozisyon aç";
@@ -312,10 +307,6 @@ if (companyPortalPage) {
             section("ERNASA ATS", [positions, manager && jobs, pool, board, calendar, evaluations, manager && offers]);
             byId("atsCandidateDetails").style.removeProperty("display");
             byId("newPositionButton").hidden = !manager;
-            if (ai) {
-                byId("positionName").style.display = "none";
-                byId("portalPosition").style.removeProperty("display");
-            }
             loadPositions();
         }
         if (ai) {
