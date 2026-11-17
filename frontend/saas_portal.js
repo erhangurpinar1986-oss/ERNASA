@@ -384,7 +384,7 @@ if (companyPortalPage) {
         tabs.hidden = tabs.childElementCount < 2 || !main || main === "dashboard";
         for (const [name,link] of activeLinks) {
             if (!link.classList.contains("portal-main-link")) continue;
-            link.classList.toggle("active",mainForScreen.get(screen) === name);
+            link.classList.toggle("active",link.dataset.panelMain === mainForScreen.get(screen));
         }
     }
     portalMetadataPromise.then(metadata => {
@@ -443,7 +443,12 @@ if (companyPortalPage) {
             const link = links[name];
             if (!link) continue;
             link.style.removeProperty("display");
-            link.textContent = label;
+            if (name === "candidates" && link.querySelector("#portalCandidatesLabel")) {
+                link.querySelector("#portalCandidatesLabel").textContent = label;
+                link.querySelectorAll("i,svg").forEach(icon => icon.remove());
+            } else {
+                link.textContent = label;
+            }
             const icons = {
                 dashboard:"layout-dashboard",pool:"users-round",positions:"briefcase",
                 interviews:"messages-square",evaluations:"clipboard-check",settings:"settings"
@@ -472,8 +477,10 @@ if (companyPortalPage) {
             byId("newPositionButton").hidden = !manager;
             loadPositions();
         }
-        if (ai) candidates.querySelector("#portalCandidatesLabel")?.replaceChildren(
-            document.createTextNode("Aday Takip Merkezi"));
+        if (ai && !candidates.classList.contains("portal-main-link")) {
+            candidates.querySelector("#portalCandidatesLabel")?.replaceChildren(
+                document.createTextNode("Aday Takip Merkezi"));
+        }
         byId("portalProfileActions").hidden = false;
         renderCandidates();
         displaySectionTabs("dashboard");
