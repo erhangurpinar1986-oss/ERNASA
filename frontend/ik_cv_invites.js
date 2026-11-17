@@ -15,9 +15,7 @@ function buildInterviewShare(invite) {
     else if (!phone.startsWith("+") && number.length === 10) number = "90" + number;
     const whatsapp = /^[1-9]\d{7,14}$/.test(number) ?
         "https://wa.me/" + number + "?text=" + encodeURIComponent(message) : "";
-    const email = invite.email ? "mailto:" + encodeURIComponent(invite.email).replace("%40","@") +
-        "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(message) : "";
-    return {expiry,message,whatsapp,email};
+    return {expiry,message,whatsapp};
 }
 
 (() => {
@@ -172,7 +170,7 @@ function buildInterviewShare(invite) {
     }
 
     function showInvite(invite) {
-        const {expiry,whatsapp,email:emailUrl} = buildInterviewShare(invite);
+        const {expiry,whatsapp} = buildInterviewShare(invite);
         const deadline = byId("inviteExpiry");
         deadline.dateTime = invite.expires_at;
         deadline.textContent = expiry;
@@ -181,7 +179,24 @@ function buildInterviewShare(invite) {
         link.value = invite.interview_url;
         shareAction("whatsappButton",whatsapp,
             invite.phone ? "WhatsApp için geçerli bir aday telefonu gerekli." : "Adayın telefonu eksik.");
-        shareAction("emailButton",emailUrl,"Adayın e-posta adresi eksik.");
+        const emailAction = byId("emailButton");
+        const emailFeedback = byId("emailButtonReason");
+        emailAction.disabled = !invite.email || !invite.interview_id;
+        emailFeedback.textContent = emailAction.disabled ? "Gönderim için kayıtlı aday e-postası gerekli." : "";
+        emailAction.onclick = async () => {
+            if (emailAction.disabled) return;
+            emailAction.disabled = true;
+            actionStatus.textContent = "Kurumsal e-posta gönderiliyor…";
+            try {
+                const result = await portalJson(
+                    "/api/ik/interviews/" + encodeURIComponent(invite.interview_id) + "/send-email",
+                    {method:"POST"}, "Kurumsal e-posta gönderilemedi.");
+                actionStatus.textContent = result.message || "Kurumsal e-posta gönderildi.";
+            } catch (error) {
+                actionStatus.textContent = error.message;
+                emailAction.disabled = false;
+            }
+        };
         actions.style.display = "block";
     }
 
