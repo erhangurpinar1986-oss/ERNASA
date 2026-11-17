@@ -12,6 +12,59 @@ if (companyPortalPage) {
         accounting:{name:"Muhasebe Uzmanı",job_family:"Finans ve Muhasebe",worker_group:"Uzman",
             matching_criteria:"Yetkinlik | Muhasebe kayıtları | 60 | muhasebe kayitlari\nYetkinlik | Finansal raporlama | 40 | finansal raporlama"},
     };
+    const cvMatchInput = positionForm.elements.namedItem("matching_criteria");
+    const cvMatchSummary = byId("cvMatchCriteriaSummary");
+    function cvMatchRows() {
+        return cvMatchInput.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    }
+    function updateCvMatchSummary() {
+        const rows = cvMatchRows();
+        const parsed = rows.map(line => line.split("|").map(value => value.trim()));
+        const valid = parsed.every(parts => parts.length === 4 &&
+            ["Yetkinlik","Mesleki deneyim","Eğitim","Sertifika"].includes(parts[0]) &&
+            parts[1].length >= 2 && parts[1].length <= 120 &&
+            /^(?:[1-9]|[1-9][0-9]|100)$/.test(parts[2]) &&
+            parts[3].split(",").every(value => value.trim().length >= 2));
+        const total = parsed.reduce((sum,parts) => sum + (Number(parts[2]) || 0),0);
+        cvMatchSummary.textContent = !rows.length ?
+            "Henüz kriter tanımlanmadı; CV eşleşme yüzdesi hesaplanamaz." :
+            !valid ? "Kriter biçimini kontrol edin: kategori | kriter | ağırlık | kanıt ifadeleri." :
+            rows.length + " kriter · toplam ağırlık " + total +
+            (total === 100 ? " / 100 · Hazır." :
+                " · Ağırlıkların toplamını 100 yapmanız önerilir.");
+        cvMatchSummary.style.color = !rows.length || !valid ? "#a44a20" : "";
+        return valid;
+    }
+    cvMatchInput.addEventListener("input",updateCvMatchSummary);
+    byId("cvMatchAddCriteria").addEventListener("click", () => {
+        const category = byId("cvMatchCategory").value;
+        const label = byId("cvMatchRequirement").value.trim();
+        const weight = byId("cvMatchWeight").value.trim();
+        const signals = byId("cvMatchSignals").value.split(",").map(v => v.trim()).filter(Boolean);
+        const invalid = !label || label.length < 2 || label.includes("|") ||
+            !/^(?:[1-9]|[1-9][0-9]|100)$/.test(weight) ||
+            signals.length < 1 || signals.length > 8 ||
+            signals.some(v => v.length < 2 || v.length > 100 || v.includes("|"));
+        if (invalid) {
+            cvMatchSummary.textContent = "Bir kriter adı (en az 2 karakter), 1–100 ağırlık ve 1–8 kanıt ifadesi girin.";
+            cvMatchSummary.style.color = "#a44a20";
+            return;
+        }
+        const row = [category,label,weight,signals.join(", ")].join(" | ");
+        const lines = cvMatchRows();
+        if (lines.length >= 30 || (cvMatchInput.value.length + row.length + 1) > 6000) {
+            cvMatchSummary.textContent = "En fazla 30 kriter ve 6000 karakter ekleyebilirsiniz.";
+            cvMatchSummary.style.color = "#a44a20";
+            return;
+        }
+        lines.push(row);
+        cvMatchInput.value = lines.join("\n");
+        byId("cvMatchRequirement").value = "";
+        byId("cvMatchSignals").value = "";
+        updateCvMatchSummary();
+        byId("cvMatchRequirement").focus();
+    });
+    updateCvMatchSummary();
     const candidateForm = byId("atsCandidateForm");
     const managerForm = byId("candidateManagerForm");
     let editingPosition = "";
@@ -71,6 +124,7 @@ if (companyPortalPage) {
                     for (const field of positionForm.elements) {
                         if (field.name) field.value = position[field.name] ?? (field.name === "openings" ? 1 : "");
                     }
+                    updateCvMatchSummary();
                     positionForm.elements.namedItem("name").focus();
                 });
                 const members = document.createElement("button");
@@ -113,6 +167,7 @@ if (companyPortalPage) {
             }
         }).catch(()=>{});
         byId("positionEditor").hidden = false;
+        updateCvMatchSummary();
         positionForm.elements.namedItem("name").focus();
     });
     positionTemplate.addEventListener("change",()=>{
@@ -121,6 +176,7 @@ if (companyPortalPage) {
         for (const [name,value] of Object.entries(selection)) {
             positionForm.elements.namedItem(name).value = value;
         }
+        updateCvMatchSummary();
     });
     byId("positionDepartmentLink").addEventListener("click",event=>{
         event.preventDefault();
@@ -160,11 +216,17 @@ if (companyPortalPage) {
     }
 
     positionForm.addEventListener("reset", () => {
+        queueMicrotask(updateCvMatchSummary);
         editingPosition = "";
         byId("positionEditorTitle").textContent = "Pozisyon aç";
     });
     positionForm.addEventListener("submit", async event => {
         event.preventDefault();
+        if (!updateCvMatchSummary()) {
+            byId("positionsMessage").textContent = "CV eşleşme kriterlerinin biçimini düzeltin.";
+            cvMatchInput.focus();
+            return;
+        }
         const button = event.submitter;
         button.disabled = true;
         const data = Object.fromEntries(new FormData(positionForm));
@@ -275,56 +337,159 @@ if (companyPortalPage) {
         }
     }
 
-    function section(title, items) {
-        const navigation = byId("portalSidebar");
-        const label = document.createElement("div");
-        label.className = "saas-nav-label";
-        label.textContent = title;
-        const links = items.filter(Boolean);
-        links.forEach(link => link.style.removeProperty("display"));
-        navigation.append(label, ...links);
-    }
+    // Görünür sol menü, temel iş akışlarını gösterir. Önceki ekran linkleri
+    // erişim/yetki kontrolleriyle birlikte korunur ve içerik sekmelerinden açılır.
     const navigation = byId("portalSidebar");
+    const tabs = byId("portalSectionTabs");
     const screenLink = name => navigation.querySelector('[data-screen="' + name + '"]');
-    navigation.querySelectorAll('[data-product="ai"]').forEach(link => { link.style.display = "none"; });
+    const sectionGroups = {
+        dashboard: ["dashboard"],
+        pool: ["suite_pool","candidates","suite_kanban","cv"],
+        positions: ["positions","suite_jobs"],
+        interviews: ["interviews","suite_calendar"],
+        evaluations: ["suite_evaluations","suite_reports","suite_offers"],
+        settings: ["suite_settings","personnel","usage","suite_history"]
+    };
+    const mainForScreen = new Map(Object.entries(sectionGroups).flatMap(([section,screens]) =>
+        screens.map(screen => [screen,section])));
+    const labelOverrides = {
+        "suite_pool":"Aday Havuzu","suite_jobs":"İş İlanları","suite_calendar":"Görüşme Takvimi",
+        "suite_evaluations":"Değerlendirmeler","suite_kanban":"İşe Alım Panosu",
+        "suite_reports":"AI Değerlendirme Raporları","suite_offers":"Teklifler",
+        "suite_settings":"Firma Ayarları","suite_history":"İşlem Geçmişi",
+        "cv":"CV Analizi","candidates":"Aday Takip Merkezi","personnel":"Personel Yönetimi",
+        "usage":"Paket ve Kullanım","positions":"Pozisyonlar ve İlanlar",
+        "interviews":"Mülakatlar","dashboard":"Genel Bakış"
+    };
+    const availableScreens = new Set();
+    const activeLinks = new Map();
+
+    function displaySectionTabs(screen) {
+        const main = mainForScreen.get(screen);
+        const options = sectionGroups[main] || [];
+        tabs.replaceChildren();
+        for (const name of options) {
+            if (!availableScreens.has(name)) continue;
+            const link = activeLinks.get(name);
+            if (!link) continue;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "portal-subnav-button";
+            button.textContent = labelOverrides[name] || link.textContent.trim();
+            button.setAttribute("aria-current",name === screen ? "page" : "false");
+            button.addEventListener("click",()=>link.click());
+            tabs.append(button);
+        }
+        // Sekme her bölümde zorunlu değildir: yalnızca ikinci bir işlem varsa göster.
+        tabs.hidden = tabs.childElementCount < 2 || !main || main === "dashboard";
+        for (const [name,link] of activeLinks) {
+            if (!link.classList.contains("portal-main-link")) continue;
+            link.classList.toggle("active",link.dataset.panelMain === mainForScreen.get(screen));
+        }
+    }
     portalMetadataPromise.then(metadata => {
         if (!metadata) return;
         const ats = metadata.products.includes("ats");
         const ai = metadata.products.includes("ai");
         const manager = ["supervisor","hr_manager"].includes(metadata.role);
         window.ikSaasAccess = {ats, ai, manager, report: ai && manager};
-        const home = byId("portalHomeLink"), overview = byId("portalOverviewLink");
-        const positions = byId("positionsMenu"), candidates = byId("portalCandidatesLink");
-        const cv = screenLink("cv"), interviews = screenLink("interviews");
-        const personnel = byId("personnelMenu"), usage = byId("usageMenu");
-        const jobs = byId("jobsMenu"), pool = byId("poolMenu"), board = byId("kanbanMenu");
-        const calendar = byId("calendarMenu"), evaluations = byId("evaluationsMenu"), offers = byId("offersMenu");
-        const reports = byId("reportsMenu"), settings = byId("settingsMenu"), history = byId("historyMenu");
+        const candidates = byId("portalCandidatesLink");
+        const home = byId("portalHomeLink");
+        const links = {
+            dashboard:byId("portalOverviewLink"),
+            positions:byId("positionsMenu"),
+            suite_jobs:byId("jobsMenu"),
+            suite_pool:byId("poolMenu"),
+            suite_kanban:byId("kanbanMenu"),
+            suite_calendar:byId("calendarMenu"),
+            suite_evaluations:byId("evaluationsMenu"),
+            suite_offers:byId("offersMenu"),
+            suite_reports:byId("reportsMenu"),
+            suite_settings:byId("settingsMenu"),
+            suite_history:byId("historyMenu"),
+            candidates,
+            cv:screenLink("cv"),
+            interviews:screenLink("interviews"),
+            personnel:byId("personnelMenu"),
+            usage:byId("usageMenu")
+        };
+        if (ats) ["positions","suite_jobs","suite_pool","suite_kanban","suite_calendar",
+            "suite_evaluations","suite_offers"].forEach(name=>availableScreens.add(name));
+        if (ai) ["cv","candidates","interviews","suite_reports"].forEach(name=>availableScreens.add(name));
+        if (manager) ["personnel","usage","suite_settings","suite_history"].forEach(name=>availableScreens.add(name));
+        if (!metadata.can_manage_personnel) availableScreens.delete("personnel");
+        if (!manager) ["suite_jobs","suite_offers","suite_reports"].forEach(name=>availableScreens.delete(name));
+        availableScreens.add("dashboard");
+        for (const [name,link] of Object.entries(links)) {
+            if (!link || !availableScreens.has(name)) continue;
+            activeLinks.set(name,link);
+        }
         navigation.replaceChildren();
-        section("GENEL", [home, overview]);
+        // Eski linkler DOM'da kalır: diğer modüllerin .click() çağrıları bozulmaz.
+        const hiddenLinks = document.createElement("div");
+        hiddenLinks.hidden = true;
+        hiddenLinks.id = "portalSecondaryRoutes";
+        hiddenLinks.setAttribute("aria-hidden","true");
+        const primaries = [
+            ["dashboard","dashboard","Genel Bakış"],
+            ["pool",ats?"suite_pool":"candidates","Aday Havuzu"],
+            ["positions","positions","Pozisyonlar ve İlanlar"],
+            ["interviews",ai?"interviews":"suite_calendar","Mülakatlar"],
+            ["evaluations","suite_evaluations","Değerlendirmeler"],
+            ["settings","suite_settings","Ayarlar"]
+        ];
+        for (const [group,name,label] of primaries) {
+            if (!availableScreens.has(name)) continue;
+            const link = links[name];
+            if (!link) continue;
+            link.style.removeProperty("display");
+            if (name === "candidates" && link.querySelector("#portalCandidatesLabel")) {
+                link.querySelector("#portalCandidatesLabel").textContent = label;
+                link.querySelectorAll("i,svg").forEach(icon => icon.remove());
+            } else {
+                link.textContent = label;
+            }
+            const icons = {
+                dashboard:"layout-dashboard",pool:"users-round",positions:"briefcase",
+                interviews:"messages-square",evaluations:"clipboard-check",settings:"settings"
+            };
+            const symbol = document.createElement("i");
+            symbol.setAttribute("data-lucide",icons[group]);
+            link.prepend(symbol);
+            link.classList.add("portal-main-link");
+            link.dataset.panelMain = group;
+            navigation.append(link);
+        }
+        for (const [name,link] of Object.entries(links)) {
+            if (!link || link.parentNode === navigation) continue;
+            if (availableScreens.has(name)) {
+                link.style.removeProperty("display");
+                link.dataset.panelMain = mainForScreen.get(name) || "dashboard";
+                hiddenLinks.append(link);
+            }
+        }
+        // Ana sayfa bağlantısı kaybolmaz, ancak menüyü kalabalıklaştırmaz.
+        home.style.removeProperty("display");
+        home.classList.add("portal-home-link");
+        navigation.append(hiddenLinks,home);
         if (ats) {
-            positions.style.removeProperty("display");
-            section("ERNASA ATS", [positions, manager && jobs, pool, board, calendar, evaluations, manager && offers]);
             byId("atsCandidateDetails").style.removeProperty("display");
             byId("newPositionButton").hidden = !manager;
             loadPositions();
         }
-        if (ai) {
-            cv.style.removeProperty("display");
-            interviews.style.removeProperty("display");
-            candidates.querySelector("#portalCandidatesLabel").textContent = "Aday Takip Merkezi";
-            section("ERNASA AI İK", [cv, candidates, interviews, manager && reports]);
-        }
-        if (manager) {
-            usage.style.removeProperty("display");
-            section("FİRMA YÖNETİMİ", [metadata.can_manage_personnel ? personnel : null, usage, settings, history]);
+        if (ai && !candidates.classList.contains("portal-main-link")) {
+            candidates.querySelector("#portalCandidatesLabel")?.replaceChildren(
+                document.createTextNode("Aday Takip Merkezi"));
         }
         byId("portalProfileActions").hidden = false;
         renderCandidates();
+        displaySectionTabs("dashboard");
+        if (window.lucide?.createIcons) window.lucide.createIcons();
     });
     document.addEventListener("ik-portal-screen", event => {
         if (event.detail === "positions" && window.ikSaasAccess.ats) loadPositions();
         if (event.detail === "usage" && window.ikSaasAccess.manager) loadUsage();
+        displaySectionTabs(event.detail);
     });
 
     const profileDialog = byId("profileDialog");
