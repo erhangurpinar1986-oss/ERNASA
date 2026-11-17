@@ -538,10 +538,22 @@
                 <fieldset class="saas-fieldset"><legend>Pozisyon gereksinimleri</legend><div class="saas-fields position-requirements">
                 <label class="saas-wide">İş tanımı <textarea name="description" maxlength="4000"></textarea></label>
                 <label class="saas-wide">Aranan nitelikler <textarea name="qualifications" maxlength="4000"></textarea></label>
-                <label class="saas-wide">Ağırlıklı eşleşme kriterleri
-                    <textarea name="matching_criteria" maxlength="6000" placeholder="Yetkinlik | Depo planlama | 40 | depo planlama"></textarea>
-                    <small>Her satıra kategori, kriter, ağırlık ve virgülle ayrılan kanıt ifadelerini dikey çizgiyle ayırarak girin. Kategoriler Yetkinlik, Mesleki deneyim, Eğitim ve Sertifika.</small>
-                </label>
+                <div class="saas-wide" id="cvMatchingEditor">
+                    <h3>CV–Pozisyon Eşleşme Kriterleri</h3>
+                    <p>Buraya girdiğiniz kriterler, ATS aday detayındaki <strong>CV eşleşmesini incele</strong> sonucunu hesaplar. Değerlendirmeler ekranındaki kriterlerden ayrıdır.</p>
+                    <div class="saas-form" id="cvMatchingQuickForm">
+                        <label>Kategori <select id="cvMatchCategory"><option>Yetkinlik</option><option>Mesleki deneyim</option><option>Eğitim</option><option>Sertifika</option></select></label>
+                        <label>Aranan özellik <input id="cvMatchRequirement" type="text" maxlength="120" placeholder="Örn. Stok yönetimi"></label>
+                        <label>Ağırlık <input id="cvMatchWeight" type="number" min="1" max="100" value="25"></label>
+                        <label>CV'de aranacak kanıt ifadeleri <input id="cvMatchSignals" type="text" maxlength="800" placeholder="Örn. stok yönetimi, envanter takibi"></label>
+                        <button type="button" id="cvMatchAddCriteria">Kriter ekle</button>
+                    </div>
+                    <label>Ağırlıklı kriter listesi
+                        <textarea name="matching_criteria" id="cvMatchingCriteria" maxlength="6000" rows="5" placeholder="Yetkinlik | Stok yönetimi | 50 | stok yönetimi, envanter takibi"></textarea>
+                    </label>
+                    <p id="cvMatchCriteriaSummary" role="status" aria-live="polite">Henüz kriter tanımlanmadı; CV eşleşme yüzdesi hesaplanamaz.</p>
+                    <small>Her satır: Kategori | İş gereksinimi | Ağırlık | Kanıt ifadeleri. Kategoriler: Yetkinlik, Mesleki deneyim, Eğitim, Sertifika. Toplam ağırlığın 100 olması önerilir. Eşleşme puanı yalnızca CV'de kanıt bulunabilen kriterleri değerlendirir; ayrıca kanıt kapsamı gösterilir. Sonuç insan incelemesi içindir.</small>
+                </div>
                 <label>Eğitim <input name="education" maxlength="300"></label>
                 <label>Gerekli sertifikalar <input name="certifications" maxlength="300"></label>
                 <label>Deneyim <input name="experience" maxlength="300"></label>
