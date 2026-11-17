@@ -451,15 +451,26 @@ if (companyPortalPage) {
                         try {
                             const matching = await api(path+"/match");
                             const evidence = document.createElement("div");
-                            evidence.append(el("p", matching.match_score === null ? matching.reason :
-                                "CV–pozisyon eşleşme puanı · %" + matching.match_score));
+                            if (matching.match_score === null) {
+                                evidence.append(el("p","CV–pozisyon uyum yüzdesi hesaplanamadı."));
+                                evidence.append(el("p",matching.reason || "CV kanıtı veya pozisyon kriterleri eksik."));
+                                if (!matching.requirements?.length) {
+                                    evidence.append(el("p","Çözüm: Pozisyonlar > ilgili pozisyonu Düzenle > CV–Pozisyon Eşleşme Kriterleri alanından iş gereksinimlerini ve ağırlıkları kaydedin."));
+                                }
+                            } else {
+                                evidence.append(el("p","CV–pozisyon eşleşme puanı · %" + matching.match_score));
+                            }
                             if (matching.evidence_coverage !== null) {
-                                evidence.append(el("p","CV kanıt kapsamı · %" + matching.evidence_coverage));
+                                evidence.append(el("p","CV kanıt kapsamı · %" + matching.evidence_coverage +
+                                    " (tanımlı kriter ağırlıklarının kanıt bulunan bölümü)"));
+                                if (matching.evidence_coverage < 100) {
+                                    evidence.append(el("p","Dikkat: Kapsam eksik. Eşleşme puanı yalnızca kanıt bulunan kriterlerden hesaplanır; tüm gereksinimler için kesin uyum yüzdesi değildir."));
+                                }
                             }
                             evidence.append(table(["Kategori","İş gereksinimi","Ağırlık","Durum","CV dayanağı"],
-                                matching.requirements.map(row => [row.category,row.requirement,row.weight,row.status,
-                                    row.evidence_items.map(item=>item.text+(item.page ? " (s. "+item.page+")" : "")).join(" · ")])));
-                            evidence.append(el("p","Puan İK incelemesi içindir. Eksik kanıt puana dahil edilmez."));
+                                (matching.requirements || []).map(row => [row.category,row.requirement,row.weight,row.status,
+                                    (row.evidence_items || []).map(item=>item.text+(item.page ? " (s. "+item.page+")" : "")).join(" · ")])));
+                            evidence.append(el("p","Bu gösterge otomatik işe alım/ret kararı değildir. Kanıt bulunamadı durumu, adayın o beceriye sahip olmadığını kanıtlamaz. Nihai değerlendirme İK uzmanına aittir."));
                             item.nextElementSibling?.classList.contains("ats-evidence") && item.nextElementSibling.remove();
                             evidence.className = "ats-evidence";
                             item.after(evidence);
