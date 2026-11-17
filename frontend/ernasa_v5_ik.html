@@ -340,19 +340,38 @@
             WhatsApp
         </a>
 
-        <button
+        <a
             id="emailButton"
-            type="button"
+            href="https://privateemail.com/spm/mail/INBOX/"
+            target="_blank"
+            rel="noopener noreferrer"
             class="primary-button"
             aria-describedby="emailButtonReason"
         >
-            Kurumsal E-posta Gönder
+            PrivateEmail'de Aç
+        </a>
+
+        <button
+            id="autoEmailButton"
+            type="button"
+            class="primary-button"
+        >
+            ERNASA'dan Otomatik Gönder
         </button>
 
     </div>
 
     <p id="whatsappButtonReason"></p>
     <p id="emailButtonReason"></p>
+    <section id="privateEmailDraft" style="display:none; margin-top:12px;">
+        <p><strong>PrivateEmail davet taslağı</strong> — bu alanlar gönderilmez; yeni e-postaya kopyalanır.</p>
+        <label>Alıcı <input id="privateEmailTo" readonly aria-label="Adayın e-posta adresi"></label>
+        <button type="button" data-privateemail-copy="privateEmailTo">Alıcıyı Kopyala</button>
+        <label>Konu <input id="privateEmailSubject" readonly aria-label="Davet konusu"></label>
+        <button type="button" data-privateemail-copy="privateEmailSubject">Konuyu Kopyala</button>
+        <label>Mesaj <textarea id="privateEmailBody" rows="7" readonly aria-label="Davet metni"></textarea></label>
+        <button type="button" data-privateemail-copy="privateEmailBody">Mesajı Kopyala</button>
+    </section>
     <p id="inviteShareStatus" role="status"></p>
     <p>Durum · <strong id="candidateStatus"></strong></p>
     <p>Son geçerlilik · <time id="inviteExpiry"></time></p>
@@ -616,11 +635,11 @@
 
 <script src="/static/ernasa_report_format.js"></script>
 <script src="/static/ernasa_v5_ik.js"></script>
-<script src="/static/ik_cv_invites.js"></script>
+<script src="/static/ik_cv_invites.js?v=20261117-privateemail2"></script>
 <script src="/static/aday-takip.js"></script>
 <script src="/static/ernasa_v5_dashboard_only.js"></script>
 <script src="/static/saas_portal.js"></script>
-<script src="/static/ats_suite.js"></script>
+<script src="/static/ats_suite.js?v=20261117-privateemail2"></script>
 <script src="/static/portal_icons.js"></script>
 <script>
 async function ernasaSecureLogout() {

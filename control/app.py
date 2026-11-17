@@ -1189,8 +1189,17 @@ def ernasa_invitation_page(handler, db, actor, submitted, query):
             '<label>Adaya özel mülakat bağlantısı'
             f'<input id="ernasa-invite-url" type="url" readonly value="{e(invite["url"])}"></label>'
             '<button type="button" id="ernasa-invite-copy">Bağlantıyı kopyala</button>'
+            '<p><a href="https://privateemail.com/spm/mail/INBOX/" target="_blank" rel="noopener noreferrer">PrivateEmail’de Aç</a></p>'
+            f'<label>Alıcı adresi<input id="ernasa-invite-to" readonly value="{e(invite["email"])}"></label>'
+            '<button type="button" id="ernasa-invite-copy-to">Alıcıyı Kopyala</button>'
+            '<label>Davet konusu<input id="ernasa-invite-subject" readonly value="ERNASA · B2B Satış Ortağı 1. Tur Mülakat Daveti"></label>'
+            '<button type="button" id="ernasa-invite-copy-subject">Konuyu Kopyala</button>'
+            f'<label>Davet mesajı<textarea id="ernasa-invite-body" readonly>Merhaba {e(invite["name"])},\n\n'
+            f'ERNASA B2B Satış Ortağı 1. Tur mülakat bağlantınız: {e(invite["url"])}\n\n'
+            'Bağlantı oluşturulduğu andan itibaren 8 saat geçerlidir.\n\nİyi çalışmalar,\nERNASA Yazılım Sistemleri</textarea></label>'
+            '<button type="button" id="ernasa-invite-copy-body">Mesajı Kopyala</button>'
             '<p id="ernasa-invite-copy-feedback" role="status"></p>'
-            '<script src="/ernasa-invite-copy.js" defer></script>')
+            '<script src="/ernasa-invite-copy.js?v=20261117-privateemail2" defer></script>')
         content = card('Aday daveti',detail)+content
         if invite['status'] == 'completed':
             answers = invite.get('answers',())

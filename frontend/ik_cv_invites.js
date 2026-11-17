@@ -179,25 +179,56 @@ function buildInterviewShare(invite) {
         link.value = invite.interview_url;
         shareAction("whatsappButton",whatsapp,
             invite.phone ? "WhatsApp için geçerli bir aday telefonu gerekli." : "Adayın telefonu eksik.");
-        const emailAction = byId("emailButton");
-        const emailFeedback = byId("emailButtonReason");
-        emailAction.disabled = !invite.email || !invite.interview_id;
-        emailFeedback.textContent = emailAction.disabled ? "Gönderim için kayıtlı aday e-postası gerekli." : "";
-        emailAction.onclick = async () => {
-            if (emailAction.disabled) return;
-            emailAction.disabled = true;
-            actionStatus.textContent = "Kurumsal e-posta gönderiliyor…";
+        const webmail = byId("emailButton");
+        const feedback = byId("emailButtonReason");
+        const draft = byId("privateEmailDraft");
+        const autoEmail = byId("autoEmailButton");
+        if (invite.email) {
+            webmail.removeAttribute("aria-disabled");
+            feedback.textContent = "PrivateEmail'de yeni mesaj açıp aşağıdaki alıcı, konu ve metni yapıştırın.";
+            draft.style.display = "";
+            byId("privateEmailTo").value = invite.email;
+            byId("privateEmailSubject").value = invite.company + " · " + invite.position + " mülakat daveti";
+            byId("privateEmailBody").value = buildInterviewShare(invite).message;
+            webmail.onclick = () => {
+                actionStatus.textContent = "PrivateEmail açılıyor. Alıcı, konu ve mesajı buradan kopyalayın; e-posta kendiliğinden gönderilmez.";
+            };
+        } else {
+            webmail.setAttribute("aria-disabled","true");
+            webmail.onclick = event => event.preventDefault();
+            feedback.textContent = "Adayın e-posta adresi eksik.";
+            draft.style.display = "none";
+        }
+        autoEmail.disabled = !invite.email || !invite.interview_id;
+        autoEmail.onclick = async () => {
+            if (autoEmail.disabled) return;
+            autoEmail.disabled = true;
+            actionStatus.textContent = "Kurumsal gönderim servisine bağlanılıyor…";
             try {
                 const result = await portalJson(
                     "/api/ik/interviews/" + encodeURIComponent(invite.interview_id) + "/send-email",
                     {method:"POST"}, "Kurumsal e-posta gönderilemedi.");
-                actionStatus.textContent = result.message || "Kurumsal e-posta gönderildi.";
+                actionStatus.textContent = result.message || "Gönderim isteği kabul edildi.";
             } catch (error) {
                 actionStatus.textContent = error.message;
-                emailAction.disabled = false;
+                autoEmail.disabled = false;
             }
         };
         actions.style.display = "block";
+    }
+
+    for (const button of document.querySelectorAll("[data-privateemail-copy]")) {
+        button.addEventListener("click", async () => {
+            const field = byId(button.dataset.privateemailCopy);
+            try {
+                await navigator.clipboard.writeText(field.value);
+                actionStatus.textContent = "Alan kopyalandı: " + (field.getAttribute("aria-label") || "Bilgi");
+            } catch {
+                field.focus();
+                field.select();
+                actionStatus.textContent = "Ctrl+C ile seçili metni kopyalayın.";
+            }
+        });
     }
 
     copy.addEventListener("click", async () => {

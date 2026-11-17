@@ -542,6 +542,14 @@ if (companyPortalPage) {
                     const actions = el("div","",{class:"saas-actions"});
                     actions.append(link("Mülakat bağlantısı",invite.interview_url));
                     if (shared.whatsapp) actions.append(link("WhatsApp",shared.whatsapp));
+                    if (invite.email) {
+                        actions.append(link("PrivateEmail'de Aç", "https://privateemail.com/spm/mail/INBOX/"));
+                        const to = input("draft_to","text",invite.email,{readOnly:""});
+                        const subject = input("draft_subject","text",invite.company+" · "+invite.position+" mülakat daveti",{readOnly:""});
+                        draft.append(field("Alıcı",to),action("Alıcıyı Kopyala",()=>navigator.clipboard.writeText(to.value)),
+                            field("Konu",subject),action("Konuyu Kopyala",()=>navigator.clipboard.writeText(subject.value)),
+                            action("Davet Metnini Kopyala",()=>navigator.clipboard.writeText(message.value)));
+                    }
                     if (invite.email && invite.interview_id) actions.append(action("Kurumsal E-posta Gönder",async button => {
                         button.disabled = true;
                         try {
