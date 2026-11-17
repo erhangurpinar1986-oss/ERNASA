@@ -139,3 +139,33 @@
     }
     .saas-calendar-cell { min-height: 36px; padding: 3px; font-size: 11px; }
 }
+
+/* Sade firma menüsü: ana akışlar solda, alt işlemler içerikte. */
+.company-portal .sidebar-menu .portal-main-link {
+    display: flex; align-items: center; gap: 10px; min-height: 42px;
+    padding: 10px 12px; border-radius: 9px;
+}
+.company-portal .sidebar-menu .portal-main-link.active {
+    background: #234b78; color: #ffffff;
+}
+.company-portal .sidebar-menu .portal-home-link {
+    margin-top: 12px; opacity: .85;
+}
+.company-portal .portal-subnav {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    margin: 0 0 14px; padding: 8px 10px; border-radius: 10px;
+    background: #f3f7fc; border: 1px solid #dce7f4;
+}
+.company-portal .portal-subnav-button {
+    border: 1px solid #cbd9e9; border-radius: 8px;
+    background: #fff; color: #17375c; font: inherit;
+    font-size: 13px; font-weight: 600; padding: 9px 12px; cursor: pointer;
+}
+.company-portal .portal-subnav-button[aria-current="page"] {
+    background: #155abd; color: white; border-color: #155abd;
+}
+@media (max-width: 900px) {
+    .company-portal .portal-subnav { flex-wrap: nowrap; overflow-x: auto; }
+    .company-portal .portal-subnav-button { flex: 0 0 auto; white-space: nowrap; }
+    .company-portal .sidebar-menu .portal-home-link { margin-top: 0; }
+}
