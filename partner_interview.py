@@ -42,6 +42,26 @@ def locked_questions(path):
     return questions
 
 
+def first_round_questions(template):
+    """Validate a saved CONTROL question template before issuing candidate links."""
+    from control.interview_templates import PARTNER_FIRST_ROUND_ALIASES
+
+    if (not isinstance(template, dict) or template.get('name') not in PARTNER_FIRST_ROUND_ALIASES
+            or template.get('language') != 'tr'):
+        return None
+    items = template.get('questions')
+    if not isinstance(items, list) or len(items) != 10:
+        return None
+    if any(not isinstance(item, dict) or not isinstance(item.get('text'), str)
+           or not item['text'].strip() or len(item['text']) > 700
+           or type(item.get('weight')) is not int or not 0 <= item['weight'] <= 100
+           for item in items):
+        return None
+    if sum(item['weight'] for item in items) != 100:
+        return None
+    return [item['text'] for item in items]
+
+
 def analyze_cv(root, filename, content):
     ats.document_media(filename, content)
     try:
