@@ -68,6 +68,7 @@
         </a>
         <a href="#" class="sidebar-item" id="settingsMenu" data-screen="suite_settings" style="display:none"><i data-lucide="settings"></i> Firma Ayarları</a>
         <a href="#" class="sidebar-item" id="historyMenu" data-screen="suite_history" style="display:none"><i data-lucide="clipboard"></i> İşlem Geçmişi</a>
+        <a href="#" class="sidebar-item" id="trainingMenu" data-screen="training" hidden><i data-lucide="graduation-cap"></i> Eğitim</a>
     </nav>
 
     <div class="sidebar-footer">
@@ -622,6 +623,51 @@
             </fieldset>
         </form>
     </section>
+    <section id="trainingScreen" class="results-card saas-module" hidden>
+      <header class="saas-module-heading"><h2>ERNASA Eğitim</h2><button id="trainingRefresh" type="button">Yenile</button></header>
+      <p id="trainingStatus" role="status" aria-live="polite"></p>
+      <div class="saas-panel">
+        <h3>Eğitim programları</h3>
+        <div id="trainingCourseList"></div>
+        <details><summary>Yeni eğitim programı oluştur</summary>
+          <p>İster sıfırdan oluşturun, ister <strong>Eğitici Eğitimi</strong> şablonunu kullanın.</p>
+          <button type="button" id="trainingTrainerTemplate">Eğitici Eğitimi şablonunu yükle</button>
+          <form id="trainingCourseForm" class="saas-form">
+            <label>Program adı <input name="title" required minlength="2" maxlength="160" placeholder="Örn. Depo Güvenliği"></label>
+            <label>Personel sınıfı <input name="personnel_class" required minlength="2" maxlength="120" placeholder="Örn. Depo ve Lojistik"></label>
+            <label>Katılımcı türü <select id="trainingKind" name="kind"><option value="employee">İşe alınan çalışan</option><option value="partner">İş ortağı</option></select></label>
+            <label>İlgili pozisyon (isteğe bağlı) <select id="trainingPosition" name="position_id"><option value="">Tüm pozisyonlar</option></select></label>
+            <label class="saas-wide">Açıklama <textarea name="description" maxlength="1500"></textarea></label>
+            <button type="submit">Eğitim programını kaydet</button>
+          </form>
+          <div class="saas-panel"><h3>Dersleri oluştur</h3>
+            <form id="trainingLessonForm" class="saas-form">
+              <label>Modül adı <input name="module" required maxlength="80"></label>
+              <label>Ders başlığı <input name="title" required minlength="2" maxlength="160"></label>
+              <label class="saas-wide">Ders metni <textarea name="content" required maxlength="4000"></textarea></label>
+              <label class="saas-wide">Soru <textarea name="question" required maxlength="1000"></textarea></label>
+              <label>A seçeneği <input name="a" required maxlength="500"></label>
+              <label>B seçeneği <input name="b" required maxlength="500"></label>
+              <label>C seçeneği <input name="c" required maxlength="500"></label>
+              <label>D seçeneği <input name="d" required maxlength="500"></label>
+              <label>Doğru seçenek <select name="best"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></label>
+              <label class="saas-wide">Yanıt açıklaması <textarea name="explanation" required maxlength="1500"></textarea></label>
+              <button type="submit">Dersi ekle</button>
+            </form>
+            <div id="trainingLessonList"></div>
+          </div>
+        </details>
+      </div>
+      <div class="saas-panel"><h3>Katılımcılar ve ilerleme</h3>
+        <form id="trainingEnrollForm" class="saas-form">
+          <label>Program <select id="trainingCourse" required><option value="">Program seçin</option></select></label>
+          <label>Katılımcı <select id="trainingPerson" required><option value="">Kişi seçin</option></select></label>
+          <button type="submit">Eğitime kaydet</button>
+        </form>
+        <small>Çalışan eğitimleri yalnızca işe alımı tamamlanan kişilere atanır. İş ortağı eğitimi için tamamlanmış mülakat gerekir.</small>
+        <div id="trainingEnrollmentList"></div>
+      </div>
+    </section>
     <section id="atsSuiteScreen" class="results-card saas-module" hidden></section>
     <dialog id="profileDialog" aria-labelledby="profileDialogTitle">
         <h3 id="profileDialogTitle">Profilim</h3>
@@ -653,6 +699,7 @@
 <script src="/static/ernasa_v5_dashboard_only.js"></script>
 <script src="/static/saas_portal.js?v=20261118-ats-nav"></script>
 <script src="/static/ats_suite.js?v=20261118-ats-nav"></script>
+<script src="/static/training_admin.js?v=20261118-staging"></script>
 <script src="/static/portal_icons.js"></script>
 <script>
 async function ernasaSecureLogout() {
