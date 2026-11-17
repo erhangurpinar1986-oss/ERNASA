@@ -1133,7 +1133,8 @@ def match_ats_document(application_id: str, document_id: str,
 
 
 def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=False, partner_questions=None,
-                        draft_id=None, cv_evidence=(), cv_document_id=None, active_cursor=None, introduction=None):
+                        partner_template=None, draft_id=None, cv_evidence=(), cv_document_id=None,
+                        active_cursor=None, introduction=None):
     company_name = _ik.company_name if _ik.portal else candidate.get("company", "")
     if _ik.portal and not company_name:
         raise HTTPException(503, "Doğrulanmış firma unvanı alınamadı.")
@@ -1164,7 +1165,7 @@ def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=Fa
                 position = recruitment.position_name(cursor, _ik.company_id, position_id)
                 recruitment.staff_position(cursor, _ik, position_id)
             recruitment.enforce_interview_quota(cursor, _ik)
-            template = (None if partner_questions else portal_access.control_call(
+            template = (partner_template if partner_questions else portal_access.control_call(
                 _ik.portal,"interview_template",id=str(_ik.company_id),position_id=position_id or ""))
             if draft_id:
                 cursor.execute("""DELETE FROM ik_partner_drafts WHERE id=? AND company_id=?
@@ -1207,9 +1208,10 @@ def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=Fa
                 cursor.execute("INSERT INTO ik_interview_template_snapshots VALUES (?,?,?,?,?)",
                     (interview_id,_ik.company_id,template["name"],template["language"],
                      json.dumps(template["questions"],ensure_ascii=False)))
-                for number, question in enumerate(template["questions"],1):
-                    cursor.execute("INSERT INTO interview_questions VALUES (?,?,?)",
-                                   (interview_id,number,question["text"]))
+                if not partner_questions:
+                    for number, question in enumerate(template["questions"],1):
+                        cursor.execute("INSERT INTO interview_questions VALUES (?,?,?)",
+                                       (interview_id,number,question["text"]))
             recruitment.record(cursor, _ik, "interview_link_created", interview_id)
 
     origin = _ik.portal.origin if _ik.portal else legacy_ik_origin()
@@ -1235,7 +1237,8 @@ def ernasa_invite_service(tenant, slug, port, runtime, evaluator=None):
     """An in-process adapter installed only by the isolated CONTROL launcher."""
     portal = portal_access.Portal(slug, f"http://{slug}.ernasa.com:{port}")
 
-    def invoke(operation, founder_id, profile, *, name="", email="", token="", filename="", cv=b"", extras=(), introduction=None):
+    def invoke(operation, founder_id, profile, *, name="", email="", token="", filename="", cv=b"",
+               extras=(), introduction=None, template=None):
         if profile['id'] != tenant or profile['name'] != 'ERNASA' or not profile['ai_allowed']:
             raise HTTPException(403,"ERNASA davet hesabı etkin değil.")
         if operation == "prepare":
@@ -1259,7 +1262,7 @@ def ernasa_invite_service(tenant, slug, port, runtime, evaluator=None):
             review = json.loads(draft["suggestions"])
             if isinstance(review,list):
                 review = {"suggestions":review,"cv_evidence":[]}
-            locked = partner_interview.locked_questions(Path(__file__).resolve().parents[1] / "ernasa-locked-questions.json")
+            locked = partner_interview.first_round_questions(template)
             if operation == "draft":
                 return {"name":draft["name"],"locked":locked,**review}
             if locked is None:
@@ -1274,7 +1277,8 @@ def ernasa_invite_service(tenant, slug, port, runtime, evaluator=None):
                 company_name=profile['name'], products=('ai',),
                 interview_quota=profile['interview_quota'], month_bounds=tuple(profile['month_bounds']))
             result = save_interview_link({"name":draft["name"],"email":draft["email"],"position":"ERNASA Satış Ortağı"},
-                                         actor,ernasa_invite=True,partner_questions=locked+list(extras),draft_id=token,
+                                         actor,ernasa_invite=True,partner_questions=locked+list(extras),
+                                         partner_template=template,draft_id=token,
                                          cv_evidence=review["cv_evidence"],introduction=introduction)
             return result["interview_id"]
         with closing(get_connection()) as db:
