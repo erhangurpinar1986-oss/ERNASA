@@ -9,6 +9,9 @@ on:
       - 'frontend/ik_cv_invites.js'
       - 'frontend/ik.js'
       - 'frontend/ats_suite.js'
+      - 'frontend/saas_portal.js'
+      - 'ats_matching.py'
+      - 'tests/test_ats_cv_match_criteria.py'
       - 'frontend/ernasa_v5_ik.html'
       - 'tests/test_invite_email.py'
       - 'control/app.py'
@@ -48,3 +51,11 @@ jobs:
         run: python -m compileall -q backend control partner_interview.py tests
       - name: Verify first-round template mapping
         run: python -m unittest -v tests.test_partner_first_round_template tests.test_invite_email
+      - name: Verify CV matching calculations
+        run: |
+          python -m pip install pytest
+          python -m pytest -q tests/test_ats_cv_match_criteria.py
+      - name: Validate ATS and portal JavaScript syntax
+        run: |
+          node --check frontend/ats_suite.js
+          node --check frontend/saas_portal.js
