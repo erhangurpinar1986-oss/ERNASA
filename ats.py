@@ -1,4 +1,7 @@
 import io
+import logging
+from base64 import b64decode, b64encode
+from binascii import Error as Base64Error
 import json
 import re
 import zipfile
@@ -332,11 +335,21 @@ def document_name(filename):
     return path.name[:200]
 
 
+def archive_document(cursor, actor, app_id, document_id, content):
+    """Store CV bytes additively in the existing database for restart-safe retrieval."""
+    cursor.execute("""INSERT INTO ats_document_blobs
+        (document_id,company_id,application_id,digest,content_base64)
+        VALUES (?,?,?,?,?) ON CONFLICT(document_id) DO NOTHING""",
+        (document_id,actor.company_id,app_id,sha256(content).hexdigest(),
+         b64encode(content).decode('ascii')))
+
+
 def record_document(cursor, actor, app_id, document_id, name, media, content):
     cursor.execute('INSERT INTO ats_documents VALUES (?,?,?,?,?,?,?,?)',
                    (document_id,actor.company_id,app_id,name,media,len(content),actor.user_id,now()))
     cursor.execute('INSERT INTO ats_document_digests VALUES (?,?,?,?)',
                    (actor.company_id,app_id,sha256(content).hexdigest(),document_id))
+    archive_document(cursor,actor,app_id,document_id,content)
     record(cursor,actor,'application_document_added',app_id)
 
 
@@ -345,6 +358,7 @@ def upload_document(root, actor, app_id, filename, content, job_id=None):
     document_id = job_id or uid()
     path = document_path(root,actor.company_id,document_id).with_suffix(Path(name).suffix.lower())
     created = False
+    restored = False
     try:
         with write(actor.company_id) as cursor:
             if job_id:
@@ -357,10 +371,34 @@ def upload_document(root, actor, app_id, filename, content, job_id=None):
             application(cursor,actor,app_id)
             media = document_media(name,content)
             digest = sha256(content).hexdigest()
-            cursor.execute("""SELECT 1 FROM ats_document_digests
-                WHERE company_id=? AND application_id=? AND digest=?""",(actor.company_id,app_id,digest))
-            if cursor.fetchone():
-                raise HTTPException(409,'Bu dosya bu başvuruya zaten yüklenmiş.')
+            cursor.execute("""SELECT d.document_id,v.filename FROM ats_document_digests d
+                JOIN ats_documents v ON v.id=d.document_id AND v.company_id=d.company_id
+                    AND v.application_id=d.application_id
+                WHERE d.company_id=? AND d.application_id=? AND d.digest=?""",
+                (actor.company_id,app_id,digest))
+            existing = cursor.fetchone()
+            if existing:
+                # An old CV record survives a deploy even when its local file does not.
+                # Reattach identical content to its ORIGINAL document ID; never duplicate
+                # or overwrite the existing candidate/application/interview records.
+                document_id = existing['document_id']
+                old_path = document_path(root,actor.company_id,document_id)
+                path = old_path.with_suffix(Path(existing['filename']).suffix.lower())
+                if path.is_file() or old_path.is_file():
+                    raise HTTPException(409,'Bu dosya bu başvuruya zaten yüklenmiş.')
+                path.parent.mkdir(parents=True,exist_ok=True)
+                try:
+                    with path.open('xb') as output:
+                        created = True
+                        restored = True
+                        output.write(content)
+                except FileExistsError:
+                    raise HTTPException(409,'Bu dosya bu başvuruya zaten yüklenmiş.') from None
+                archive_document(cursor,actor,app_id,document_id,content)
+                record(cursor,actor,'application_document_restored',app_id)
+                if job_id:
+                    cursor.execute("UPDATE ats_upload_jobs SET status='ready',payload=NULL,error=NULL WHERE id=?", (job_id,))
+                return {'id':document_id,'restored':True}
             path.parent.mkdir(parents=True,exist_ok=True)
             # The tenant lock protects replacement of a file left by an interrupted pending job.
             with path.open('wb' if job_id else 'xb') as output:
@@ -368,9 +406,10 @@ def upload_document(root, actor, app_id, filename, content, job_id=None):
                 output.write(content)
             record_document(cursor,actor,app_id,document_id,name,media,content)
             if job_id:
-                cursor.execute("UPDATE ats_upload_jobs SET status='ready',payload=NULL WHERE id=?", (job_id,))
+                cursor.execute("UPDATE ats_upload_jobs SET status='ready',payload=NULL,error=NULL WHERE id=?", (job_id,))
     except Exception:
-        if created and not job_id:
+        # Rollback cleanup touches ONLY the file created by this request, not old CVs.
+        if created and (not job_id or restored):
             path.unlink(missing_ok=True)
         raise
     return {'id':document_id}
@@ -380,15 +419,52 @@ def get_document(root, actor, app_id, document_id):
     with closing(get_connection()) as connection:
         cursor = connection.cursor()
         application(cursor,actor,app_id)
-        cursor.execute('SELECT filename,media_type FROM ats_documents WHERE id=? AND company_id=? AND application_id=?',
-                       (document_id,actor.company_id,app_id))
+        cursor.execute("""SELECT d.filename,d.media_type,d.size_bytes,
+                b.content_base64,b.digest AS blob_digest
+            FROM ats_documents d
+            LEFT JOIN ats_document_blobs b ON b.document_id=d.id AND b.company_id=d.company_id
+                AND b.application_id=d.application_id
+            WHERE d.id=? AND d.company_id=? AND d.application_id=?""",
+            (document_id,actor.company_id,app_id))
         result = cursor.fetchone()
     if not result:
-        raise HTTPException(404,'Belge bulunamadı.')
+        raise HTTPException(404,'Belge kaydı bulunamadı.')
     old_path = document_path(root,actor.company_id,document_id)
     path = old_path.with_suffix(Path(result['filename']).suffix.lower())
     if not path.is_file() and old_path.is_file():
         path = old_path
     if not path.is_file():
-        raise HTTPException(404,'Belge bulunamadı.')
+        encoded = result['content_base64']
+        if not encoded:
+            raise HTTPException(404,'CV kaydı korunuyor ancak dosya bulunamadı. Orijinal CV\'yi aynı başvuruya yeniden yükleyerek belgeyi onarın.')
+        try:
+            payload = b64decode(encoded,validate=True)
+        except (Base64Error,ValueError):
+            raise HTTPException(503,'CV arşivi doğrulanamadı; destek ekibine başvurun.') from None
+        if len(payload) != result['size_bytes'] or sha256(payload).hexdigest() != result['blob_digest']:
+            raise HTTPException(503,'CV arşivi bütünlük kontrolünden geçemedi; destek ekibine başvurun.')
+        path.parent.mkdir(parents=True,exist_ok=True)
+        try:
+            with path.open('xb') as output:
+                output.write(payload)
+        except FileExistsError:
+            pass  # Another authenticated request restored the same document.
+    else:
+        # Opportunistically back up legacy files while they are still accessible.
+        if not result['content_base64']:
+            try:
+                payload = path.read_bytes()
+                if 0 < len(payload) <= MAX_DOCUMENT and len(payload) == result['size_bytes']:
+                    with write(actor.company_id) as cursor:
+                        cursor.execute("""SELECT digest FROM ats_document_digests
+                            WHERE company_id=? AND application_id=? AND document_id=?""",
+                            (actor.company_id,app_id,document_id))
+                        row = cursor.fetchone()
+                        if row and row['digest'] == sha256(payload).hexdigest():
+                            archive_document(cursor,actor,app_id,document_id,payload)
+            except (OSError,RuntimeError) as error:
+                # Never prevent an existing CV from opening because archival failed.
+                logging.getLogger(__name__).warning('ATS legacy CV archival failed: %s',type(error).__name__)
+    if not path.is_file():
+        raise HTTPException(503,'CV dosyası depodan geri yüklenemedi.')
     return path, result['filename'], result['media_type']
