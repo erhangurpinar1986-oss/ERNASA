@@ -8,16 +8,35 @@ from ats_matching import relevant_text
 from database import get_connection
 from interview_assessments import enqueue
 from recruitment import write
+from control.interview_templates import snapshot_question_count
 
 
 def load_interview(cursor, token, company_id):
-    cursor.execute("""SELECT i.*,COALESCE(p.question_count,10) AS question_count
+    cursor.execute("""SELECT i.*,p.question_count AS partner_question_count, template.questions AS template_questions,
+        intro.question AS introduction_question, intro.answer AS introduction_answer
         FROM interview_links i LEFT JOIN ik_partner_interviews p ON p.token=i.token AND p.company_id=i.company_id
+        LEFT JOIN ik_partner_introductions intro ON intro.token=p.token AND intro.company_id=p.company_id
+        LEFT JOIN ik_interview_template_snapshots template ON template.token=i.token AND template.company_id=i.company_id
         WHERE i.token=? AND i.company_id=? AND i.status IS DISTINCT FROM 'new'""", (token, company_id))
     row = cursor.fetchone()
     if not row:
         raise HTTPException(404, 'Mülakat bağlantısı bulunamadı.')
-    return dict(row)
+    interview = dict(row)
+    snapshot = {'questions':interview['template_questions']} if interview['template_questions'] else None
+    interview['question_count'] = interview['partner_question_count'] or snapshot_question_count(snapshot)
+    return interview
+
+
+def introduction_note(cursor, token, tenant):
+    if tenant is None:
+        return None
+    cursor.execute('SELECT answer FROM ik_partner_introductions WHERE token=? AND company_id=?', (token, tenant))
+    row = cursor.fetchone()
+    return row['answer'] if row else None
+
+
+def introduction_pending(interview):
+    return interview['introduction_question'] is not None and interview['introduction_answer'] is None
 
 
 def answers(cursor, token, total=10):
@@ -59,6 +78,9 @@ def interview_job_context(cursor, interview):
 
 def current_question(interview, recorded, intro, generate):
     total = interview['question_count']
+    if introduction_pending(interview):
+        return {'success':True, 'status':'started', 'phase':'introduction', 'question_number':0,
+                'question_count':total, 'question':interview['introduction_question']}
     number = next((n for n in range(1,total+1) if n not in recorded), None)
     if number is None:
         return completed(total)
@@ -70,7 +92,7 @@ def current_question(interview, recorded, intro, generate):
         row = cursor.fetchone()
         job_context = interview_job_context(cursor, interview) if row is None and number != 1 else ''
     if row is None:
-        if total > 10:
+        if total > 10 or interview["template_questions"]:
             raise HTTPException(503,'Kilitli mülakat sorusu bulunamadı.')
         history = '\n'.join(f"Soru {n}: {row['question']}\nCevap: {row['answer']}" for n,row in recorded.items())
         text = intro() if number == 1 else generate(cv_text=relevant_text(interview['cv_text'] or ''),
@@ -82,7 +104,10 @@ def current_question(interview, recorded, intro, generate):
                 ON CONFLICT(token,question_number) DO NOTHING""", (token, number, text))
             cursor.execute(lookup, (token, number))
             row = cursor.fetchone()
-    return {'success':True, 'status':'started', 'question_number':number, 'question_count':total, 'question':row['question']}
+    result = {'success':True, 'status':'started', 'question_number':number, 'question_count':total, 'question':row['question']}
+    if total > 10:
+        result['phase'] = 'locked' if number <= 10 else 'extra'
+    return result
 
 
 def start(token, tenant, deadline_passed, intro, generate):
@@ -105,18 +130,37 @@ def start(token, tenant, deadline_passed, intro, generate):
     return current_question(interview, recorded, intro, generate)
 
 
+def save_introduction(cursor, token, tenant, interview, answer):
+    if interview['introduction_question'] is None:
+        raise HTTPException(400, 'Bu mülakatta tanışma sorusu yok.')
+    saved = interview['introduction_answer']
+    if saved is not None:
+        if saved != answer:
+            raise HTTPException(409, 'Tanışma sorusu daha önce yanıtlandı.')
+        return
+    if interview['status'] != 'started':
+        raise HTTPException(409, 'Mülakat başlamamış veya tamamlanmış.')
+    cursor.execute("""UPDATE ik_partner_introductions SET answer=?
+        WHERE token=? AND company_id=? AND answer IS NULL""", (answer, token, tenant))
+    interview['introduction_answer'] = answer
+
+
 def submit(token, tenant, payload, intro, generate):
     number = payload.get('question_number')
     answer = payload.get('answer')
     with write(tenant) as cursor:
         interview = load_interview(cursor, token, tenant)
         total = interview['question_count']
-        if type(number) is not int or not 1 <= number <= total or not isinstance(answer,str) or not 1 <= len(answer.strip()) <= 12000:
+        if type(number) is not int or not 0 <= number <= total or not isinstance(answer,str) or not 1 <= len(answer.strip()) <= 12000:
             raise HTTPException(400, 'Soru numarası veya cevap geçersiz.')
         answer = answer.strip()
         recorded = answers(cursor, token, total)
         saved = recorded.get(number)
-        if saved:
+        if number == 0:
+            save_introduction(cursor, token, tenant, interview, answer)
+        elif introduction_pending(interview):
+            raise HTTPException(409, 'Önce tanışma sorusunu yanıtlayın.')
+        elif saved:
             if saved['answer'] != answer:
                 raise HTTPException(409, 'Bu soru daha önce yanıtlandı.')
         else:
@@ -137,5 +181,6 @@ def submit(token, tenant, payload, intro, generate):
             recorded = answers(cursor, token, total)
             if len(recorded) == total:
                 cursor.execute("UPDATE interview_links SET status='completed' WHERE token=?", (token,))
-                enqueue(cursor,tenant,token)
+                if total >= 10:
+                    enqueue(cursor,tenant,token)
     return current_question(interview, recorded, intro, generate)

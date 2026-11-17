@@ -5,7 +5,7 @@ const candidateLocales = Object.freeze({tr:{dir:"ltr",enabled:true},en:{dir:"ltr
 const candidateEnglish = {
     ".brand-text p":"AI-assisted recruitment platform",
     ".secure-pill":"Secure interview",
-    ".client-area > span":"Employer",
+    ".client-area span":"Employer",
     ".welcome-text .eyebrow":"ERNASA DIGITAL INTERVIEW",
     ".welcome-text > p:first-of-type":"This interview is the next step in your application. Tell us about your work and experience.",
     ".info-tile:first-child small":"Estimated duration",

@@ -395,11 +395,16 @@ def mutate(db, actor, path, data):
                 (tenant,position,identifier))
             audit(db,actor,f'Mülakat şablonu atandı #{identifier}',tenant)
             return target+f'?duzenle={identifier}'
+        saved_template = db.execute('SELECT questions FROM ik_interview_templates WHERE id=?',
+                                    (identifier,)).fetchone() if identifier else None
+        count = (interview_templates.snapshot_question_count(saved_template) if saved_template
+                 else 1 if data.get('round') == 'english_demo' else 10)
+        language = 'en' if count == 1 else choice(data,'language',('tr','en'))
         questions = [{'text':field(data,f'question_{index}',700),
-                      'weight':int(field(data,f'weight_{index}',3))} for index in range(1,11)]
+                      'weight':int(field(data,f'weight_{index}',3))} for index in range(1,count+1)]
         if any(not 0 <= item['weight'] <= 100 for item in questions) or sum(item['weight'] for item in questions)!=100:
-            raise Problem(400,'On soru ağırlığının toplamı 100 olmalıdır.')
-        values = (field(data,'name'),choice(data,'language',('tr','en')),json.dumps(questions,ensure_ascii=False))
+            raise Problem(400,'Soru ağırlıklarının toplamı 100 olmalıdır.')
+        values = (field(data,'name'),language,json.dumps(questions,ensure_ascii=False))
         if identifier:
             db.execute('UPDATE ik_interview_templates SET name=?,language=?,questions=? WHERE id=?',(*values,identifier))
         else:
@@ -917,12 +922,29 @@ def screen(db, actor, path, q):
     if path == '/mulakat-sablonlari':
         selected = number({'id':q.get('duzenle','')},optional=True)
         row = require(db.execute('SELECT * FROM ik_interview_templates WHERE id=?',(selected,)).fetchone(),'Şablon') if selected else None
-        questions = json.loads(row['questions']) if row else [{'text':'','weight':''} for _ in range(10)]
-        language = row['language'] if row else 'tr'
-        fields = (hidden('template_id',selected or '') + inp('Şablon adı','name',row['name'] if row else '')
-                  + '<label>Şablon dili<select name="language">'
-                  + ''.join(f'<option value="{code}" {"selected" if code==language else ""}>{label}</option>'
-                            for code,label in (('tr','Türkçe'),('en','English'))) + '</select></label>')
+        demo = not row and q.get('tur') == 'english_demo'
+        first_round = not row and q.get('tur') == 'partner_first'
+        if row:
+            questions = json.loads(row['questions'])
+        elif demo:
+            questions = [{'text':interview_templates.PARTNER_ENGLISH_DEMO,'weight':100}]
+        elif first_round:
+            questions = interview_templates.partner_first_round()
+        else:
+            questions = [{'text':'','weight':''} for _ in range(10)]
+        language = row['language'] if row else 'en' if demo else 'tr'
+        name = row['name'] if row else ''
+        if demo:
+            name = interview_templates.PARTNER_ENGLISH_DEMO_NAME
+        elif first_round:
+            name = interview_templates.PARTNER_FIRST_ROUND_NAME
+        fields = hidden('template_id',selected or '') + inp('Şablon adı','name',name)
+        if len(questions) == 1:
+            fields += hidden('round','english_demo') + '<p>Şablon dili: English · İkinci tur satış demosu</p>'
+        else:
+            fields += ('<label>Şablon dili<select name="language">'
+                       + ''.join(f'<option value="{code}" {"selected" if code==language else ""}>{label}</option>'
+                                 for code,label in (('tr','Türkçe'),('en','English'))) + '</select></label>')
         for index,item in enumerate(questions,1):
             fields += (f'<div class="template-question"><label>{index}. soru'
                        f'<textarea name="question_{index}" maxlength="700" required>{e(item["text"])}</textarea></label>'
@@ -940,8 +962,11 @@ def screen(db, actor, path, q):
             assignments = db.execute("""SELECT c.name,a.position_id FROM ik_interview_template_assignments a
                 JOIN companies c ON c.id=a.company_id WHERE a.template_id=? ORDER BY c.name,a.position_id""",(selected,))
             assign += card('Mevcut atamalar',table(('Firma','Pozisyon'),([e(a['name']),e(a['position_id'] or 'Firma geneli')] for a in assignments)))
-        return card('Şablonlar',listing+f'<a href="{path}">Yeni şablon</a>') + card(
-            'On soru ve değerlendirme ağırlıkları',form(path,actor,fields,'Şablonu kaydet')) + assign
+        links = (f'<a href="{path}">Yeni şablon</a> · '
+                 f'<a href="{path}?tur=partner_first">ERNASA satış ortaklığı · 1. tur</a> · '
+                 f'<a href="{path}?tur=english_demo">Yeni İngilizce demo şablonu</a>')
+        title = 'İngilizce satış demosu · İkinci tur' if len(questions) == 1 else 'On soru ve değerlendirme ağırlıkları'
+        return card('Şablonlar',listing+links) + card(title,form(path,actor,fields,'Şablonu kaydet')) + assign
     edit = number({'id':q.get('duzenle','')},optional=True)
     tenant = actor['company_id']
     if path=='/':
@@ -1104,7 +1129,9 @@ def ernasa_invitation_page(handler, db, actor, submitted, query):
             if not re.fullmatch(r'[a-f0-9]{32}',draft):
                 raise Problem(404,'CV soru taslağı bulunamadı.')
             extras = [submitted.get(f'extra_{index}','').strip() for index in range(1,4)]
-            token = handler('create',actor['id'],profile,token=draft,extras=tuple(question for question in extras if question))
+            introduction = submitted.get('introduction','') if submitted.get('include_introduction') == '1' else None
+            token = handler('create',actor['id'],profile,token=draft,
+                            extras=tuple(question for question in extras if question),introduction=introduction)
         elif action == 'evaluate':
             token = submitted.get('token','')
             if not re.fullmatch(r'[A-Za-z0-9_-]{43}',token):
@@ -1134,6 +1161,12 @@ def ernasa_invitation_page(handler, db, actor, submitted, query):
         else:
             review += '<p role="alert">Onaylı 10 Türkçe soru bekleniyor. Davet bağlantısı henüz oluşturulamaz.</p>'
         fields = hidden('action','create')+hidden('draft',draft_id)
+        fields += ('<div class="template-question"><label>'
+                   '<input type="checkbox" name="include_introduction" value="1">'
+                   'Tanışma sorusu ekle (puansız)</label>'
+                   '<label>Tanışma sorusu metni'
+                   f'<textarea name="introduction" maxlength="{interview_templates.PARTNER_INTRODUCTION_LIMIT}">'
+                   f'{e(interview_templates.PARTNER_INTRODUCTION)}</textarea></label></div>')
         for index in range(1,4):
             suggestion = draft['suggestions'][index-1] if len(draft['suggestions']) >= index else {}
             fields += (f'<div class="template-question"><label>Ek soru {index}'
@@ -1174,6 +1207,8 @@ def ernasa_invitation_page(handler, db, actor, submitted, query):
                 label = 'AI değerlendirmesini yeniden dene' if invite.get('error') else 'AI değerlendirmesi çalıştır'
                 result += form(ERNASA_INVITE_PATH,actor,hidden('token',token)+hidden('action','evaluate'),label)
             result += ernasa_cv_evidence(invite.get('cv_evidence'))
+            if invite.get('introduction_note'):
+                result += f'<h3>Tanışma notu</h3><p>{e(invite["introduction_note"])}</p>'
             title = '10 kilit soru' if invite.get('question_count') else 'Mülakat soruları'
             result += f'<h3>{title}</h3>'+answer_table(item for item in answers if item['question_number']<=10)
             if invite.get('question_count'):

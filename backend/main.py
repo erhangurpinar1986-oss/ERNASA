@@ -13,6 +13,7 @@ import ats_matching
 from contextlib import asynccontextmanager, closing, nullcontext
 import asyncio
 from control import render_gateway
+from control.interview_templates import PARTNER_INTRODUCTION_LIMIT, snapshot_question_count
 from base64 import b64encode
 from xml.sax.saxutils import escape
 from pathlib import Path
@@ -1132,7 +1133,7 @@ def match_ats_document(application_id: str, document_id: str,
 
 
 def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=False, partner_questions=None,
-                        draft_id=None, cv_evidence=(), cv_document_id=None, active_cursor=None):
+                        draft_id=None, cv_evidence=(), cv_document_id=None, active_cursor=None, introduction=None):
     company_name = _ik.company_name if _ik.portal else candidate.get("company", "")
     if _ik.portal and not company_name:
         raise HTTPException(503, "Doğrulanmış firma unvanı alınamadı.")
@@ -1190,6 +1191,9 @@ def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=Fa
             if partner_questions:
                 cursor.execute("INSERT INTO ik_partner_interviews(token,company_id,question_count) VALUES (?,?,?)",
                                (interview_id,_ik.company_id,len(partner_questions)))
+                if introduction is not None:
+                    cursor.execute("INSERT INTO ik_partner_introductions(token,company_id,question) VALUES (?,?,?)",
+                                   (interview_id,_ik.company_id,introduction))
                 if cv_evidence:
                     cursor.execute("INSERT INTO ik_partner_cv_evidence VALUES (?,?,?)",
                                    (interview_id,_ik.company_id,json.dumps(cv_evidence,ensure_ascii=False)))
@@ -1231,7 +1235,7 @@ def ernasa_invite_service(tenant, slug, port, runtime, evaluator=None):
     """An in-process adapter installed only by the isolated CONTROL launcher."""
     portal = portal_access.Portal(slug, f"http://{slug}.ernasa.com:{port}")
 
-    def invoke(operation, founder_id, profile, *, name="", email="", token="", filename="", cv=b"", extras=()):
+    def invoke(operation, founder_id, profile, *, name="", email="", token="", filename="", cv=b"", extras=(), introduction=None):
         if profile['id'] != tenant or profile['name'] != 'ERNASA' or not profile['ai_allowed']:
             raise HTTPException(403,"ERNASA davet hesabı etkin değil.")
         if operation == "prepare":
@@ -1262,12 +1266,16 @@ def ernasa_invite_service(tenant, slug, port, runtime, evaluator=None):
                 raise HTTPException(409,"Onaylı 10 Türkçe soru yapılandırılmadı.")
             if not 2 <= len(extras) <= 3 or any(not question or len(question)>700 for question in extras):
                 raise HTTPException(400,"İki veya üç geçerli ek soru girin.")
+            if introduction is not None:
+                introduction = introduction.strip()
+                if not 1 <= len(introduction) <= PARTNER_INTRODUCTION_LIMIT:
+                    raise HTTPException(400,"Tanışma sorusu 1–700 karakter olmalıdır.")
             actor = portal_access.Actor(company_id=tenant, role='founder', portal=portal, user_id=founder_id,
                 company_name=profile['name'], products=('ai',),
                 interview_quota=profile['interview_quota'], month_bounds=tuple(profile['month_bounds']))
             result = save_interview_link({"name":draft["name"],"email":draft["email"],"position":"ERNASA Satış Ortağı"},
                                          actor,ernasa_invite=True,partner_questions=locked+list(extras),draft_id=token,
-                                         cv_evidence=review["cv_evidence"])
+                                         cv_evidence=review["cv_evidence"],introduction=introduction)
             return result["interview_id"]
         with closing(get_connection()) as db:
             cursor = db.cursor()
@@ -1285,6 +1293,7 @@ def ernasa_invite_service(tenant, slug, port, runtime, evaluator=None):
             result = invitation(row)
             if row["status"] == "completed":
                 result["answers"] = [dict(item) for item in portal_interviews.answers(cursor,token,row["question_count"] or 10).values()]
+                result["introduction_note"] = portal_interviews.introduction_note(cursor,token,tenant)
                 cursor.execute("SELECT criteria FROM ik_partner_cv_evidence WHERE token=? AND company_id=?",(token,tenant))
                 cv = cursor.fetchone()
                 result["cv_evidence"] = json.loads(cv["criteria"]) if cv else []
@@ -1345,13 +1354,20 @@ def get_interview_link(token: str, company_id: int | None = Depends(portal_acces
         if not row:
             raise HTTPException(status_code=404, detail="Mülakat bağlantısı bulunamadı.")
         interview = dict(row)
-        cursor.execute("SELECT language FROM ik_interview_template_snapshots WHERE token=? AND company_id=?",
+        cursor.execute("SELECT name,language,questions FROM ik_interview_template_snapshots WHERE token=? AND company_id=?",
                        (token,company_id))
         template = cursor.fetchone()
         language = template["language"] if template else "tr"
         cursor.execute("SELECT question_count FROM ik_partner_interviews WHERE token=? AND company_id=?",(token,company_id))
         partner = cursor.fetchone()
-        question_count = partner["question_count"] if partner else 10
+        question_count = partner["question_count"] if partner else snapshot_question_count(template)
+        sales_round = None
+        if partner or (template and language == "tr" and template["name"] in {
+            "ERNASA B2B Satış Ortağı", "ERNASA B2B Satış Ortağı · 1. Tur",
+        }):
+            sales_round = "first"
+        elif template and language == "en" and question_count == 1:
+            sales_round = "english_demo"
         status = interview["status"]
         expired = status == "expired" or (
             status in ("waiting", "created", "opened") and _link_deadline_passed(interview)
@@ -1365,6 +1381,7 @@ def get_interview_link(token: str, company_id: int | None = Depends(portal_acces
                 "status": "expired",
                 "language": language,
                 "question_count": question_count,
+                "sales_round": sales_round,
                 "can_start": False,
             }
         return {
@@ -1374,6 +1391,7 @@ def get_interview_link(token: str, company_id: int | None = Depends(portal_acces
             "status": status,
             "language": language,
             "question_count": question_count,
+            "sales_round": sales_round,
         }
     finally:
         connection.close()
@@ -1935,6 +1953,10 @@ def download_interview_pdf(token: str, _ik: portal_access.Actor = Depends(requir
             if line.strip():
                 story.append(recruitment_pdf.paragraph(line.strip(), styles["BodyText"]))
         story.append(Spacer(1, 10))
+        note = portal_interviews.introduction_note(cursor,token,_ik.company_id)
+        if note:
+            story.append(recruitment_pdf.paragraph("Tanışma notu",styles["Heading2"]))
+            story.append(recruitment_pdf.paragraph(note,styles["BodyText"]))
         story.append(recruitment_pdf.paragraph(answers_title, styles["Heading2"]))
         for row in answer_rows:
             story.append(recruitment_pdf.paragraph(f"{question} {row['question_number']}: {row['question']}", styles["BodyText"]))

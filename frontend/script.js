@@ -114,11 +114,22 @@ function updateStartButton() {
         accuracyCheckbox.checked;
 
     startInterviewButton.disabled = !allApproved;
+    document.querySelector(".button-note").hidden = allApproved;
 }
 
 function showCandidateQuestion(data) {
+    const introduction = data.phase === "introduction";
+    document.getElementById("questionTitle").textContent = introduction ? "Tanışma" :
+        candidateText("Mülakat Sorusu", "Interview question");
     questionProgress.dataset.number = data.question_number;
     questionProgress.textContent = candidateText("Soru ", "Question ") + data.question_number;
+    if (introduction) {
+        questionProgress.textContent = "Puansız";
+    } else if (data.phase === "locked") {
+        questionProgress.textContent += "/10";
+    } else if (data.phase === "extra") {
+        questionProgress.textContent = "Ek soru " + (data.question_number - 10) + "/" + (data.question_count - 10);
+    }
     questionProgressBar.style.width = (data.question_number * 100 / (data.question_count || 10)) + "%";
     questionText.textContent = data.question;
 }
@@ -215,8 +226,25 @@ if (interviewToken) {
         .then(data => {
     if (data.success) {
     setCandidateLocale(data.language || "tr");
-    if (data.question_count > 10) {
-        document.querySelector(".info-tile:nth-child(2) b").textContent = data.question_count + " soru";
+    if (data.sales_round) {
+        const firstRound = data.sales_round === "first";
+        welcomeCard.querySelector(".eyebrow").textContent = firstRound ?
+            "ERNASA B2B Satış Ortaklığı · 1. Tur" : "International Sales · Round 2 · English Demo";
+        welcomeCard.querySelector(".welcome-text > p").textContent = firstRound ?
+            "Bu mülakatta B2B satış ve iş geliştirmeye nasıl yaklaştığınızı anlamak istiyoruz. Yanıtlarınızı mümkün olduğunda kendi deneyimlerinizden örneklerle açıklayabilirsiniz." :
+            "In this second round, present ERNASA to an HR manager and respond to an integration question in English.";
+        const firstTile = welcomeCard.querySelector(".info-tile:first-child");
+        firstTile.querySelector("small").textContent = firstRound ? "Mülakat dili" : "Sales pitch";
+        firstTile.querySelector("b").textContent = firstRound ? "Türkçe" : "60 seconds";
+    }
+    if (data.question_count) {
+        const unit = data.question_count === 1 ? candidateText("soru", "question") : candidateText("soru", "questions");
+        const count = document.querySelector(".info-tile:nth-child(2) b");
+        if (data.sales_round === "first" && data.question_count > 10) {
+            count.textContent = "10 ana soru + " + (data.question_count - 10) + " ek soru";
+        } else {
+            count.textContent = data.question_count + " " + unit;
+        }
     }
     if (location.hostname.endsWith(".ernasa.com") && location.hostname !== "www.ernasa.com") {
         const logo = document.getElementById("candidateCompanyLogo");

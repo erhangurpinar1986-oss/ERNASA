@@ -47,6 +47,9 @@ DDL = (
         token TEXT PRIMARY KEY REFERENCES ik_ernasa_invites, company_id BIGINT NOT NULL,
         question_count INTEGER NOT NULL CHECK(question_count BETWEEN 12 AND 13),
         report TEXT, error TEXT)""",
+    """CREATE TABLE IF NOT EXISTS ik_partner_introductions (
+        token TEXT PRIMARY KEY REFERENCES ik_partner_interviews ON DELETE CASCADE,
+        company_id BIGINT NOT NULL, question TEXT NOT NULL, answer TEXT)""",
     """CREATE TABLE IF NOT EXISTS ik_partner_extra_questions (
         token TEXT NOT NULL REFERENCES ik_partner_interviews,
         question_number INTEGER NOT NULL CHECK(question_number BETWEEN 11 AND 13),

@@ -1,5 +1,30 @@
 """CONTROL-owned interview templates; existing interview questions remain immutable."""
 import json
+from pathlib import Path
+
+PARTNER_INTRODUCTION = 'Hoş geldiniz. Kendinizi ve satış veya iş geliştirme deneyiminizi kısaca tanıtır mısınız?'
+PARTNER_INTRODUCTION_LIMIT = 700
+PARTNER_ENGLISH_DEMO_NAME = 'ERNASA International Sales · Round 2'
+PARTNER_ENGLISH_DEMO = (
+    'Imagine I’m an HR manager speaking with you for the first time. In 60 seconds, explain how ERNASA '
+    'could help my hiring team. Then answer this question: “Does it integrate with our current ATS, '
+    'and is that included in the price?”'
+)
+
+
+PARTNER_FIRST_ROUND_NAME = 'ERNASA B2B Satış Ortağı · 1. Tur'
+PARTNER_FIRST_ROUND_WEIGHTS = (13, 20, 10, 10, 5, 8, 10, 12, 5, 7)
+
+
+def partner_first_round():
+    path = Path(__file__).resolve().parents[1] / 'ernasa-locked-questions.json'
+    questions = json.loads(path.read_text(encoding='utf-8-sig'))
+    return [{'text':text,'weight':weight}
+            for text,weight in zip(questions,PARTNER_FIRST_ROUND_WEIGHTS,strict=True)]
+
+
+def snapshot_question_count(snapshot):
+    return len(json.loads(snapshot['questions'])) if snapshot else 10
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ik_interview_templates (
