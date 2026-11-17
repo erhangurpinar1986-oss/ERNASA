@@ -6,6 +6,7 @@ import partner_interview
 import ats
 import ats_cv_import
 import ik_cv_invites
+from services import invite_email
 import interview_assessments
 import ats_workflow
 import ats_upload_queue
@@ -1117,6 +1118,81 @@ class LinkedInterview(BaseModel):
 
 def require_combined(actor: portal_access.Actor = Depends(require_ats)):
     return require_ai(actor)
+
+
+@app.post("/api/ik/interviews/{token}/send-email")
+def send_interview_invitation_email(
+    token: str, actor: portal_access.Actor = Depends(require_ai)
+):
+    """Dispatch an existing invitation using the verified ERNASA sender.
+
+    Recipient and URL are read from the tenant-scoped stored invitation; the
+    browser cannot provide an arbitrary address, message or destination.
+    """
+    if not __import__("re").fullmatch(r"[A-Za-z0-9_-]{43}", token):
+        raise HTTPException(404, "Mülakat daveti bulunamadı.")
+    try:
+        invite_email.configured_sender()
+    except invite_email.EmailConfigurationError as error:
+        raise HTTPException(503, str(error)) from error
+
+    now = datetime.now(timezone.utc)
+    scope, parameters = recruitment.scope(actor)
+    with recruitment.write(actor.company_id) as cursor:
+        cursor.execute(f"""SELECT token,name,email,company,position,expires_at,status
+            FROM interview_links WHERE token=? AND {scope}""", (token, *parameters))
+        record = cursor.fetchone()
+        if record is None:
+            raise HTTPException(404, "Mülakat daveti bulunamadı.")
+        candidate = dict(record)
+        if candidate["status"] not in ("waiting", "created", "opened"):
+            raise HTTPException(409, "Bu mülakat için yeni davet gönderilemez.")
+        if not candidate.get("expires_at") or datetime.fromisoformat(candidate["expires_at"]) <= now:
+            raise HTTPException(410, "Mülakat bağlantısının süresi dolmuş.")
+        try:
+            invite_email.invitation_message(candidate, "")
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+
+        cursor.execute("SELECT status, initiated_at FROM ik_invitation_email_sends WHERE token=?", (token,))
+        previous = cursor.fetchone()
+        if previous and previous["status"] == "sent":
+            return {"success": True, "already_sent": True,
+                    "message": "Bu davet daha önce kurumsal e-postadan gönderildi."}
+        if previous and previous["status"] == "pending":
+            try:
+                recent = (now - datetime.fromisoformat(previous["initiated_at"])).total_seconds() < 120
+            except (TypeError, ValueError):
+                recent = True
+            if recent:
+                raise HTTPException(409, "E-posta gönderimi sürüyor. Lütfen yeniden göndermeyin.")
+        cursor.execute("""INSERT INTO ik_invitation_email_sends
+            (token,company_id,status,initiated_at,sent_at,provider_message_id)
+            VALUES (?,?,?, ?,NULL,NULL)
+            ON CONFLICT (token) DO UPDATE SET status='pending', initiated_at=excluded.initiated_at,
+                sent_at=NULL,provider_message_id=NULL""",
+            (token,actor.company_id,"pending",now.isoformat()))
+
+    origin = actor.portal.origin if actor.portal else legacy_ik_origin()
+    url = f"{origin}/interview/{token}"
+    try:
+        provider_id = invite_email.send_invitation(
+            candidate, url, idempotency_key="ernasa-interview-" + token)
+    except invite_email.EmailDeliveryError as error:
+        with recruitment.write(actor.company_id) as cursor:
+            cursor.execute("""UPDATE ik_invitation_email_sends SET status='failed'
+                WHERE token=? AND status='pending'""", (token,))
+        raise HTTPException(502, str(error)) from error
+
+    with recruitment.write(actor.company_id) as cursor:
+        cursor.execute("""UPDATE ik_invitation_email_sends
+            SET status='sent',sent_at=?,provider_message_id=?
+            WHERE token=? AND status='pending'""",
+            (datetime.now(timezone.utc).isoformat(),provider_id,token))
+        if actor.company_id is not None:
+            recruitment.record(cursor, actor, "interview_invitation_email_sent", token)
+    return {"success":True, "already_sent":False,
+            "message":"Mülakat daveti kurumsal e-posta servisine teslim edildi."}
 
 
 @app.post("/api/ik/ats/applications/{application_id}/ai-interview", status_code=201)

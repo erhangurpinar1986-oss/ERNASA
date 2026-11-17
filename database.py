@@ -175,6 +175,16 @@ def initialize_database():
         )
     """)
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ik_invitation_email_sends (
+            token TEXT PRIMARY KEY REFERENCES interview_links(token),
+            company_id BIGINT,
+            status TEXT NOT NULL,
+            initiated_at TEXT NOT NULL,
+            sent_at TEXT,
+            provider_message_id TEXT
+        )
+    """)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS interview_questions (
             token TEXT NOT NULL REFERENCES interview_links(token),
             question_number INTEGER NOT NULL CHECK(question_number BETWEEN 1 AND 10),

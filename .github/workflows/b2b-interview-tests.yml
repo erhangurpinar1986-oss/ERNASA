@@ -4,6 +4,13 @@ on:
   pull_request:
     paths:
       - 'backend/main.py'
+      - 'database.py'
+      - 'services/invite_email.py'
+      - 'frontend/ik_cv_invites.js'
+      - 'frontend/ik.js'
+      - 'frontend/ats_suite.js'
+      - 'frontend/ernasa_v5_ik.html'
+      - 'tests/test_invite_email.py'
       - 'control/app.py'
       - 'control/interview_templates.py'
       - 'partner_interview.py'
@@ -13,6 +20,13 @@ on:
     branches: [main]
     paths:
       - 'backend/main.py'
+      - 'database.py'
+      - 'services/invite_email.py'
+      - 'frontend/ik_cv_invites.js'
+      - 'frontend/ik.js'
+      - 'frontend/ats_suite.js'
+      - 'frontend/ernasa_v5_ik.html'
+      - 'tests/test_invite_email.py'
       - 'control/app.py'
       - 'control/interview_templates.py'
       - 'partner_interview.py'
@@ -33,4 +47,4 @@ jobs:
       - name: Verify Python compilation
         run: python -m compileall -q backend control partner_interview.py tests
       - name: Verify first-round template mapping
-        run: python -m unittest -v tests.test_partner_first_round_template
+        run: python -m unittest -v tests.test_partner_first_round_template tests.test_invite_email
