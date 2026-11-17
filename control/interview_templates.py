@@ -22,8 +22,13 @@ def resolve_partner_first_round(db):
     row = db.execute("""SELECT name,language,questions FROM ik_interview_templates
         WHERE name IN (?,?) ORDER BY CASE WHEN name=? THEN 0 ELSE 1 END LIMIT 1""",
         (*PARTNER_FIRST_ROUND_ALIASES, PARTNER_FIRST_ROUND_NAME)).fetchone()
-    return ({'name': row['name'], 'language': row['language'],
-             'questions': json.loads(row['questions'])} if row else {})
+    if not row:
+        return {}
+    try:
+        questions = json.loads(row['questions'])
+    except (TypeError, ValueError):
+        return {}
+    return {'name': row['name'], 'language': row['language'], 'questions': questions}
 
 
 def partner_first_round():
