@@ -949,7 +949,8 @@ def screen(db, actor, path, q):
             fields += (f'<div class="template-question"><label>{index}. soru'
                        f'<textarea name="question_{index}" maxlength="700" required>{e(item["text"])}</textarea></label>'
                        + inp('Ağırlık · '+str(index),'weight_'+str(index),item['weight'],kind='number') + '</div>')
-        rows = db.execute('SELECT id,name,language FROM ik_interview_templates ORDER BY name').fetchall()
+        rows = db.execute('SELECT id,name,language FROM ik_interview_templates WHERE name<>? ORDER BY name',
+                          ('ERNASA B2B Satış Ortağı',)).fetchall()
         listing = table(('Şablon','Dil','İşlem'),([e(t['name']),e(t['language']),
             f'<a href="{path}?duzenle={t["id"]}">Düzenle</a>'] for t in rows))
         assign = ''
@@ -1118,6 +1119,7 @@ def ernasa_invitation_page(handler, db, actor, submitted, query):
     if profile is None:
         raise Problem(503,'ERNASA davet hesabı etkin değil.')
     profile = dict(profile,month_bounds=ik_bridge.month_bounds())
+    first_round_template = interview_templates.resolve_partner_first_round(db)
     if submitted is not None:
         action = submitted.get('action')
         if action == 'prepare':
@@ -1131,7 +1133,8 @@ def ernasa_invitation_page(handler, db, actor, submitted, query):
             extras = [submitted.get(f'extra_{index}','').strip() for index in range(1,4)]
             introduction = submitted.get('introduction','') if submitted.get('include_introduction') == '1' else None
             token = handler('create',actor['id'],profile,token=draft,
-                            extras=tuple(question for question in extras if question),introduction=introduction)
+                            extras=tuple(question for question in extras if question),introduction=introduction,
+                            template=first_round_template)
         elif action == 'evaluate':
             token = submitted.get('token','')
             if not re.fullmatch(r'[A-Za-z0-9_-]{43}',token):
@@ -1152,7 +1155,7 @@ def ernasa_invitation_page(handler, db, actor, submitted, query):
     if draft_id:
         if not re.fullmatch(r'[a-f0-9]{32}',draft_id):
             raise Problem(404,'CV soru taslağı bulunamadı.')
-        draft = handler('draft',actor['id'],profile,token=draft_id)
+        draft = handler('draft',actor['id'],profile,token=draft_id,template=first_round_template)
         review = f'<p><strong>{e(draft["name"])}</strong> · CV analizi tamamlandı.</p>'
         review += ernasa_cv_evidence(draft['cv_evidence'])
         if draft['locked']:
