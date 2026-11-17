@@ -12,6 +12,59 @@ if (companyPortalPage) {
         accounting:{name:"Muhasebe Uzmanı",job_family:"Finans ve Muhasebe",worker_group:"Uzman",
             matching_criteria:"Yetkinlik | Muhasebe kayıtları | 60 | muhasebe kayitlari\nYetkinlik | Finansal raporlama | 40 | finansal raporlama"},
     };
+    const cvMatchInput = positionForm.elements.namedItem("matching_criteria");
+    const cvMatchSummary = byId("cvMatchCriteriaSummary");
+    function cvMatchRows() {
+        return cvMatchInput.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    }
+    function updateCvMatchSummary() {
+        const rows = cvMatchRows();
+        const parsed = rows.map(line => line.split("|").map(value => value.trim()));
+        const valid = parsed.every(parts => parts.length === 4 &&
+            ["Yetkinlik","Mesleki deneyim","Eğitim","Sertifika"].includes(parts[0]) &&
+            parts[1].length >= 2 && parts[1].length <= 120 &&
+            /^(?:[1-9]|[1-9][0-9]|100)$/.test(parts[2]) &&
+            parts[3].split(",").every(value => value.trim().length >= 2));
+        const total = parsed.reduce((sum,parts) => sum + (Number(parts[2]) || 0),0);
+        cvMatchSummary.textContent = !rows.length ?
+            "Henüz kriter tanımlanmadı; CV eşleşme yüzdesi hesaplanamaz." :
+            !valid ? "Kriter biçimini kontrol edin: kategori | kriter | ağırlık | kanıt ifadeleri." :
+            rows.length + " kriter · toplam ağırlık " + total +
+            (total === 100 ? " / 100 · Hazır." :
+                " · Ağırlıkların toplamını 100 yapmanız önerilir.");
+        cvMatchSummary.style.color = !rows.length || !valid ? "#a44a20" : "";
+        return valid;
+    }
+    cvMatchInput.addEventListener("input",updateCvMatchSummary);
+    byId("cvMatchAddCriteria").addEventListener("click", () => {
+        const category = byId("cvMatchCategory").value;
+        const label = byId("cvMatchRequirement").value.trim();
+        const weight = byId("cvMatchWeight").value.trim();
+        const signals = byId("cvMatchSignals").value.split(",").map(v => v.trim()).filter(Boolean);
+        const invalid = !label || label.length < 2 || label.includes("|") ||
+            !/^(?:[1-9]|[1-9][0-9]|100)$/.test(weight) ||
+            signals.length < 1 || signals.length > 8 ||
+            signals.some(v => v.length < 2 || v.length > 100 || v.includes("|"));
+        if (invalid) {
+            cvMatchSummary.textContent = "Bir kriter adı (en az 2 karakter), 1–100 ağırlık ve 1–8 kanıt ifadesi girin.";
+            cvMatchSummary.style.color = "#a44a20";
+            return;
+        }
+        const row = [category,label,weight,signals.join(", ")].join(" | ");
+        const lines = cvMatchRows();
+        if (lines.length >= 30 || (cvMatchInput.value.length + row.length + 1) > 6000) {
+            cvMatchSummary.textContent = "En fazla 30 kriter ve 6000 karakter ekleyebilirsiniz.";
+            cvMatchSummary.style.color = "#a44a20";
+            return;
+        }
+        lines.push(row);
+        cvMatchInput.value = lines.join("\n");
+        byId("cvMatchRequirement").value = "";
+        byId("cvMatchSignals").value = "";
+        updateCvMatchSummary();
+        byId("cvMatchRequirement").focus();
+    });
+    updateCvMatchSummary();
     const candidateForm = byId("atsCandidateForm");
     const managerForm = byId("candidateManagerForm");
     let editingPosition = "";
@@ -71,6 +124,7 @@ if (companyPortalPage) {
                     for (const field of positionForm.elements) {
                         if (field.name) field.value = position[field.name] ?? (field.name === "openings" ? 1 : "");
                     }
+                    updateCvMatchSummary();
                     positionForm.elements.namedItem("name").focus();
                 });
                 const members = document.createElement("button");
@@ -113,6 +167,7 @@ if (companyPortalPage) {
             }
         }).catch(()=>{});
         byId("positionEditor").hidden = false;
+        updateCvMatchSummary();
         positionForm.elements.namedItem("name").focus();
     });
     positionTemplate.addEventListener("change",()=>{
@@ -121,6 +176,7 @@ if (companyPortalPage) {
         for (const [name,value] of Object.entries(selection)) {
             positionForm.elements.namedItem(name).value = value;
         }
+        updateCvMatchSummary();
     });
     byId("positionDepartmentLink").addEventListener("click",event=>{
         event.preventDefault();
@@ -160,11 +216,17 @@ if (companyPortalPage) {
     }
 
     positionForm.addEventListener("reset", () => {
+        queueMicrotask(updateCvMatchSummary);
         editingPosition = "";
         byId("positionEditorTitle").textContent = "Pozisyon aç";
     });
     positionForm.addEventListener("submit", async event => {
         event.preventDefault();
+        if (!updateCvMatchSummary()) {
+            byId("positionsMessage").textContent = "CV eşleşme kriterlerinin biçimini düzeltin.";
+            cvMatchInput.focus();
+            return;
+        }
         const button = event.submitter;
         button.disabled = true;
         const data = Object.fromEntries(new FormData(positionForm));
