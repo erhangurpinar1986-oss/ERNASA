@@ -442,40 +442,65 @@ if (companyPortalPage) {
                 notice("Aday notu kaydedildi.");
             }));
             root.append(el("h4","Belgeler"));
+            const cvDocuments = data.documents.filter(doc => /\.(pdf|docx)$/i.test(doc.filename || ""));
+            const cvNamed = cvDocuments.filter(doc => /cv|özgeçmiş|ozgecmis|resume/i.test(doc.filename || ""));
+            // Öncelik CV olarak adlandırılmış belgelerde; aksi hâlde son yüklenen PDF/DOCX.
+            const lastUploaded = docs => [...docs].sort((a,b) =>
+                (Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0)).at(-1);
+            const selectedCv = lastUploaded(cvNamed.length ? cvNamed : cvDocuments);
+
+            async function analyzeCvMatch(doc, anchor, button) {
+                button.disabled = true;
+                try {
+                    // API başvuruyu ve pozisyon kriterlerini şirket oturumuna göre doğrular.
+                    const matching = await api(appRoute(id)+"/documents/"+encodeURIComponent(doc.id)+"/match");
+                    const evidence = el("div","",{class:"ats-evidence",tabindex:"-1"});
+                    evidence.append(el("h4","CV–Pozisyon Eşleşme Sonucu"),
+                        el("p","İncelenen CV: "+doc.filename+" · Pozisyon: "+row.position));
+                    if (matching.match_score === null) {
+                        evidence.append(el("p","CV–pozisyon uyum yüzdesi hesaplanamadı."));
+                        evidence.append(el("p",matching.reason || "CV kanıtı veya pozisyon kriterleri eksik."));
+                        if (!matching.requirements?.length) {
+                            evidence.append(el("p","Çözüm: Pozisyonlar > ilgili pozisyonu Düzenle > CV–Pozisyon Eşleşme Kriterleri alanından iş gereksinimlerini ve ağırlıkları kaydedin."));
+                        }
+                    } else {
+                        evidence.append(el("p","CV–pozisyon eşleşme puanı · %" + matching.match_score));
+                    }
+                    if (matching.evidence_coverage !== null) {
+                        evidence.append(el("p","CV kanıt kapsamı · %" + matching.evidence_coverage +
+                            " (tanımlı kriter ağırlıklarının kanıt bulunan bölümü)"));
+                        if (matching.evidence_coverage < 100) {
+                            evidence.append(el("p","Dikkat: Kapsam eksik. Eşleşme puanı yalnızca kanıt bulunan kriterlerden hesaplanır; tüm gereksinimler için kesin uyum yüzdesi değildir."));
+                        }
+                    }
+                    evidence.append(table(["Kategori","İş gereksinimi","Ağırlık","Durum","CV dayanağı"],
+                        (matching.requirements || []).map(item => [item.category,item.requirement,item.weight,item.status,
+                            (item.evidence_items || []).map(value=>value.text+(value.page ? " (s. "+value.page+")" : "")).join(" · ")])));
+                    evidence.append(el("p","Bu gösterge otomatik işe alım/ret kararı değildir. Kanıt bulunamadı durumu, adayın o beceriye sahip olmadığını kanıtlamaz. Nihai değerlendirme İK uzmanına aittir."));
+                    root.querySelectorAll(".ats-evidence").forEach(item => item.remove());
+                    anchor.after(evidence);
+                    evidence.focus({preventScroll:true});
+                    evidence.scrollIntoView({block:"nearest",behavior:"smooth"});
+                } catch(error) {
+                    notice(error.message,true);
+                } finally {
+                    button.disabled = false;
+                }
+            }
+            if (selectedCv) {
+                const quickMatch = el("div","",{class:"saas-form"});
+                quickMatch.append(el("p","Otomatik seçilen CV: "+selectedCv.filename +
+                    (cvDocuments.length>1 ? " · Başka belge kullanmak için aşağıdaki belge satırından inceleyebilirsiniz." : "")));
+                quickMatch.append(action("CV Uyumunu Analiz Et",button => analyzeCvMatch(selectedCv,quickMatch,button)));
+                root.append(quickMatch);
+            } else {
+                root.append(el("p","Bu ATS başvurusuna bağlı PDF/DOCX CV bulunmuyor. Önce aşağıdan CV yükleyin; ardından analiz yapabilirsiniz."));
+            }
             for (const doc of data.documents) {
-                const path = appRoute(id)+"/documents/"+doc.id;
                 const item = el("p");
-                item.append(link(doc.filename,apiRoot+path));
-                if (metadata.products.includes("ats")) {
-                    item.append(action("CV eşleşmesini incele",async () => {
-                        try {
-                            const matching = await api(path+"/match");
-                            const evidence = document.createElement("div");
-                            if (matching.match_score === null) {
-                                evidence.append(el("p","CV–pozisyon uyum yüzdesi hesaplanamadı."));
-                                evidence.append(el("p",matching.reason || "CV kanıtı veya pozisyon kriterleri eksik."));
-                                if (!matching.requirements?.length) {
-                                    evidence.append(el("p","Çözüm: Pozisyonlar > ilgili pozisyonu Düzenle > CV–Pozisyon Eşleşme Kriterleri alanından iş gereksinimlerini ve ağırlıkları kaydedin."));
-                                }
-                            } else {
-                                evidence.append(el("p","CV–pozisyon eşleşme puanı · %" + matching.match_score));
-                            }
-                            if (matching.evidence_coverage !== null) {
-                                evidence.append(el("p","CV kanıt kapsamı · %" + matching.evidence_coverage +
-                                    " (tanımlı kriter ağırlıklarının kanıt bulunan bölümü)"));
-                                if (matching.evidence_coverage < 100) {
-                                    evidence.append(el("p","Dikkat: Kapsam eksik. Eşleşme puanı yalnızca kanıt bulunan kriterlerden hesaplanır; tüm gereksinimler için kesin uyum yüzdesi değildir."));
-                                }
-                            }
-                            evidence.append(table(["Kategori","İş gereksinimi","Ağırlık","Durum","CV dayanağı"],
-                                (matching.requirements || []).map(row => [row.category,row.requirement,row.weight,row.status,
-                                    (row.evidence_items || []).map(item=>item.text+(item.page ? " (s. "+item.page+")" : "")).join(" · ")])));
-                            evidence.append(el("p","Bu gösterge otomatik işe alım/ret kararı değildir. Kanıt bulunamadı durumu, adayın o beceriye sahip olmadığını kanıtlamaz. Nihai değerlendirme İK uzmanına aittir."));
-                            item.nextElementSibling?.classList.contains("ats-evidence") && item.nextElementSibling.remove();
-                            evidence.className = "ats-evidence";
-                            item.after(evidence);
-                        } catch(error) { notice(error.message); }
-                    }));
+                item.append(link(doc.filename,apiRoot+appRoute(id)+"/documents/"+encodeURIComponent(doc.id)));
+                if (cvDocuments.some(candidate => candidate.id === doc.id)) {
+                    item.append(action("CV eşleşmesini incele",button => analyzeCvMatch(doc,item,button)));
                 }
                 root.append(item);
             }
