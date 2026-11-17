@@ -1,0 +1,36 @@
+name: ERNASA B2B Interview Template Tests
+
+on:
+  pull_request:
+    paths:
+      - 'backend/main.py'
+      - 'control/app.py'
+      - 'control/interview_templates.py'
+      - 'partner_interview.py'
+      - 'tests/test_partner_first_round_template.py'
+      - '.github/workflows/b2b-interview-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/main.py'
+      - 'control/app.py'
+      - 'control/interview_templates.py'
+      - 'partner_interview.py'
+      - 'tests/test_partner_first_round_template.py'
+      - '.github/workflows/b2b-interview-tests.yml'
+
+jobs:
+  interview-template-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install application requirements
+        run: python -m pip install -r requirements.txt
+      - name: Verify Python compilation
+        run: python -m compileall -q backend control partner_interview.py tests
+      - name: Verify first-round template mapping
+        run: python -m unittest -v tests.test_partner_first_round_template
