@@ -542,7 +542,16 @@ if (companyPortalPage) {
                     const actions = el("div","",{class:"saas-actions"});
                     actions.append(link("Mülakat bağlantısı",invite.interview_url));
                     if (shared.whatsapp) actions.append(link("WhatsApp",shared.whatsapp));
-                    if (shared.email) actions.append(link("E-posta",shared.email));
+                    if (invite.email && invite.interview_id) actions.append(action("Kurumsal E-posta Gönder",async button => {
+                        button.disabled = true;
+                        try {
+                            const result = await api("interviews/" + encodeURIComponent(invite.interview_id) + "/send-email","POST",{});
+                            notice(result.message || "Davet kurumsal e-postayla gönderildi.");
+                        } catch (error) {
+                            notice(error.message,true);
+                            button.disabled = false;
+                        }
+                    }));
                     preview.append(el("h4","Davet oluşturuldu"),draft,actions);
                     root.prepend(preview);
                     preview.focus();
