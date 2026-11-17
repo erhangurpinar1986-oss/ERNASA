@@ -269,6 +269,7 @@ createLinkButton.addEventListener("click", async () => {
             document.getElementById("candidateStatus");
 
         interviewLink.value = result.interview_url;
+        currentEmailInviteId = result.interview_id || "";
         candidateNumber.textContent = result.candidate_number;
         candidateStatus.textContent = "Durum: Bekliyor";
 
@@ -366,43 +367,36 @@ whatsappButton.addEventListener("click", () => {
 });
 
     
+let currentEmailInviteId = "";
 const emailButton =
     document.getElementById("emailButton");
 
-emailButton.addEventListener("click", () => {
-    const name =
-        document.getElementById("candidateName").value.trim();
-
-    const email =
-        document.getElementById("candidateEmail").value.trim();
-
-    const company =
-        document.getElementById("companyName").value.trim();
-
-    const position =
-        document.getElementById("positionName").value.trim();
-
-    const interviewLink =
-        document.getElementById("interviewLink").value;
-
-    const subject =
-        `${company} - ${position} Mülakat Daveti`;
-
-    const body =
-        `Merhaba ${name},\n\n` +
-        `${company} bünyesindeki ${position} pozisyonu için ` +
-        `online mülakat bağlantınız oluşturulmuştur.\n\n` +
-        `${interviewLink}\n\n` +
-        `Mülakatınızı 8 saat içerisinde tamamlamanızı rica ederiz.\n\n` +
-        `İyi çalışmalar.`;
-
-    const url =
-        `mailto:${email}` +
-        `?subject=${encodeURIComponent(subject)}` +
-        `&body=${encodeURIComponent(body)}`;
-
-    window.location.href = url;
+emailButton.addEventListener("click", async () => {
+    if (!currentEmailInviteId) {
+        alert("Önce mülakat bağlantısı oluşturun.");
+        return;
+    }
+    emailButton.disabled = true;
+    const originalLabel = emailButton.textContent;
+    emailButton.textContent = "Kurumsal e-posta gönderiliyor…";
+    try {
+        const response = await fetch(
+            "/api/ik/interviews/" + encodeURIComponent(currentEmailInviteId) + "/send-email",
+            {method:"POST", credentials:"same-origin", cache:"no-store"}
+        );
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || "Kurumsal e-posta gönderilemedi.");
+        }
+        emailButton.textContent = "Davet Gönderildi";
+        alert(result.message || "Davet ERNASA kurumsal e-postasıyla gönderildi.");
+    } catch (error) {
+        emailButton.disabled = false;
+        emailButton.textContent = originalLabel;
+        alert(error.message);
+    }
 });
+
 async function loadInterviewResults() {
     const resultsBox = document.getElementById("interviewResults");
 
