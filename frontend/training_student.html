@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>ERNASA Eğitim</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#173353;background:#f3f7fc}
+*{box-sizing:border-box}body{margin:0}main{max-width:870px;margin:32px auto;padding:0 18px}
+header{display:flex;align-items:center;gap:15px;margin-bottom:20px}header img{width:62px;height:62px;object-fit:contain}
+h1{margin:0;font-size:24px}h2{font-size:20px;margin:0 0 14px}
+section{background:white;padding:22px;border:1px solid #dce6f1;border-radius:13px;margin:14px 0}
+.muted{color:#64758a;font-size:14px}.answers{display:grid;gap:9px;margin:16px 0}
+button{font:inherit;border:1px solid #c5d5e8;background:#f1f6fc;color:#153657;padding:10px 14px;border-radius:8px;cursor:pointer}
+button.primary{background:#155abd;color:white;border-color:#155abd}button:disabled{opacity:.6}
+.choices{display:grid;gap:8px}.choice{width:100%;text-align:left}
+.status{min-height:26px;color:#205076;white-space:pre-line}.topline{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+progress{width:100%;height:15px;accent-color:#155abd}.explanation{border-left:3px solid #2b709d;background:#f2f8fe;padding:13px}
+</style></head><body><main>
+<header><img src="/assets/ernasalogo.png" alt="ERNASA"><div><h1>ERNASA Eğitim</h1><div class="muted" id="identity">Eğitim yükleniyor…</div></div></header>
+<section id="main"><p class="status">Oturum doğrulanıyor…</p></section>
+</main><script>
+"use strict";
+const panel=document.getElementById("main"),identity=document.getElementById("identity");
+let state, index=0;
+const add=(tag,content="",className="")=>{const x=document.createElement(tag);x.textContent=content;if(className)x.className=className;return x};
+async function api(path,body,csrf){
+ const opts={cache:"no-store",credentials:"same-origin"};
+ if(body){opts.method="POST";opts.headers={"Content-Type":"application/json","X-Training-CSRF":csrf};opts.body=JSON.stringify(body)}
+ const response=await fetch(path,opts);
+ if(!response.ok){const data=await response.json().catch(()=>({}));throw Error(data.detail||"İşlem başarısız: "+response.status)}
+ return response.json();
+}
+function render(){
+ const lesson=state.lessons[index],saved=state.answers;
+ const completed=Object.keys(saved).length,total=state.lessons.length;
+ panel.replaceChildren();
+ const head=add("div","","topline");
+ head.append(add("h2",state.title),add("span",(index+1)+"/"+total+" ders","muted"));
+ const meter=document.createElement("progress");meter.max=total;meter.value=completed;
+ panel.append(head,add("p",state.personnel_class+" · "+completed+" ders tamamlandı","muted"),meter,
+     add("h3",lesson.module+" — "+lesson.title),add("p",lesson.content),
+     add("h3",lesson.question));
+ const choices=add("div","","answers"),status=add("p","","status");
+ lesson.choices.forEach((choice,n)=>{
+     const button=add("button",String.fromCharCode(65+n)+". "+choice,"choice");
+     button.type="button";
+     button.disabled=Object.hasOwn(saved,String(index));
+     button.addEventListener("click",async()=>{
+         [...choices.children].forEach(x=>x.disabled=true);
+         status.textContent="Yanıt kaydediliyor…";
+         try{const result=await api("/api/training/answer",{index,choice:n},state.csrf);
+             saved[String(index)]=n;
+             status.textContent=result.correct?"Yanıt kaydedildi.":"Yanıt kaydedildi. Açıklamayı inceleyin.";
+             const explanation=add("p",result.explanation,"explanation");choices.after(explanation);
+             meter.value=Object.keys(saved).length;
+         }catch(e){status.textContent=e.message;[...choices.children].forEach(x=>x.disabled=false)}
+     });choices.append(button);
+ });
+ panel.append(choices,status);
+ if(Object.hasOwn(saved,String(index)))status.textContent="Bu dersin yanıtı daha önce kaydedildi.";
+ const nav=add("div","","topline");
+ const previous=add("button","Önceki ders"),next=add("button",index===total-1?"Başa dön":"Sonraki ders","primary");
+ previous.disabled=index===0;
+ previous.onclick=()=>{index--;render()};
+ next.onclick=()=>{index=index===total-1?0:index+1;render()};
+ nav.append(previous,next);panel.append(nav);
+}
+api("/api/training/me").then(data=>{state=data;identity.textContent=data.name+" · "+data.personnel_class;render()})
+ .catch(error=>{panel.replaceChildren(add("h2","Eğitime erişilemiyor"),add("p",error.message),add("p","İK yetkilinizden yeni davet isteyin.","muted"))});
+</script></body></html>
