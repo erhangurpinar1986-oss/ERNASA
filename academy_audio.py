@@ -122,9 +122,15 @@ def academy_page(token: str):
     data["modules"] = [module for module in data["modules"] if module["id"] in selected]
     if not data["modules"]:
         raise HTTPException(409, "Katılımcıya henüz eğitim atanmadı.")
-    # Final is common to the B2B training; other programs use course questions.
-    if assignments["program_id"] != "b2b_satis":
-        data["final"] = []
+    # The final assessment must match the assigned modules, not unseen lessons.
+    # The complete B2B curriculum retains its original 14-question final.
+    from academy_assignments import MODULE_TITLES
+    if not (assignments["program_id"] == "b2b_satis"
+            and selected == set(MODULE_TITLES)):
+        data["final"] = [
+            module["questions"][1] if len(module["questions"]) > 1 else module["questions"][0]
+            for module in data["modules"] if module.get("questions")
+        ][:14]
     encoded = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     html = html[:data_start] + encoded + html[data_start + data_size:]
     return HTMLResponse(content=html, headers=_headers())
