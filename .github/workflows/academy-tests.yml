@@ -57,4 +57,11 @@ jobs:
               assert 'function stopDictation()' in html
               assert 'function videoPracticePanel(m)' in html
               assert 'function scenarioPanel()' in html
+              for scenario,seconds in (('tanitim',90),('itiraz',180),('serbest',300)):
+                  import re
+                  assert re.search(rf"{scenario}:\\{{[^}}]*limit:{seconds}\\}}",html), (path,scenario)
+              assert 'scenarioLimitSeconds(session.scenario)*1000' in html
+              assert 'scenarioLimitSeconds(run.scenario)*1000' in html
+              assert 'const VIDEO_LIMIT_BYTES=40*1024*1024;' in html
+              assert 'const AUDIO_MAX_BYTES=12*1024*1024;' in html
           PY
