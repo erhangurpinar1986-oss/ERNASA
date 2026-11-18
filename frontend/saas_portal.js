@@ -484,6 +484,13 @@ if (companyPortalPage) {
                 hiddenLinks.append(link);
             }
         }
+        // Eğitim Atama, firma içindeki yetkili üç İK rolünün tamamına açıktır.
+        // Rol ve firma izolasyonu /egitim-atama API'sinde ayrıca doğrulanır.
+        const trainingLink = byId("trainingAssignmentMenu");
+        if (trainingLink && ["supervisor","hr_manager","hr_staff"].includes(metadata.role)) {
+            trainingLink.style.removeProperty("display");
+            navigation.append(trainingLink);
+        }
         // Ana Sayfa ve Genel Bakış aynı dashboard ekranıdır: tek görünür
         // Ana Sayfa bağlantısı kullan; eski kök linki gizli tut.
         home.hidden = true;
