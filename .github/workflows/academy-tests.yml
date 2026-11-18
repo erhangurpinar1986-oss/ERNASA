@@ -58,8 +58,10 @@ jobs:
               assert 'function videoPracticePanel(m)' in html
               assert 'function scenarioPanel()' in html
               for scenario,seconds in (('tanitim',90),('itiraz',180),('serbest',300)):
-                  import re
-                  assert re.search(rf"{scenario}:\\{{[^}}]*limit:{seconds}\\}}",html), (path,scenario)
+                  marker=scenario+':{'
+                  assert marker in html, (path,scenario)
+                  fragment=html.split(marker,1)[1].split('}',1)[0]
+                  assert 'limit:'+str(seconds) in fragment, (path,scenario)
               assert 'scenarioLimitSeconds(session.scenario)*1000' in html
               assert 'scenarioLimitSeconds(run.scenario)*1000' in html
               assert 'const VIDEO_LIMIT_BYTES=40*1024*1024;' in html
