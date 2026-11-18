@@ -87,14 +87,14 @@ def initialize_schema():
             created_at TEXT NOT NULL,
             video_allowed INTEGER NOT NULL DEFAULT 0
         )""")
-        # Additive migration: existing assignments remain audio-only.
-        try:
-            cur.execute("ALTER TABLE ernasa_training_assignments ADD COLUMN video_allowed INTEGER NOT NULL DEFAULT 0")
-        except Exception as exc:
-            message = str(exc).lower()
-            if "duplicate column" not in message and "already exists" not in message:
-                raise
-            db.rollback() if "psycopg2" in type(db).__module__ else None
+        # Additive migration without changing existing invite rows.
+        from database import DATABASE_URL
+        if DATABASE_URL:
+            cur.execute("ALTER TABLE ernasa_training_assignments ADD COLUMN IF NOT EXISTS video_allowed INTEGER NOT NULL DEFAULT 0")
+        else:
+            cur.execute("PRAGMA table_info(ernasa_training_assignments)")
+            if "video_allowed" not in {row["name"] for row in cur.fetchall()}:
+                cur.execute("ALTER TABLE ernasa_training_assignments ADD COLUMN video_allowed INTEGER NOT NULL DEFAULT 0")
         cur.execute("CREATE INDEX IF NOT EXISTS ernasa_training_assignments_tenant ON ernasa_training_assignments(company_id,created_at)")
         db.commit()
 
