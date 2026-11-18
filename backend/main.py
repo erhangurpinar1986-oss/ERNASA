@@ -584,6 +584,11 @@ async def attach_ats_document(application_id: str, cv: UploadFile = File(...),
     return ats.upload_document(UPLOAD_DIRECTORY, actor, application_id, cv.filename or 'cv', content)
 
 
+@app.get("/api/ik/ats/applications/{application_id}/document-availability")
+def ats_document_availability(application_id: str, actor: portal_access.Actor = Depends(require_ats)):
+    return ats.document_availability(UPLOAD_DIRECTORY, actor, application_id)
+
+
 @app.get("/api/ik/ats/applications/{application_id}/documents/{document_id}")
 def read_ats_document(application_id: str, document_id: str, actor: portal_access.Actor = Depends(require_ats)):
     path, name, media = ats.get_document(UPLOAD_DIRECTORY, actor, application_id, document_id)
