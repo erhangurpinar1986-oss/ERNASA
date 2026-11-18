@@ -359,7 +359,7 @@ if (companyPortalPage) {
         "suite_settings":"Firma Ayarları","suite_history":"İşlem Geçmişi",
         "cv":"CV Analizi","candidates":"Aday Takip Merkezi","personnel":"Personel Yönetimi",
         "usage":"Paket ve Kullanım","positions":"Pozisyonlar ve İlanlar",
-        "interviews":"Mülakatlar","dashboard":"Genel Bakış"
+        "interviews":"Mülakatlar","dashboard":"Ana Sayfa"
     };
     const availableScreens = new Set();
     const activeLinks = new Map();
@@ -431,7 +431,7 @@ if (companyPortalPage) {
         hiddenLinks.id = "portalSecondaryRoutes";
         hiddenLinks.setAttribute("aria-hidden","true");
         const primaries = [
-            ["dashboard","dashboard","Genel Bakış"],
+            ["dashboard","dashboard","Ana Sayfa"],
             ["pool",ats?"suite_pool":"candidates","Aday Havuzu"],
             ["positions","positions","Pozisyonlar ve İlanlar"],
             ["interviews",ai?"interviews":"suite_calendar","Mülakatlar"],
@@ -450,7 +450,7 @@ if (companyPortalPage) {
                 link.textContent = label;
             }
             const icons = {
-                dashboard:"layout-dashboard",pool:"users-round",positions:"briefcase",
+                dashboard:"house",pool:"users-round",positions:"briefcase",
                 interviews:"messages-square",evaluations:"clipboard-check",settings:"settings"
             };
             const symbol = document.createElement("i");
@@ -468,10 +468,11 @@ if (companyPortalPage) {
                 hiddenLinks.append(link);
             }
         }
-        // Ana sayfa bağlantısı kaybolmaz, ancak menüyü kalabalıklaştırmaz.
-        home.style.removeProperty("display");
-        home.classList.add("portal-home-link");
-        navigation.append(hiddenLinks,home);
+        // Ana Sayfa ve Genel Bakış aynı dashboard ekranıdır: tek görünür
+        // Ana Sayfa bağlantısı kullan; eski kök linki gizli tut.
+        home.hidden = true;
+        hiddenLinks.append(home);
+        navigation.append(hiddenLinks);
         if (ats) {
             byId("atsCandidateDetails").style.removeProperty("display");
             byId("newPositionButton").hidden = !manager;
