@@ -5,6 +5,7 @@ import portal_interviews
 import partner_interview
 import academy_audio
 import academy_assignments
+import academy_video
 import ernasa_training
 import ats
 import ats_cv_import
@@ -114,6 +115,7 @@ async def lifespan(_app):
     ernasa_training.initialize_schema()
     academy_audio.initialize_schema()
     academy_assignments.initialize_schema()
+    academy_video.initialize_schema()
     stop = asyncio.Event()
     with render_gateway.start_control() as control_server:
         _app.state.control_server = control_server
@@ -138,6 +140,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.include_router(ernasa_training.router)
 app.include_router(academy_audio.router)
 app.include_router(academy_assignments.router)
+app.include_router(academy_video.router)
 
 @app.middleware("http")
 async def route_control(request: Request, call_next):
