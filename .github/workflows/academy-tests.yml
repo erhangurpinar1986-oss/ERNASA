@@ -9,6 +9,7 @@ on:
       - academy_assignments.py
       - academy_assign.html
       - academy_portal.html
+      - academy_preview/index.html
       - ernasa_training.py
       - backend/main.py
       - tests/test_academy_audio.py
@@ -34,11 +35,22 @@ jobs:
         run: |
           python - <<'PY'
           import re, pathlib
-          for item in ['academy_portal.html','academy_assign.html']:
+          for item in ['academy_portal.html','academy_assign.html','academy_preview/index.html']:
               html=pathlib.Path(item).read_text(encoding='utf-8')
               scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
               assert scripts, item
-              pathlib.Path('/tmp/'+item+'.js').write_text('\n'.join(scripts),encoding='utf-8')
+              pathlib.Path('/tmp/'+item.replace('/','_')+'.js').write_text('\n'.join(scripts),encoding='utf-8')
           PY
           node --check /tmp/academy_portal.html.js
           node --check /tmp/academy_assign.html.js
+          node --check /tmp/academy_preview_index.html.js
+      - name: Confirm voice and scenario features
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for path in ('academy_portal.html','academy_preview/index.html'):
+              html=Path(path).read_text(encoding='utf-8')
+              assert 'engine.interimResults=true' in html
+              assert 'function presentationBrief(m)' in html
+              assert 'function stopDictation()' in html
+          PY
