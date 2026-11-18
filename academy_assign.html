@@ -99,7 +99,17 @@ async function create(){
  const p=document.createElement('p');p.textContent=v.recipient+' · '+v.module_ids.length+' ders · Son geçerlilik: '+new Date(v.expires_at).toLocaleString('tr-TR');
  const link=document.createElement('a');link.href=v.link;link.textContent=v.link;link.rel='noreferrer';link.target='_blank';
  const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent='Bağlantıyı kopyala';copy.onclick=()=>navigator.clipboard?.writeText(v.link);
- $('result').append(p,link,document.createTextNode(' '),copy);$('result').hidden=false;loadAssignments();
+ const subject='ERNASA Eğitim Daveti';
+ const body='Merhaba '+v.recipient+',\n\nSize özel ERNASA eğitim programınız için erişim bağlantısı aşağıdadır:\\n'+v.link+'\\n\\nBağlantı geçerlilik tarihi: '+new Date(v.expires_at).toLocaleString('tr-TR')+'\\n\\nEğitim boyunca sorularınız için İK yetkilinizle iletişime geçebilirsiniz.';
+ const email=document.createElement('a');email.textContent='E-posta taslağı aç';
+ email.href='mailto:'+encodeURIComponent($('email').value.trim())+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+ email.className='secondary';email.style.marginLeft='10px';
+ const wa=document.createElement('a');wa.textContent='WhatsApp paylaşım taslağı';
+ wa.href='https://wa.me/?text='+encodeURIComponent(body);wa.target='_blank';wa.rel='noopener noreferrer';
+ wa.className='secondary';wa.style.marginLeft='10px';
+ const info=document.createElement('p');info.className='muted';info.textContent='Bu seçenekler taslak açar; kullanıcı göndermedikçe davet iletilmiş sayılmaz.';
+ $('result').append(p,link,document.createTextNode(' '),copy,document.createTextNode(' '),email,document.createTextNode(' '),wa,info);
+ $('result').hidden=false;loadAssignments();
  }catch(e){$('status').textContent='Atama başarısız: '+e.message;}
  finally{$('create').disabled=false;}
 }
