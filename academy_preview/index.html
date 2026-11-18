@@ -159,8 +159,8 @@ function qbox(q,answer,key,mode,index){const have=Number.isInteger(answer),ok=ha
 // V1.6 — Kaydedilen sesler bu sayfa oturumu süresince bellekte tutulur; sunucuya gönderilmez.
 const audioRecords=new Map();
 let activeAudioRecording=null;
-const AUDIO_MAX_MS=90000;
-const AUDIO_MAX_BYTES=6*1024*1024;
+const AUDIO_MAX_MS=300000;
+const AUDIO_MAX_BYTES=12*1024*1024;
 function recordingMime(){
  if(typeof MediaRecorder==='undefined')return '';
  for(const m of ['audio/webm;codecs=opus','audio/webm','audio/mp4']){
@@ -174,12 +174,12 @@ function audioPracticePanel(m){
  const hasAudio=!!item;
  return `<section class="audio-practice" aria-label="Sesli satış yanıtı kaydı">
   <h3>🎙 Yukarıdaki senaryoya göre konuşmanı kaydet</h3>
-  <p class="audio-help">Yukarıda verilen müşteri senaryosuna ve konuşma sırasına göre prova yap. Kaydı dinleyebilir ve açık onayınla paylaşabilirsin. En fazla <b>90 saniye</b>. Ses kaydı, yazıya çevirme özelliğinden ayrıdır.</p>
+  <p class="audio-help">Yukarıda verilen müşteri senaryosuna ve konuşma sırasına göre prova yap. Kaydı dinleyebilir ve açık onayınla paylaşabilirsin. Bu senaryo için en fazla <b>${formatDuration(scenarioLimitSeconds(selectedScenario()))}</b>. Ses kaydı, yazıya çevirme özelliğinden ayrıdır.</p>
   <div class="audio-permission">🔒 <b>Mikrofon izni:</b> Yalnızca “Mikrofon izni iste ve kayda başla” butonuna bastığında tarayıcı iznini ister. İzin reddedilirse kayıt başlamaz. Kayıt kendiliğinden paylaşılmaz.</div>
   <div class="audio-actions">
     <button type="button" class="btn primary" id="audioStart" data-action="audio-start" ${recording||hasAudio?'disabled':''}>🎙 Mikrofon izni iste ve kayda başla</button>
     <button type="button" class="btn ${recording?'recording':''}" id="audioStop" data-action="audio-stop" ${recording?'':'disabled'}>■ Kaydı bitir</button>
-    <span class="audio-timer" id="audioTimer" aria-live="off">${recording?'00:00 / 01:30':hasAudio?'✓ Ses kaydı hazır':'00:00 / 01:30'}</span>
+    <span class="audio-timer" id="audioTimer" aria-live="off">${recording?'00:00 / '+formatClock(scenarioLimitSeconds(activeAudioRecording?.scenario||selectedScenario())):hasAudio?'✓ Ses kaydı hazır':'00:00 / '+formatClock(scenarioLimitSeconds(selectedScenario()))}</span>
   </div>
   <div class="audio-status" role="status" aria-live="polite" id="audioStatus">${recording?'🎤 Kayıt devam ediyor.':hasAudio?'✓ Kaydın hazır. Göndermeden önce dinleyebilirsin.':'Henüz ses kaydı oluşturulmadı.'}</div>
   <audio id="audioPlayback" class="audio-player" controls preload="none" ${hasAudio?'':'hidden'} src="${hasAudio?item.url:''}">Tarayıcın ses oynatmayı desteklemiyor.</audio>
@@ -219,7 +219,7 @@ async function startAudioRecording(){
  let mime=recordingMime();let recorder;
  try{recorder=new MediaRecorder(stream,mime?{mimeType:mime}:undefined);}
  catch(e){stream.getTracks().forEach(t=>t.stop());button.disabled=false;audioStatus('Ses kaydı başlatılamadı. Tarayıcının ses biçimi desteğini kontrol edin.');return;}
- const session={module,stream,recorder,chunks:[],started:Date.now(),timer:null};
+ const session={module,scenario:selectedScenario(),stream,recorder,chunks:[],started:Date.now(),timer:null};
  activeAudioRecording=session;
  const stopBtn=document.getElementById('audioStop');
  if(stopBtn){stopBtn.disabled=false;stopBtn.classList.add('recording');}
@@ -236,7 +236,7 @@ async function startAudioRecording(){
    const ext=/mp4/i.test(type)?'m4a':/ogg/i.test(type)?'ogg':'webm';
    const name='ERNASA_Satis_Pratigi_'+module.replace(/[^a-z0-9_-]/gi,'_')+'_'+new Date().toISOString().slice(0,10)+'.'+ext;
    const url=URL.createObjectURL(blob);
-   audioRecords.set(module,{blob,url,name,type});
+   audioRecords.set(module,{blob,url,name,type,scenario:session.scenario});
    if(state.cursor==='module'&&state.module===module){
     const el=document.getElementById('audioPlayback');if(el){el.src=url;el.hidden=false;}
     const start=document.getElementById('audioStart');if(start)start.disabled=true;
@@ -258,12 +258,12 @@ async function startAudioRecording(){
   }
  };
  try{recorder.start(250);}catch(e){activeAudioRecording=null;stream.getTracks().forEach(t=>t.stop());button.disabled=false;if(stopBtn){stopBtn.disabled=true;stopBtn.classList.remove('recording');}audioStatus('Ses kaydı başlatılamadı.');return;}
- audioStatus('🔴 Kayıt başladı. En fazla 90 saniye konuşabilirsiniz.');
+ audioStatus('🔴 Kayıt başladı. Süre: '+formatDuration(scenarioLimitSeconds(session.scenario))+'.');
  const tick=()=>{
   if(activeAudioRecording!==session)return;
   const secs=Math.floor((Date.now()-session.started)/1000);const timer=document.getElementById('audioTimer');
-  if(timer)timer.textContent=String(Math.floor(secs/60)).padStart(2,'0')+':'+String(secs%60).padStart(2,'0')+' / 01:30';
-  if(Date.now()-session.started>=AUDIO_MAX_MS)stopAudioRecording();
+  if(timer)timer.textContent=formatClock(secs)+' / '+formatClock(scenarioLimitSeconds(session.scenario));
+  if(Date.now()-session.started>=Math.min(AUDIO_MAX_MS,scenarioLimitSeconds(session.scenario)*1000))stopAudioRecording();
  };
  session.timer=setInterval(tick,250);
 }
@@ -283,7 +283,7 @@ function deleteAudioRecording(){
  const start=document.getElementById('audioStart');if(start)start.disabled=false;
  for(const id of ['audioDownload','audioDelete','audioShare']){const btn=document.getElementById(id);if(btn)btn.disabled=true;}
  const checkbox=document.getElementById('audioConsent');if(checkbox){checkbox.checked=false;checkbox.disabled=true;}
- const timer=document.getElementById('audioTimer');if(timer)timer.textContent='00:00 / 01:30';
+ const timer=document.getElementById('audioTimer');if(timer)timer.textContent='00:00 / '+formatClock(scenarioLimitSeconds(selectedScenario()));
  audioStatus('Ses kaydı silindi. İstersen yeni kayıt başlatabilirsin.');
 }
 function downloadAudioRecording(){
@@ -310,7 +310,7 @@ async function shareAudioRecording(){
   try{
    const form=new FormData();
    form.append('module_id',state.module);
-   form.append('scenario_id',selectedScenario());
+   form.append('scenario_id',item.scenario||selectedScenario());
    form.append('consent','yes');
    form.append('audio',item.blob,item.name);
    const response=await fetch('/api/egitim/'+encodeURIComponent(token)+'/ses',{
@@ -349,10 +349,16 @@ const PRESENTATION_BRIEFS={"vizyon":["İK müdürü","ERNASA'yı ilk kez duyuyor
 
 const ACADEMY_VIDEO_ALLOWED=true;
 const PRESENTATION_SCENARIOS={
- tanitim:{title:'1 · Tanışma ve ürün tanıtımı',task:'Müşteri ürünü ilk kez duyuyor. Kısa bir tanışmayla başlayıp ihtiyaç sorusu sor ve ürünün hangi problemi çözdüğünü açıkla.',limit:60},
- itiraz:{title:'2 · Zor müşteri itirazı',task:'Müşteri “Bize gerçekten faydası ne? Fiyatı yüksek, verilerimiz güvende mi?” diye soruyor. Karşı sorularla ihtiyacı anla, doğrulanmayan vaatlerden kaçın ve uygun sonraki adımı öner.',limit:90},
- serbest:{title:'3 · Serbest satış sunumu',task:'İK müdürüne ERNASA İK ürününü kendi sözlerinle tanıt. ATS, CV analizi, dijital mülakat ve insan denetimi yaklaşımını birleştirerek kısa demo görüşmesi talep et.',limit:90}
+ tanitim:{title:'1 · Tanışma ve ürün tanıtımı',task:'Müşteri ürünü ilk kez duyuyor. Kısa bir tanışmayla başlayıp ihtiyaç sorusu sor ve ürünün hangi problemi çözdüğünü açıkla.',limit:90},
+ itiraz:{title:'2 · Zor müşteri itirazı',task:'Müşteri “Bize gerçekten faydası ne? Fiyatı yüksek, verilerimiz güvende mi?” diye soruyor. Karşı sorularla ihtiyacı anla, doğrulanmayan vaatlerden kaçın ve uygun sonraki adımı öner.',limit:180},
+ serbest:{title:'3 · Serbest satış sunumu',task:'İK müdürüne ERNASA İK ürününü kendi sözlerinle tanıt. ATS, CV analizi, dijital mülakat ve insan denetimi yaklaşımını birleştirerek kısa demo görüşmesi talep et.',limit:300}
 };
+function scenarioLimitSeconds(id){return PRESENTATION_SCENARIOS[id]?.limit||90;}
+function formatDuration(seconds){
+ const min=Math.floor(seconds/60), sec=seconds%60;
+ return min+' dakika'+(sec?' '+sec+' saniye':'');
+}
+function formatClock(seconds){return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');}
 function selectedScenario(){return state.scenarios?.[state.module]||'tanitim';}
 function scenarioPanel(){
  const current=selectedScenario(),sc=PRESENTATION_SCENARIOS[current];
@@ -360,14 +366,14 @@ function scenarioPanel(){
  <div class="practice-brief-tag">GERÇEKÇİ MÜŞTERİ SİMÜLASYONLARI · KOLAYDAN ZORA</div>
  <h3>Hangi sunum görevini denemek istersin?</h3>
  <div class="scenario-options">${Object.entries(PRESENTATION_SCENARIOS).map(([id,item])=>`<button type="button" class="btn ${id===current?'primary':''}" data-scenario="${id}" aria-pressed="${id===current}">${safe(item.title)}</button>`).join('')}</div>
- <div class="scenario-task"><b>Görevin:</b> ${safe(sc.task)} <b>Hedef süre:</b> ${sc.limit} saniye.</div>
+ <div class="scenario-task"><b>Görevin:</b> ${safe(sc.task)} <b>Azami sunum süresi:</b> ${formatDuration(sc.limit)}.</div>
  <p class="smallprint">Bir senaryo seçip istersen önce yazılı taslak oluştur. Sesli kayıt veya kamera kaydını seçmek zorunlu değildir; aynı ders için tekrar prova yapabilirsin. Gönderilen kaydın senaryosu İK inceleme ekranında görünür.</p>
  </section>`;
 }
 const videoRecords=new Map();
 let activeVideoRecording=null;
-const VIDEO_LIMIT_BYTES=20*1024*1024;
-const VIDEO_LIMIT_MS=90000;
+const VIDEO_LIMIT_BYTES=40*1024*1024;
+const VIDEO_LIMIT_MS=300000;
 function videoMime(){
  if(typeof MediaRecorder==='undefined')return '';
  for(const type of ['video/webm;codecs=vp8,opus','video/webm','video/mp4']){
@@ -388,9 +394,9 @@ function videoPracticePanel(m){
  const item=videoRecords.get(m.id),recording=activeVideoRecording?.module===m.id;
  return `<section class="audio-practice" aria-label="İsteğe bağlı görüntülü sunum">
  <h3>🎥 İsteğe bağlı görüntülü sunum yap</h3>
- <p class="audio-help">Kamerayı ve mikrofonu yalnızca kendi izninle aç. Seçtiğin müşteri senaryosuna göre en fazla 90 saniye konuş. Önce kaydı izle, sonra istersen gönder. Bu uygulama canlı görüşme değildir.</p>
+ <p class="audio-help">Kamerayı ve mikrofonu yalnızca kendi izninle aç. Seçtiğin müşteri senaryosuna göre en fazla ${formatDuration(scenarioLimitSeconds(selectedScenario()))} konuş. Önce kaydı izle, sonra istersen gönder. Bu uygulama canlı görüşme değildir.</p>
  <div class="audio-actions"><button type="button" id="videoStart" class="btn primary" data-action="video-start" ${recording||item?'disabled':''}>🎥 Kamera ve mikrofon izni iste</button>
- <button type="button" id="videoStop" class="btn" data-action="video-stop" ${recording?'':'disabled'}>■ Görüntülü kaydı bitir</button><span id="videoTimer" class="audio-timer">${recording?'Kayıt sürüyor':item?'✓ Video hazır':'00:00 / 01:30'}</span></div>
+ <button type="button" id="videoStop" class="btn" data-action="video-stop" ${recording?'':'disabled'}>■ Görüntülü kaydı bitir</button><span id="videoTimer" class="audio-timer">${recording?'Kayıt sürüyor':item?'✓ Video hazır':'00:00 / '+formatClock(scenarioLimitSeconds(selectedScenario()))}</span></div>
  <div id="videoStatus" class="audio-status" role="status" aria-live="polite">${item?'✓ Görüntülü sunum kaydı hazır.':'Henüz görüntülü sunum kaydedilmedi.'}</div>
  <video id="videoPreview" controls playsinline preload="none" ${item?'':'hidden'} src="${item?.url||''}" style="width:100%;max-width:440px;display:${item?'block':'none'};margin:12px 0;border-radius:12px;background:#101c31"></video>
  <div class="audio-actions"><button type="button" class="btn" id="videoDownload" data-action="video-download" ${item?'':'disabled'}>⬇ Videoyu indir</button>
@@ -418,7 +424,7 @@ async function startVideoRecording(){
  const mime=videoMime();let recorder;
  try{recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:650000,audioBitsPerSecond:64000});}
  catch(e){stream.getTracks().forEach(t=>t.stop());if(start)start.disabled=false;videoStatus('Görüntülü kayıt başlatılamadı.');return;}
- const run={module,stream,recorder,chunks:[],started:Date.now(),timer:null};
+ const run={module,scenario:selectedScenario(),stream,recorder,chunks:[],started:Date.now(),timer:null};
  activeVideoRecording=run;const stopBtn=document.getElementById('videoStop');if(stopBtn)stopBtn.disabled=false;
  const view=document.getElementById('videoPreview');if(view){view.hidden=false;view.style.display='block';view.srcObject=stream;view.muted=true;view.autoplay=true;view.play().catch(()=>{});}
  recorder.ondataavailable=e=>{if(e.data?.size)run.chunks.push(e.data);};
@@ -430,7 +436,7 @@ async function startVideoRecording(){
   if(view){view.pause();view.srcObject=null;view.muted=false;view.autoplay=false;}
   if(blob.size>0&&blob.size<=VIDEO_LIMIT_BYTES){
    const url=URL.createObjectURL(blob),extension=/mp4/.test(mediaType)?'mp4':'webm';
-   videoRecords.set(module,{blob,url,name:'ERNASA_Sunum_'+module+'_'+new Date().toISOString().slice(0,10)+'.'+extension});
+   videoRecords.set(module,{blob,url,scenario:run.scenario,name:'ERNASA_Sunum_'+module+'_'+new Date().toISOString().slice(0,10)+'.'+extension});
    if(state.cursor==='module'&&state.module===module){
     if(view){view.src=url;view.controls=true;view.hidden=false;view.style.display='block';}
     ['videoDownload','videoDelete'].forEach(id=>{const b=document.getElementById(id);if(b)b.disabled=false;});
@@ -440,7 +446,7 @@ async function startVideoRecording(){
   }else{
    if(start)start.disabled=false;
    if(view){view.removeAttribute('src');view.hidden=true;view.style.display='none';}
-   videoStatus(blob.size>VIDEO_LIMIT_BYTES?'Video 20 MB sınırını aştı; daha kısa kayıt deneyin.':'Video dosyası oluşturulamadı.');
+   videoStatus(blob.size>VIDEO_LIMIT_BYTES?'Video 40 MB sınırını aştı; daha kısa kayıt deneyin.':'Video dosyası oluşturulamadı.');
   }
   const stop=document.getElementById('videoStop');if(stop)stop.disabled=true;
   const timer=document.getElementById('videoTimer');if(timer)timer.textContent='✓ Kayıt tamamlandı';
@@ -451,8 +457,8 @@ async function startVideoRecording(){
  run.timer=setInterval(()=>{
   if(activeVideoRecording!==run)return;
   const seconds=Math.floor((Date.now()-run.started)/1000);
-  const timer=document.getElementById('videoTimer');if(timer)timer.textContent=String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0')+' / 01:30';
-  if(Date.now()-run.started>=VIDEO_LIMIT_MS)stopVideoRecording();
+  const timer=document.getElementById('videoTimer');if(timer)timer.textContent=formatClock(seconds)+' / '+formatClock(scenarioLimitSeconds(run.scenario));
+  if(Date.now()-run.started>=Math.min(VIDEO_LIMIT_MS,scenarioLimitSeconds(run.scenario)*1000))stopVideoRecording();
  },250);
 }
 function stopVideoRecording(){
@@ -486,7 +492,7 @@ async function shareVideoRecording(){
  const button=document.getElementById('videoShare');if(button)button.disabled=true;
  videoStatus('Görüntülü sunum İK sistemine gönderiliyor…');
  try{
-  const form=new FormData();form.append('module_id',state.module);form.append('scenario_id',selectedScenario());
+  const form=new FormData();form.append('module_id',state.module);form.append('scenario_id',item.scenario||selectedScenario());
   form.append('consent','yes');form.append('video',item.blob,item.name);
   const response=await fetch('/api/egitim/'+encodeURIComponent(token)+'/video',{method:'POST',body:form,credentials:'same-origin'});
   const data=await response.json().catch(()=>({}));
