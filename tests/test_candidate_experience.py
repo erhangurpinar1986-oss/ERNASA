@@ -118,7 +118,7 @@ def test_provider_builds_real_html_button_not_plain_mailto(monkeypatch):
         seen.append(__import__("json").loads(req.data))
         return DummyResponse()
     monkeypatch.setenv("ERNASA_RESEND_API_KEY","test-secret")
-    monkeypatch.setenv("ERNASA_EMAIL_FROM","office@ernasa.com")
+    monkeypatch.setenv("ERNASA_EMAIL_FROM","iletisim@ernasa.com")
     monkeypatch.setattr(invite_email,"urlopen",fake_urlopen)
     link="https://ernasa.com/egitim/"+("a"*43)
     result=invite_email.send_training_invitation(
