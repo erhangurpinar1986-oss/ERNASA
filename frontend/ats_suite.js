@@ -442,6 +442,8 @@ if (companyPortalPage) {
                 notice("Aday notu kaydedildi.");
             }));
             root.append(el("h4","Belgeler"));
+            const {documents: availabilityRows} = await api(appRoute(id)+"/document-availability");
+            const availabilityById = new Map(availabilityRows.map(item => [item.id,item]));
             const cvDocuments = data.documents.filter(doc => /\.(pdf|docx)$/i.test(doc.filename || ""));
             const cvNamed = cvDocuments.filter(doc => /cv|özgeçmiş|ozgecmis|resume/i.test(doc.filename || ""));
             // Öncelik CV olarak adlandırılmış belgelerde; aksi hâlde son yüklenen PDF/DOCX.
@@ -501,9 +503,22 @@ if (companyPortalPage) {
             }
             for (const doc of data.documents) {
                 const item = el("p");
-                item.append(link(doc.filename,apiRoot+appRoute(id)+"/documents/"+encodeURIComponent(doc.id)));
-                if (cvDocuments.some(candidate => candidate.id === doc.id)) {
-                    item.append(action("CV eşleşmesini incele",button => analyzeCvMatch(doc,item,button)));
+                const health = availabilityById.get(doc.id);
+                const available = health && ["disk_verified","archived"].includes(health.status);
+                if (available) {
+                    item.append(link(doc.filename,apiRoot+appRoute(id)+"/documents/"+encodeURIComponent(doc.id)));
+                    item.append(document.createTextNode(" · Dosya erişilebilir"));
+                } else {
+                    item.append(el("strong",doc.filename));
+                    const status = health?.status === "text_only"
+                        ? " · Özgün dosya bulunamadı; mülakatta saklanan CV metniyle analiz yapılabilir."
+                        : " · Özgün CV dosyası bulunamadı. Aşağıdaki CV yükleme alanından aynı dosyayı yeniden yükleyin; mevcut başvuru korunur.";
+                    item.append(document.createTextNode(status));
+                }
+                if (cvDocuments.some(candidate => candidate.id === doc.id) && (available || health?.status === "text_only")) {
+                    item.append(document.createTextNode(" · "));
+                    item.append(action(available ? "CV eşleşmesini incele" : "Saklanan metinden analiz et",
+                        button => analyzeCvMatch(doc,item,button)));
                 }
                 root.append(item);
             }
