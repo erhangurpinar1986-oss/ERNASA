@@ -22,6 +22,7 @@ NAV['/mulakat-sablonlari'] = 'Mülakat Şablonları'
 ERNASA_INVITE_PATH = '/ernasa-aday-davetleri'
 ERNASA_INVITE_SLUG = 'ernasa-davet'
 NAV[ERNASA_INVITE_PATH] = 'ERNASA Aday Davetleri'
+NAV['/aday-deneyimi'] = 'Aday Deneyimi'
 ROLES = {'founder':'Kurucu', 'supervisor':'Firma Süpervizörü', 'staff':'Personel'}
 ACCESS = {'founder':set(NAV), 'supervisor':{'/', '/kullanicilar'}, 'staff':{'/'}}
 STAFF_PERMISSION = 'subscription_read'
@@ -717,6 +718,32 @@ def navigation(routes_allowed, current):
         if links:
             groups.append(f'<div class="nav-group"><span>{title}</span>{"".join(links)}</div>')
     return '<nav aria-label="Yönetim menüsü">' + ''.join(groups) + '</nav>'
+
+
+def candidate_experience_panel(data):
+    """Founder-only aggregated report; no survey response identifiers exposed."""
+    names = {'ease':'Kullanım kolaylığı','clarity':'Soruların açıklığı',
+             'interview':'Dijital mülakat deneyimi','training':'Eğitimin faydası',
+             'overall':'Genel memnuniyet'}
+    content = ('<p>Gönüllü değerlendirmeler, mülakat puanları ve aday '
+               'kararlarından ayrı saklanır. Yalnızca toplam sonuçlar gösterilir.</p>')
+    for key,title in (('mulakat','Dijital mülakat'),('egitim','Eğitim platformu')):
+        result=data.get(key,{})
+        ratings=result.get('ratings',{})
+        rows=[]
+        for col,label in names.items():
+            item=ratings.get(col,{})
+            mean=item.get('average')
+            if item.get('count'):
+                rows.append((e(label),e(str(mean))+' / 5',e(str(item['count']))))
+        content += card(title+' · '+str(result.get('count',0))+' değerlendirme',
+                        table(('Başlık','Ortalama','Yanıt sayısı'),rows))
+        comments=result.get('comments') or []
+        if comments:
+            content += card(title+' · öneriler',
+                     '<ul>'+''.join('<li>'+e(str(c))+'</li>' for c in comments)+'</ul>')
+    content += '<p class="notice">Katılımcıların kimliği ve tekil mülakat yanıtları bu ekranda gösterilmez.</p>'
+    return content
 
 
 def table(headers, rows):
@@ -1453,8 +1480,12 @@ class Handler(BaseHTTPRequestHandler):
                 actor['routes'] = allowed_routes(db,actor)
                 if not getattr(self.server,'ernasa_invite_handler',None):
                     actor['routes'] = actor['routes'] - {ERNASA_INVITE_PATH}
+                if not getattr(self.server,'experience_summary',None):
+                    actor['routes'] = actor['routes'] - {'/aday-deneyimi'}
                 if path not in actor['routes'] or (post and actor['role']=='staff'):
                     raise Problem(403,'Bu ekran için yetkiniz yok.')
+                if post and path=='/aday-deneyimi':
+                    raise Problem(405,'Bu ekranda değişiklik yapılamaz.')
                 if post:
                     target = (ernasa_invitation_page(self.server.ernasa_invite_handler,db,actor,data,{})
                               if path==ERNASA_INVITE_PATH else mutate(db,actor,path,data))
@@ -1462,7 +1493,8 @@ class Handler(BaseHTTPRequestHandler):
                     target = target or path
                     return self.redirect(target+('&' if '?' in target else '?')+'kaydedildi=1')
                 query = {k:v[-1] for k,v in parse_qs(url.query,max_num_fields=12).items()}
-                content = (ernasa_invitation_page(self.server.ernasa_invite_handler,db,actor,None,query)
+                content = (candidate_experience_panel(self.server.experience_summary()) if path=='/aday-deneyimi'
+                           else ernasa_invitation_page(self.server.ernasa_invite_handler,db,actor,None,query)
                            if path==ERNASA_INVITE_PATH else screen(db,actor,path,query))
                 if query.get('kaydedildi')=='1':
                     content = '<p class="notice" role="status">İşlem kaydedildi.</p>'+content

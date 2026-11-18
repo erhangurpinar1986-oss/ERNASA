@@ -49,6 +49,12 @@ a{color:#25578c;overflow-wrap:anywhere}#status{padding:8px 0;color:#244d74}#resu
 <button type="button" id="refreshMedia" class="secondary">Gönderilen kayıtları yenile</button>
 <div id="mediaStatus" aria-live="polite"></div><div id="mediaEntries"></div>
 </section>
+<section><h2>Önceden oluşturulmuş eğitim davetini yeniden gönder</h2>
+<p class="muted">Daha önce oluşturduğunuz davetin linkini buraya yapıştırın. Sistem daveti yeniden oluşturmaz; kayıtlı alıcı e-postasına tıklanabilir HTML daveti gönderir.</p>
+<label for="existingLink">Mevcut eğitim bağlantısı</label>
+<input id="existingLink" type="text" placeholder="https://ernasa.com/egitim/..." autocomplete="off">
+<button type="button" id="sendExisting">Mevcut daveti e-posta ile gönder</button>
+<p id="existingStatus" role="status"></p></section>
 <section><h2>Son atamalar</h2><button id="refresh" type="button" class="secondary">Listeyi yenile</button><div id="assignments" aria-live="polite"></div></section>
 <script>
 const $=id=>document.getElementById(id);
@@ -106,13 +112,21 @@ async function create(){
  const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent='Bağlantıyı kopyala';copy.onclick=()=>navigator.clipboard?.writeText(v.link);
  const subject='ERNASA Eğitim Daveti';
  const body='Merhaba '+v.recipient+',\n\nSize özel ERNASA eğitim programınız için erişim bağlantısı aşağıdadır:\n'+v.link+'\n\nBağlantı geçerlilik tarihi: '+new Date(v.expires_at).toLocaleString('tr-TR')+'\n\nEğitim boyunca sorularınız için İK yetkilinizle iletişime geçebilirsiniz.';
- const email=document.createElement('a');email.textContent='E-posta taslağı aç';
- email.href='mailto:'+encodeURIComponent($('email').value.trim())+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
- email.className='secondary';email.style.marginLeft='10px';
+ const email=document.createElement('button');email.type='button';email.className='secondary';email.textContent='📧 Eğitime Başla bağlantısını e-posta ile gönder';email.style.marginLeft='10px';
+ email.disabled=!$('email').value.trim();
+ email.onclick=async()=>{
+  if(!confirm('Kayıtlı e-posta adresine kişisel eğitim daveti gönderilsin mi?'))return;
+  email.disabled=true;$('status').textContent='Eğitim daveti e-posta servisine gönderiliyor…';
+  try{
+   const key=v.link.split('/').pop();const sent=await request('/api/egitim/ik/davet/'+encodeURIComponent(key)+'/gonder',{method:'POST'});
+   $('status').textContent=sent.sent?'✓ Davet e-posta servisine teslim edildi.':'Gönderim doğrulanamadı.';
+  }catch(err){$('status').textContent='E-posta gönderilemedi: '+err.message;}
+  finally{email.disabled=false;}
+ };
  const wa=document.createElement('a');wa.textContent='WhatsApp paylaşım taslağı';
  wa.href='https://wa.me/?text='+encodeURIComponent(body);wa.target='_blank';wa.rel='noopener noreferrer';
  wa.className='secondary';wa.style.marginLeft='10px';
- const info=document.createElement('p');info.className='muted';info.textContent='Bu seçenekler taslak açar; kullanıcı göndermedikçe davet iletilmiş sayılmaz.';
+ const info=document.createElement('p');info.className='muted';info.textContent='Kişiye özel davet, e-posta gönderimi açıkça onaylandığında HTML buton ve tıklanabilir bağlantıyla iletilir. WhatsApp seçeneği yalnızca taslaktır.';
  $('result').append(p,link,document.createTextNode(' '),copy,document.createTextNode(' '),email,document.createTextNode(' '),wa,info);
  $('result').hidden=false;loadAssignments();
  }catch(e){$('status').textContent='Atama başarısız: '+e.message;}
@@ -179,6 +193,20 @@ async function init(){try{
  }catch(e){$('status').textContent='Eğitim kataloğu yüklenemedi: '+e.message;}}
  $('analyze').onclick=analyze;$('fromSystem').onclick=readSavedReport;$('refreshReports').onclick=loadReports;$('manual').onclick=()=>{$('reportStatus').textContent='Rapor olmadan seçim yapabilirsiniz.';$('suggestions').hidden=true;};
  $('defaults').onclick=preset;$('all').onclick=()=>selectModules(catalog.modules.map(m=>m.id));
+ $('sendExisting').onclick=async()=>{
+ const raw=$('existingLink').value.trim();let u;
+ try{u=new URL(raw);}catch(e){$('existingStatus').textContent='Geçerli eğitim bağlantısını yapıştırın.';return;}
+ const match=u.pathname.match(/^\/egitim\/([A-Za-z0-9_-]{43})\/?$/);
+ if(!['ernasa.com','www.ernasa.com'].includes(u.hostname)||u.protocol!=='https:'||!match){
+  $('existingStatus').textContent='Yalnızca ERNASA kişisel eğitim bağlantısı kabul edilir.';return;
+ }
+ if(!confirm('Bu daveti kayıtlı katılımcı e-posta adresine yeniden gönderelim mi?'))return;
+ $('sendExisting').disabled=true;$('existingStatus').textContent='E-posta gönderiliyor…';
+ try{const v=await request('/api/egitim/ik/davet/'+match[1]+'/gonder',{method:'POST'});
+  $('existingStatus').textContent=v.sent?'✓ Davet e-posta servisine iletildi.':'Gönderim doğrulanamadı.';
+ }catch(e){$('existingStatus').textContent='E-posta gönderilemedi: '+e.message;}
+ finally{$('sendExisting').disabled=false;}
+ };
  $('clear').onclick=()=>selectModules([]);$('refreshMedia').onclick=loadMedia;$('create').onclick=create;$('refresh').onclick=loadAssignments;
  init();
 </script></body></html>

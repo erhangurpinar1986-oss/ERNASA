@@ -7,6 +7,7 @@ import academy_audio
 import academy_assignments
 import academy_video
 import ernasa_training
+import candidate_experience
 import ats
 import ats_cv_import
 import ik_cv_invites
@@ -113,6 +114,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 async def lifespan(_app):
     # Isolated training schemas: do not modify existing candidate/interview data.
     ernasa_training.initialize_schema()
+    candidate_experience.initialize_schema()
     academy_audio.initialize_schema()
     academy_assignments.initialize_schema()
     academy_video.initialize_schema()
@@ -138,6 +140,7 @@ app = FastAPI(
 )
 app.add_middleware(SecurityHeadersMiddleware)
 app.include_router(ernasa_training.router)
+app.include_router(candidate_experience.router)
 app.include_router(academy_audio.router)
 app.include_router(academy_assignments.router)
 app.include_router(academy_video.router)

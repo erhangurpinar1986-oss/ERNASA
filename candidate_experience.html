@@ -1,0 +1,59 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow">
+<title>ERNASA · Aday Deneyimi Değerlendirmesi</title>
+<style>
+:root{font-family:system-ui,"Segoe UI",Arial,sans-serif;color:#173350;background:#f3f6fa}
+*{box-sizing:border-box}body{margin:0;padding:22px}main{max-width:690px;margin:30px auto;background:#fff;border:1px solid #dce5ee;border-radius:16px;padding:28px;box-shadow:0 6px 24px #18324b0b}
+h1{font-size:24px;color:#133456}p{line-height:1.6;color:#4d647c}fieldset{border:1px solid #e1e7f0;border-radius:10px;margin:15px 0;padding:13px 15px}legend{font-weight:650;padding:0 6px}
+.stars{display:flex;gap:10px;flex-wrap:wrap}.stars label{display:flex;gap:4px;align-items:center;background:#f3f7fc;border:1px solid #e3eaf1;border-radius:8px;padding:8px 11px;cursor:pointer}
+textarea{display:block;resize:vertical;width:100%;min-height:110px;margin:12px 0;padding:12px;border:1px solid #bacbdf;border-radius:8px;font:inherit}
+button{background:#153c66;color:#fff;border:0;padding:12px 19px;border-radius:9px;font:inherit;cursor:pointer}button:disabled{opacity:.55;cursor:default}
+button.secondary{background:#fff;border:1px solid #c7d4e3;color:#173e69;margin-left:6px}
+#status{font-weight:600;padding-top:12px}.small{font-size:13px;color:#587087}.consent{display:flex;align-items:flex-start;gap:9px;margin:17px 0}
+</style></head><body><main><h1>ERNASA İK · Aday Deneyimi</h1>
+<p>ERNASA ile gerçekleştirdiğiniz süreci değerlendirmek ister misiniz? Yanıtlarınız isteğe bağlıdır; işe alım, mülakat veya eğitim puanlarını etkilemez. Anket adınızı veya e-posta adresinizi istemez.</p>
+<form id="survey">
+<fieldset><legend>Kullanım kolaylığı</legend><div class="stars" data-field="ease"></div></fieldset>
+<fieldset><legend>Soruların açıklığı ve anlaşılabilirliği</legend><div class="stars" data-field="clarity"></div></fieldset>
+<fieldset id="interviewQuestion"><legend>Dijital mülakat deneyimi</legend><div class="stars" data-field="interview"></div></fieldset>
+<fieldset id="trainingQuestion"><legend>Eğitim ve sunum modüllerinin faydası</legend><div class="stars" data-field="training"></div></fieldset>
+<fieldset><legend>Genel memnuniyet</legend><div class="stars" data-field="overall"></div></fieldset>
+<label for="comment"><b>Geliştirmemizi istediğiniz bir özellik var mı?</b> (isteğe bağlı)</label>
+<textarea id="comment" maxlength="500" placeholder="Önerinizi yazabilirsiniz. Lütfen ad, iletişim bilgisi veya diğer kişisel bilgileri eklemeyin."></textarea>
+<label class="consent"><input type="checkbox" id="voluntary"><span><b>Değerlendirmeyi gönüllü olarak gönderiyorum.</b> Yanıtlarımın ürün geliştirmek için toplu biçimde kullanılmasını kabul ediyorum.</span></label>
+<button type="submit" id="submit">Değerlendirmeyi Gönder</button><button type="button" class="secondary" id="skip">Şimdi değil</button>
+<p id="status" role="status" aria-live="polite"></p></form>
+<p class="small">Geri bildirimler işe alım kararına bağlanmaz. Bir davetten yalnızca bir değerlendirme kabul edilir; tekrar gönderimler yeni kayıt oluşturmaz.</p>
+</main>
+<script>
+const qs=new URLSearchParams(location.search),source=qs.get('source'),token=qs.get('token');
+if(!['egitim','mulakat'].includes(source)||!token){document.querySelector('#survey').hidden=true;document.querySelector('#status').textContent='Bağlantı geçersiz.';}
+document.querySelector('#interviewQuestion').hidden=source!=='mulakat';
+document.querySelector('#trainingQuestion').hidden=source!=='egitim';
+for(const el of document.querySelectorAll('.stars')){
+ const name=el.dataset.field;
+ for(let n=1;n<=5;n++){
+  const label=document.createElement('label');
+  const input=document.createElement('input');input.type='radio';input.name=name;input.value=String(n);input.required=true;
+  const span=document.createElement('span');span.textContent=n+' ★';
+  label.append(input,span);el.append(label);
+ }
+}
+function get(field){const x=document.querySelector('input[name="'+field+'"]:checked');return x?Number(x.value):null;}
+document.querySelector('#skip').onclick=()=>{document.querySelector('#survey').hidden=true;document.querySelector('#status').textContent='Değerlendirmeyi atladınız. Teşekkür ederiz.';};
+document.querySelector('#survey').onsubmit=async e=>{
+ e.preventDefault();const btn=document.querySelector('#submit'),status=document.querySelector('#status');
+ if(!document.querySelector('#voluntary').checked){status.textContent='Gönderim için gönüllü katılım onayını işaretleyin.';return;}
+ btn.disabled=true;status.textContent='Değerlendirmeniz gönderiliyor…';
+ try{
+  const payload={source,token,ease:get('ease'),clarity:get('clarity'),overall:get('overall'),
+   interview:source==='mulakat'?get('interview'):null,training:source==='egitim'?get('training'):null,
+   comment:document.querySelector('#comment').value,voluntary:true};
+  const result=await fetch('/api/aday-deneyimi',{method:'POST',credentials:'same-origin',
+   headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  if(!result.ok){const data=await result.json().catch(()=>({}));throw Error(typeof data.detail==='string'?data.detail:'Gönderim başarısız.');}
+  document.querySelector('#survey').hidden=true;
+  status.textContent='✓ Değerlendirmeniz alındı. Görüşünüz için teşekkür ederiz.';
+ }catch(err){btn.disabled=false;status.textContent='Değerlendirme gönderilemedi: '+err.message;}
+};
+</script></body></html>

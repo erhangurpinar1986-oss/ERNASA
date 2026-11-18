@@ -41,6 +41,8 @@ def start_control():
         db.execute("SELECT 1 FROM ik_interview_templates LIMIT 1").fetchone()
 
     with app.server(target,0) as server:
+        import candidate_experience
+        server.experience_summary = candidate_experience.summary
         server.origin = origin
         server.public_prefix = "/control"
         server.internal_host = f"127.0.0.1:{server.server_port}"

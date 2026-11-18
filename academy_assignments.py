@@ -304,6 +304,46 @@ def create_assignment(request: Request, body: AssignmentRequest):
             "link":base+"/egitim/"+token,"sent":False}
 
 
+@router.post("/api/egitim/ik/davet/{token}/gonder")
+def send_assignment_mail(request: Request, token: str):
+    """Explicit send by authenticated HR: reuse existing invite, never reassign."""
+    company_id, _ = _actor(request,write=True)
+    if not ernasa_training.TOKEN_PATTERN.fullmatch(token):
+        raise HTTPException(404,"Eğitim daveti bulunamadı.")
+    digest = sha256(token.encode("ascii")).hexdigest()
+    with closing(get_connection()) as db:
+        c=db.cursor()
+        if company_id is None:
+            c.execute("""SELECT i.recipient,i.email,i.expires_at,i.revoked
+                FROM ernasa_training_assignments a
+                JOIN ernasa_training_invites i ON i.token_hash=a.token_hash
+                WHERE a.token_hash=? AND a.company_id IS NULL""",(digest,))
+        else:
+            c.execute("""SELECT i.recipient,i.email,i.expires_at,i.revoked
+                FROM ernasa_training_assignments a
+                JOIN ernasa_training_invites i ON i.token_hash=a.token_hash
+                WHERE a.token_hash=? AND a.company_id=?""",(digest,company_id))
+        row=c.fetchone()
+    if not row:
+        raise HTTPException(404,"Bu firmaya ait eğitim daveti bulunamadı.")
+    if row["revoked"] or datetime.fromisoformat(row["expires_at"])<=datetime.now(timezone.utc):
+        raise HTTPException(410,"Davetin geçerlilik süresi sona erdi.")
+    if not row["email"]:
+        raise HTTPException(422,"Davet e-postası belirtilmemiş.")
+    from services import invite_email
+    url="https://ernasa.com/egitim/"+token
+    try:
+        provider_id=invite_email.send_training_invitation(
+            recipient=row["email"],name=row["recipient"],url=url,
+            expires_at=row["expires_at"],
+            idempotency_key="ernasa-academy-"+digest[:32]+"-"+secrets.token_hex(8))
+    except invite_email.EmailConfigurationError as exc:
+        raise HTTPException(503,str(exc)) from None
+    except (invite_email.EmailDeliveryError, ValueError) as exc:
+        raise HTTPException(502,str(exc)) from None
+    return {"sent":True,"provider":"transactional-email","message":"Eğitim daveti e-posta servisine teslim edildi."}
+
+
 @router.get("/api/egitim/ik/atamalar")
 def list_assignments(request: Request):
     company_id,_=_actor(request)
