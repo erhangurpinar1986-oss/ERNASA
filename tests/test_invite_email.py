@@ -118,6 +118,27 @@ class InvitationEmailTests(unittest.TestCase):
                 self.assertIn(expected,mapped)
                 self.assertNotIn("Invalid API key",mapped)
 
+    def test_invalid_api_key_403_is_detected_without_secret(self):
+        import io
+        from urllib.error import HTTPError
+        provider=HTTPError("https://api.resend.com/emails",403,"Forbidden",{},
+            io.BytesIO(b'{"name":"invalid_api_key","message":"The API key is invalid"}'))
+        result=invite_email._safe_provider_error(provider)
+        self.assertIn("API anahtarı geçersiz",result)
+        self.assertNotIn("The API key is invalid",result)
+
+    def test_readonly_probe_returns_safe_error_name(self):
+        import io
+        from urllib.error import HTTPError
+        with patch.dict(os.environ, {"ERNASA_RESEND_API_KEY":"test-only",
+                  "ERNASA_EMAIL_FROM":"iletisim@ernasa.com"}), patch.object(
+                  invite_email,"urlopen",side_effect=HTTPError("https://api.resend.com/domains",
+                  403,"Forbidden",{},io.BytesIO(b'{"name":"invalid_api_key","message":"secret-value"}'))):
+            result=invite_email.inspect_sender_domain()
+        self.assertEqual(result["result"],"read_access_denied_403")
+        self.assertEqual(result["error_name"],"invalid_api_key")
+        self.assertNotIn("secret-value",str(result))
+
     def test_safe_resend_error_does_not_echo_untrusted_email(self):
         import io
         from urllib.error import HTTPError
