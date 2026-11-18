@@ -352,67 +352,105 @@ function dataQuestion(mode,key){if(mode==='exam')return ACADEMY_DATA.final[Numbe
 function handleAnswer(mode,key,index){const q=dataQuestion(mode,key);if(!q||!Number.isInteger(index)||index<0||index>=q.choices.length)return;let bucket=mode==='exam'?state.examAnswers:state.moduleAnswers;if(Number.isInteger(bucket[key]))return;bucket[key]=index;save();if(mode==='exam')exam();else lesson(state.module);const element=$(`#q-${mode}-${mode==='exam'?key:key.split(':')[1]}`);if(element){element.scrollIntoView({behavior:'smooth',block:'center'});}nav();if(!state.mute)readAloud((index===q.correct?'Doğru yanıt. ':'Doğru yanıt: '+q.choices[q.correct]+'. ')+q.why);}
 function exportResults(){const pr=progress(),out={academy:'ERNASA Satış Akademisi',version:ACADEMY_DATA.version,participant:ACADEMY_DATA.name,exported_at:new Date().toISOString(),preview_only:true,lesson_progress:{completed_modules:pr.doneModules,total_modules:ACADEMY_DATA.modules.length,answered_questions:pr.completed,total_questions:ACADEMY_DATA.modules.reduce((n,m)=>n+m.questions.length,0)},scores:{product:scoreFor('urun'),sales:scoreFor('satis'),final:scoreFor('exam')},notes:Object.fromEntries(Object.entries(state.notes).filter(([k,v])=>String(v).trim())),notice:'Yerel ön izleme sonuçları; otomatik işe alma ya da temsil yetkisi değildir.'};let blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json;charset=utf-8'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='ERNASA_Katılımcı_Egitim_Sonuc_Ozeti.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),500);}
 
-// Sesle yanıt: yalnızca kullanıcı mikrofonu açıkça başlattığında tarayıcı konuşma tanıması çalışır.
+// Türkçe sesle yazma: geçici sözcükleri anında göster; stop() sonrası final sonucu al.
 const SpeechInput=window.SpeechRecognition||window.webkitSpeechRecognition;
-let dictation=null, activeDictationField=null, activeDictationButton=null, dictationError='';
+let dictation=null,activeDictationField=null,activeDictationButton=null,dictationError='';
 function micStatus(field,message){
- const wrap=field?.closest('.dictation-wrap');const status=wrap?.querySelector('.dictation-status');
+ const status=field?.closest('.dictation-wrap')?.querySelector('.dictation-status');
  if(status)status.textContent=message;
 }
+function resetDictationButton(button){
+ if(!button)return;
+ button.classList.remove('listening');
+ button.setAttribute('aria-pressed','false');
+ button.textContent='🎙';button.title='Türkçe konuşarak yanıtla';button.disabled=false;
+}
 function stopDictation(){
- if(dictation){try{dictation.stop()}catch(e){}dictation=null;}
- if(activeDictationButton){activeDictationButton.classList.remove('listening');activeDictationButton.setAttribute('aria-pressed','false');activeDictationButton.textContent='🎙';activeDictationButton.title='Mikrofonla yanıtla';}
- activeDictationField=null;activeDictationButton=null;
+ // Ekran değişirken önceki oturumun sonuçları yeni dersin alanına yazılmamalı.
+ const engine=dictation,button=activeDictationButton;
+ dictation=null;activeDictationField=null;activeDictationButton=null;
+ if(engine)try{engine.abort();}catch(e){}
+ resetDictationButton(button);
 }
 function toggleDictation(button){
- const wrap=button.closest('.dictation-wrap');const field=wrap?.querySelector('textarea');
+ const field=button.closest('.dictation-wrap')?.querySelector('textarea');
  if(!field)return;
- if(dictation){stopDictation();micStatus(field,'Mikrofon durduruldu. Metninizi düzenleyip kaydedebilirsiniz.');return;}
- if(!SpeechInput){micStatus(field,'Tarayıcınız sesle yazmayı desteklemiyor. Güncel Chrome veya Edge kullanabilir ya da yanıtı yazabilirsiniz.');return;}
- // Kullanıcı bu düğmeye basmadan mikrofon izni istenmez.
+ if(dictation){
+  if(activeDictationField!==field)stopDictation();
+  else{
+   if(button.disabled)return;
+   button.disabled=true;
+   micStatus(field,'Son kelimeler işleniyor; konuşmanız metne aktarılıyor…');
+   try{dictation.stop();}catch(e){
+    stopDictation();micStatus(field,'Mikrofon kapandı. Görünen metni kontrol edin.');
+   }
+   return;
+  }
+ }
+ if(!window.isSecureContext){
+  micStatus(field,'Mikrofonla yanıt için güvenli HTTPS bağlantısı gerekiyor.');return;
+ }
+ if(!SpeechInput){
+  micStatus(field,'Tarayıcınız Türkçe konuşmayı yazıya dönüştürmeyi desteklemiyor. Güncel Chrome veya Edge kullanın.');return;
+ }
  stop();dictationError='';
  let engine;
- try{engine=new SpeechInput();engine.lang='tr-TR';engine.continuous=true;engine.interimResults=false;engine.maxAlternatives=1;}
- catch(e){micStatus(field,'Mikrofon başlatılamadı. Lütfen tarayıcınızı kontrol edin.');return;}
+ try{
+  engine=new SpeechInput();engine.lang='tr-TR';
+  engine.continuous=true;engine.interimResults=true;engine.maxAlternatives=1;
+ }catch(e){micStatus(field,'Ses tanıma başlatılamadı. Tarayıcı ayarlarını kontrol edin.');return;}
+ const session={prefix:field.value.trim(),latest:'',seen:false};
  dictation=engine;activeDictationField=field;activeDictationButton=button;
- engine.onresult=function(ev){
-  if(activeDictationField!==field)return;
-  let words='';
-  for(let i=ev.resultIndex;i<ev.results.length;i++){
-   if(ev.results[i].isFinal)words+=' '+ev.results[i][0].transcript.trim();
+ const active=()=>dictation===engine&&activeDictationField===field;
+ function apply(transcript){
+  if(!active())return;
+  field.value=[session.prefix,transcript].filter(Boolean).join(' ').trim();
+  field.dispatchEvent(new Event('input',{bubbles:true}));
+  if(field.id==='practiceNote'){state.notes[state.module]=field.value;save();}
+ }
+ engine.onstart=()=>{if(active())micStatus(field,'🎙 Dinliyor: konuşmaya başlayın. Kelimeler anında yazılacak.');};
+ engine.onresult=ev=>{
+  if(!active())return;
+  const words=[];let interim=false;
+  for(let i=0;i<ev.results.length;i++){
+   const item=ev.results[i],part=(item?.[0]?.transcript||'').trim();
+   if(!part)continue;
+   words.push(part);
+   if(!item.isFinal)interim=true;
   }
-  if(words.trim()){
-   field.value=(field.value.trimEnd()+' '+words.trim()).trim();
-   field.dispatchEvent(new Event('input',{bubbles:true}));
-   if(field.id==='practiceNote'){state.notes[state.module]=field.value;save();}
-   micStatus(field,'✓ Konuşmanız metne eklendi. Devam edebilir veya mikrofonu durdurabilirsiniz.');
-  }
+  if(!words.length)return;
+  session.seen=true;session.latest=words.join(' ');
+  apply(session.latest);
+  micStatus(field,interim?'… Konuşmanız yazılıyor; tamamlanınca kontrol edin.':'✓ Konuşmanız metne eklendi; devam edebilir veya durdurabilirsiniz.');
  };
- engine.onerror=function(ev){
+ engine.onerror=ev=>{
+  if(!active())return;
   dictationError=ev.error||'unknown';
-  const messages={
-   'not-allowed':'Mikrofon izni verilmedi. Tarayıcı izinlerini kontrol edin.',
-   'service-not-allowed':'Tarayıcının konuşma tanıma hizmetine izin verilmedi.',
-   'audio-capture':'Mikrofon algılanamadı. Bilgisayarın ses girişini kontrol edin.',
-   'network':'Ses tanıma hizmetine erişilemedi. Bağlantı veya tarayıcı desteğini kontrol edin.',
-   'no-speech':'Ses algılanmadı. Mikrofonu tekrar başlatabilirsiniz.',
-   'language-not-supported':'Türkçe konuşma tanıma bu cihazda desteklenmiyor.'
+  const problems={
+   'not-allowed':'Mikrofon izni verilmedi. Tarayıcının adres çubuğundan mikrofon iznini açın.',
+   'service-not-allowed':'Tarayıcı konuşma tanıma hizmetine erişemiyor.',
+   'audio-capture':'Mikrofon bulunamadı. Windows ses girişini kontrol edin.',
+   'network':'Konuşma tanıma servisine bağlantı kurulamadı. İnternet ve tarayıcı hizmetlerini kontrol edin.',
+   'no-speech':'Ses algılanmadı. Mikrofon girişini kontrol edin ve tekrar deneyin.',
+   'language-not-supported':'Bu tarayıcıda Türkçe konuşma tanıma kullanılamıyor.',
+   'aborted':'Konuşma tanıma iptal edildi.'
   };
-  micStatus(field,messages[dictationError]||'Ses tanıma tamamlanamadı. Klavyeyle yazmaya devam edebilirsiniz.');
+  micStatus(field,problems[dictationError]||'Ses tanıma hatası: '+dictationError);
  };
- engine.onend=function(){
-  if(activeDictationField===field){
-   const status=field.closest('.dictation-wrap')?.querySelector('.dictation-status');
-   if(!dictationError&&status&&!status.textContent.startsWith('✓'))status.textContent='Mikrofon kapandı. Metni kontrol ederek kaydedebilirsiniz.';
-   dictation=null;activeDictationField=null;
-   if(activeDictationButton){activeDictationButton.classList.remove('listening');activeDictationButton.setAttribute('aria-pressed','false');activeDictationButton.textContent='🎙';activeDictationButton.title='Mikrofonla yanıtla';}
-   activeDictationButton=null;
+ engine.onend=()=>{
+  if(!active())return;
+  if(!dictationError){
+   if(session.seen){apply(session.latest);micStatus(field,'✓ Metin kaydedildi; yanıtınızı gözden geçirebilirsiniz.');}
+   else micStatus(field,'Mikrofon kapandı ancak konuşma algılanmadı. Ses girişini ve konuşma tanıma hizmetini kontrol edin.');
   }
+  dictation=null;activeDictationField=null;activeDictationButton=null;
+  resetDictationButton(button);
  };
  try{
-  engine.start();button.classList.add('listening');button.setAttribute('aria-pressed','true');button.textContent='■';button.title='Kaydı durdur';
-  micStatus(field,'🎙 Mikrofon dinliyor. Türkçe konuşun; bitirmek için kırmızı düğmeye basın.');
- }catch(err){stopDictation();micStatus(field,'Mikrofon kullanılamadı. Yerel dosyayı HTTPS üzerinden açmak gerekebilir.');}
+  engine.start();button.classList.add('listening');
+  button.setAttribute('aria-pressed','true');button.textContent='■';
+  button.title='Konuşmayı bitir';micStatus(field,'Mikrofon açılıyor. İzin sorulursa onaylayın.');
+ }catch(e){stopDictation();micStatus(field,'Mikrofon açılamadı; tarayıcı izinlerini kontrol edin.');}
 }
 function decorateTextareas(){
  document.querySelectorAll('textarea:not([data-dictation-ready])').forEach(field=>{
