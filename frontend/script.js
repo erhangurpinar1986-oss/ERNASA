@@ -390,7 +390,13 @@ submitAnswerButton.addEventListener("click", () => {
             answerText.value = "";
             answerText.style.display = "none";
             document.getElementById("voiceTypingHint").hidden = true;
-            submitAnswerButton.style.display = "none";
+            const completedCard=document.createElement('div');
+            completedCard.style.marginTop='18px';
+            const a=document.createElement('a');a.textContent='★ ERNASA İK deneyimini değerlendir (isteğe bağlı)';
+            a.href='/aday-deneyimi?source=mulakat&token='+encodeURIComponent(interviewToken);
+            a.style.cssText='display:inline-block;padding:12px 18px;background:#e7f3fd;border-radius:9px;color:#163f67;font-weight:700;text-decoration:none';
+            completedCard.append(a);
+            questionText.parentElement.append(completedCard);
             return;
         }
 
