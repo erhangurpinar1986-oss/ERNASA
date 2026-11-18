@@ -294,6 +294,11 @@ def test_unreadable_cv_is_not_scored_as_zero(sample_ats,monkeypatch):
     import ats_matching
     monkeypatch.setattr(ats_matching,"_pdf_text_lines",lambda path: [])
     monkeypatch.setattr(ats_matching,"_ocr_pdf_lines",lambda path: [])
+    # Emulate the second PDF parser being unable to read the image-only file.
+    import pdfplumber
+    def unreadable_pdf(*_args, **_kwargs):
+        raise RuntimeError("No text layer")
+    monkeypatch.setattr(pdfplumber,"open",unreadable_pdf)
     comparison=ats_matching.evidence_match(root,actor,app_id,doc_id)
     assert comparison["match_score"] is None
     assert comparison["evidence_coverage"] == 0
