@@ -271,3 +271,31 @@ def test_reupload_same_cv_keeps_completed_interview_answers_report_and_link(samp
         assert source["company_id"] == actor.company_id
     assert len(ats.details(actor,app_id)["documents"]) == 1
     assert ats.get_document(root,actor,app_id,doc_id)[0].read_bytes() == original_bytes
+
+
+def test_image_only_pdf_uses_offline_ocr_for_cv_matching(sample_ats,monkeypatch):
+    root,actor,_,app_id,doc_id=sample_ats
+    import ats_matching
+    original=ats_matching._pdf_text_lines
+    # A scanned PDF has no legible native text; bounded offline OCR supplies lines.
+    monkeypatch.setattr(ats_matching,"_pdf_text_lines",lambda path: [])
+    monkeypatch.setattr(ats_matching,"_ocr_pdf_lines",
+                        lambda path: [("WMS ve forklift tecrubem var",1)])
+    match=ats_matching.evidence_match(root,actor,app_id,doc_id)
+    assert match["match_score"] == 100
+    assert match["evidence_coverage"] == 100
+    assert match["text_extraction_status"] == "readable"
+    assert "WMS" in ats_matching.source_text(root,actor,app_id,doc_id)
+    monkeypatch.setattr(ats_matching,"_pdf_text_lines",original)
+
+
+def test_unreadable_cv_is_not_scored_as_zero(sample_ats,monkeypatch):
+    root,actor,_,app_id,doc_id=sample_ats
+    import ats_matching
+    monkeypatch.setattr(ats_matching,"_pdf_text_lines",lambda path: [])
+    monkeypatch.setattr(ats_matching,"_ocr_pdf_lines",lambda path: [])
+    comparison=ats_matching.evidence_match(root,actor,app_id,doc_id)
+    assert comparison["match_score"] is None
+    assert comparison["evidence_coverage"] == 0
+    assert comparison["text_extraction_status"] == "unreadable"
+    assert "OCR" in comparison["reason"]
