@@ -6,6 +6,7 @@ on:
   pull_request:
     paths:
       - academy_audio.py
+      - academy_video.py
       - academy_assignments.py
       - academy_assign.html
       - academy_portal.html
@@ -14,6 +15,7 @@ on:
       - backend/main.py
       - tests/test_academy_audio.py
       - tests/test_academy_assignments.py
+      - tests/test_academy_video.py
       - .github/workflows/academy-tests.yml
 jobs:
   test-academy:
@@ -28,9 +30,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest
       - name: Validate Python source
-        run: python -m py_compile academy_audio.py academy_assignments.py ernasa_training.py backend/main.py tests/test_academy_audio.py tests/test_academy_assignments.py
+        run: python -m py_compile academy_audio.py academy_assignments.py academy_video.py ernasa_training.py backend/main.py tests/test_academy_audio.py tests/test_academy_assignments.py tests/test_academy_video.py
       - name: Run voice API tests
-        run: python -m pytest tests/test_academy_audio.py tests/test_academy_assignments.py -q
+        run: python -m pytest tests/test_academy_audio.py tests/test_academy_assignments.py tests/test_academy_video.py -q
       - name: Validate academy JavaScript
         run: |
           python - <<'PY'
@@ -53,4 +55,6 @@ jobs:
               assert 'engine.interimResults=true' in html
               assert 'function presentationBrief(m)' in html
               assert 'function stopDictation()' in html
+              assert 'function videoPracticePanel(m)' in html
+              assert 'function scenarioPanel()' in html
           PY
