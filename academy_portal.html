@@ -356,13 +356,13 @@ const PRESENTATION_SCENARIOS={
 function selectedScenario(){return state.scenarios?.[state.module]||'tanitim';}
 function scenarioPanel(){
  const current=selectedScenario(),sc=PRESENTATION_SCENARIOS[current];
- return \`<section class="practice-brief scenario-choice" aria-label="Sunum simülasyonu seç">
+ return `<section class="practice-brief scenario-choice" aria-label="Sunum simülasyonu seç">
  <div class="practice-brief-tag">GERÇEKÇİ MÜŞTERİ SİMÜLASYONLARI · KOLAYDAN ZORA</div>
  <h3>Hangi sunum görevini denemek istersin?</h3>
- <div class="scenario-options">\${Object.entries(PRESENTATION_SCENARIOS).map(([id,item])=>\`<button type="button" class="btn \${id===current?'primary':''}" data-scenario="\${id}" aria-pressed="\${id===current}">\${safe(item.title)}</button>\`).join('')}</div>
- <div class="scenario-task"><b>Görevin:</b> \${safe(sc.task)} <b>Hedef süre:</b> \${sc.limit} saniye.</div>
+ <div class="scenario-options">${Object.entries(PRESENTATION_SCENARIOS).map(([id,item])=>`<button type="button" class="btn ${id===current?'primary':''}" data-scenario="${id}" aria-pressed="${id===current}">${safe(item.title)}</button>`).join('')}</div>
+ <div class="scenario-task"><b>Görevin:</b> ${safe(sc.task)} <b>Hedef süre:</b> ${sc.limit} saniye.</div>
  <p class="smallprint">Bir senaryo seçip istersen önce yazılı taslak oluştur. Sesli kayıt veya kamera kaydını seçmek zorunlu değildir; aynı ders için tekrar prova yapabilirsin. Gönderilen kaydın senaryosu İK inceleme ekranında görünür.</p>
- </section>\`;
+ </section>`;
 }
 const videoRecords=new Map();
 let activeVideoRecording=null;
@@ -384,20 +384,20 @@ function refreshVideoPanel(){
  if(button)button.disabled=!item||!agree?.checked||!!activeVideoRecording||!ACADEMY_VIDEO_ALLOWED;
 }
 function videoPracticePanel(m){
- if(!ACADEMY_VIDEO_ALLOWED)return \`<p class="smallprint">🎥 Görüntülü sunum bu eğitim için atanmadı. Sesli sunumu kullanabilirsin; kamera zorunlu değildir.</p>\`;
+ if(!ACADEMY_VIDEO_ALLOWED)return `<p class="smallprint">🎥 Görüntülü sunum bu eğitim için atanmadı. Sesli sunumu kullanabilirsin; kamera zorunlu değildir.</p>`;
  const item=videoRecords.get(m.id),recording=activeVideoRecording?.module===m.id;
- return \`<section class="audio-practice" aria-label="İsteğe bağlı görüntülü sunum">
+ return `<section class="audio-practice" aria-label="İsteğe bağlı görüntülü sunum">
  <h3>🎥 İsteğe bağlı görüntülü sunum yap</h3>
  <p class="audio-help">Kamerayı ve mikrofonu yalnızca kendi izninle aç. Seçtiğin müşteri senaryosuna göre en fazla 90 saniye konuş. Önce kaydı izle, sonra istersen gönder. Bu uygulama canlı görüşme değildir.</p>
- <div class="audio-actions"><button type="button" id="videoStart" class="btn primary" data-action="video-start" \${recording||item?'disabled':''}>🎥 Kamera ve mikrofon izni iste</button>
- <button type="button" id="videoStop" class="btn" data-action="video-stop" \${recording?'':'disabled'}>■ Görüntülü kaydı bitir</button><span id="videoTimer" class="audio-timer">\${recording?'Kayıt sürüyor':item?'✓ Video hazır':'00:00 / 01:30'}</span></div>
- <div id="videoStatus" class="audio-status" role="status" aria-live="polite">\${item?'✓ Görüntülü sunum kaydı hazır.':'Henüz görüntülü sunum kaydedilmedi.'}</div>
- <video id="videoPreview" controls playsinline preload="none" \${item?'':'hidden'} src="\${item?.url||''}" style="width:100%;max-width:440px;display:\${item?'block':'none'};margin:12px 0;border-radius:12px;background:#101c31"></video>
- <div class="audio-actions"><button type="button" class="btn" id="videoDownload" data-action="video-download" \${item?'':'disabled'}>⬇ Videoyu indir</button>
- <button type="button" class="btn" id="videoDelete" data-action="video-delete" \${item?'':'disabled'}>🗑 Videoyu sil</button></div>
- <label class="audio-share-consent"><input type="checkbox" id="videoConsent" \${item?'':'disabled'}><span><b>Görüntü ve ses kaydımı göndermeyi onaylıyorum.</b> Kaydımın ERNASA'daki yetkili İK personeli tarafından eğitim değerlendirmesi amacıyla izlenmesini kabul ediyorum.</span></label>
+ <div class="audio-actions"><button type="button" id="videoStart" class="btn primary" data-action="video-start" ${recording||item?'disabled':''}>🎥 Kamera ve mikrofon izni iste</button>
+ <button type="button" id="videoStop" class="btn" data-action="video-stop" ${recording?'':'disabled'}>■ Görüntülü kaydı bitir</button><span id="videoTimer" class="audio-timer">${recording?'Kayıt sürüyor':item?'✓ Video hazır':'00:00 / 01:30'}</span></div>
+ <div id="videoStatus" class="audio-status" role="status" aria-live="polite">${item?'✓ Görüntülü sunum kaydı hazır.':'Henüz görüntülü sunum kaydedilmedi.'}</div>
+ <video id="videoPreview" controls playsinline preload="none" ${item?'':'hidden'} src="${item?.url||''}" style="width:100%;max-width:440px;display:${item?'block':'none'};margin:12px 0;border-radius:12px;background:#101c31"></video>
+ <div class="audio-actions"><button type="button" class="btn" id="videoDownload" data-action="video-download" ${item?'':'disabled'}>⬇ Videoyu indir</button>
+ <button type="button" class="btn" id="videoDelete" data-action="video-delete" ${item?'':'disabled'}>🗑 Videoyu sil</button></div>
+ <label class="audio-share-consent"><input type="checkbox" id="videoConsent" ${item?'':'disabled'}><span><b>Görüntü ve ses kaydımı göndermeyi onaylıyorum.</b> Kaydımın ERNASA'daki yetkili İK personeli tarafından eğitim değerlendirmesi amacıyla izlenmesini kabul ediyorum.</span></label>
  <div class="audio-actions"><button type="button" id="videoShare" class="btn primary" data-action="video-share" disabled>📤 Görüntülü sunumu İK'ye gönder</button></div>
- <p class="smallprint">30 gün saklama süresi. Önizleme sitesinde kayıt yalnızca cihazındadır; gerçek gönderim kişisel ERNASA eğitim bağlantısında çalışır.</p></section>\`;
+ <p class="smallprint">30 gün saklama süresi. Önizleme sitesinde kayıt yalnızca cihazındadır; gerçek gönderim kişisel ERNASA eğitim bağlantısında çalışır.</p></section>`;
 }
 async function startVideoRecording(){
  const module=state.module;
