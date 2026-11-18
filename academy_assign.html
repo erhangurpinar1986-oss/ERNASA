@@ -16,7 +16,7 @@ button:disabled{opacity:.5;cursor:default}.secondary{background:#fff;color:#173d
 a{color:#25578c;overflow-wrap:anywhere}#status{padding:8px 0;color:#244d74}#result{padding:15px;background:#ecf7f1;border-radius:9px}
 @media(max-width:690px){.grid{grid-template-columns:1fr}}
 </style></head><body>
-<h1>ERNASA · Eğitim Atama Merkezi</h1>
+<h1>ERNASA · Eğitim Atama Merkezi</h1><p id="corporateMailStatus" role="status" class="muted">Kurumsal e-posta servisi kontrol ediliyor…</p>
 <p class="muted">Yetkili İK personeli için: eğitim kataloğu, rapordan ders önerisi, manuel seçim ve kişiye özel erişim bağlantısı.</p>
 <section><h2>1 · Katılımcı ve program</h2><div class="grid">
 <div><label for="candidate">Katılımcı adı</label><input id="candidate" type="text" maxlength="120" placeholder="Ad soyad" required></div>
@@ -53,7 +53,7 @@ a{color:#25578c;overflow-wrap:anywhere}#status{padding:8px 0;color:#244d74}#resu
 <p class="muted">Daha önce oluşturduğunuz davetin linkini buraya yapıştırın. Sistem daveti yeniden oluşturmaz; kayıtlı alıcı e-postasına tıklanabilir HTML daveti gönderir.</p>
 <label for="existingLink">Mevcut eğitim bağlantısı</label>
 <input id="existingLink" type="text" placeholder="https://ernasa.com/egitim/..." autocomplete="off">
-<button type="button" id="sendExisting">Mevcut daveti e-posta ile gönder</button>
+<button type="button" id="sendExisting" disabled>Mevcut daveti kurumsal e-postadan gönder</button>
 <p id="existingStatus" role="status"></p></section>
 <section><h2>Son atamalar</h2><button id="refresh" type="button" class="secondary">Listeyi yenile</button><div id="assignments" aria-live="polite"></div></section>
 <script>
@@ -112,8 +112,8 @@ async function create(){
  const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent='Bağlantıyı kopyala';copy.onclick=()=>navigator.clipboard?.writeText(v.link);
  const subject='ERNASA Eğitim Daveti';
  const body='Merhaba '+v.recipient+',\n\nSize özel ERNASA eğitim programınız için erişim bağlantısı aşağıdadır:\n'+v.link+'\n\nBağlantı geçerlilik tarihi: '+new Date(v.expires_at).toLocaleString('tr-TR')+'\n\nEğitim boyunca sorularınız için İK yetkilinizle iletişime geçebilirsiniz.';
- const email=document.createElement('button');email.type='button';email.className='secondary';email.textContent='📧 Eğitime Başla bağlantısını e-posta ile gönder';email.style.marginLeft='10px';
- email.disabled=!$('email').value.trim();
+ const email=document.createElement('button');email.type='button';email.className='secondary';email.textContent='📧 ERNASA kurumsal e-postasından gönder';email.style.marginLeft='10px';
+ email.disabled=!$('email').value.trim()||!corporateMailConfigured;
  email.onclick=async()=>{
   if(!confirm('Kayıtlı e-posta adresine kişisel eğitim daveti gönderilsin mi?'))return;
   email.disabled=true;$('status').textContent='Eğitim daveti e-posta servisine gönderiliyor…';
@@ -185,7 +185,23 @@ async function loadMedia(){
   }
  }catch(e){$('mediaStatus').textContent='Kayıtlar yüklenemedi: '+e.message;}
 }
+let corporateMailConfigured=false;
+async function loadCorporateMailStatus(){
+ try{
+  const state=await request('/api/egitim/ik/eposta-durumu');
+  corporateMailConfigured=state.configured===true;
+  $('corporateMailStatus').textContent=corporateMailConfigured?
+    '✉ Kurumsal gönderici: '+state.sender+' · Eğitim davetleri ERNASA hesabından gönderilir.':
+    '⚠ Kurumsal gönderim yapılandırılmamış. Render servisinde ERNASA_RESEND_API_KEY ve ERNASA_EMAIL_FROM ayarlarını kontrol edin.';
+  $('sendExisting').disabled=!corporateMailConfigured;
+ }catch(e){
+  corporateMailConfigured=false;
+  $('corporateMailStatus').textContent='⚠ Kurumsal e-posta durumu doğrulanamadı: '+e.message;
+  $('sendExisting').disabled=true;
+ }
+}
 async function init(){try{
+ await loadCorporateMailStatus();
  catalog=await request('/api/egitim/ik/katalog');
  renderModules();
  for(const p of catalog.programs){const o=document.createElement('option');o.value=p.id;o.textContent=p.title;$('program').append(o);}
@@ -200,7 +216,8 @@ async function init(){try{
  if(!['ernasa.com','www.ernasa.com'].includes(u.hostname)||u.protocol!=='https:'||!match){
   $('existingStatus').textContent='Yalnızca ERNASA kişisel eğitim bağlantısı kabul edilir.';return;
  }
- if(!confirm('Bu daveti kayıtlı katılımcı e-posta adresine yeniden gönderelim mi?'))return;
+ if(!corporateMailConfigured){$('existingStatus').textContent='Kurumsal gönderim aktif değil.';return;}
+ if(!confirm('Bu daveti ERNASA kurumsal e-postasıyla kayıtlı katılımcıya yeniden gönderelim mi?'))return;
  $('sendExisting').disabled=true;$('existingStatus').textContent='E-posta gönderiliyor…';
  try{const v=await request('/api/egitim/ik/davet/'+match[1]+'/gonder',{method:'POST'});
   $('existingStatus').textContent=v.sent?'✓ Davet e-posta servisine iletildi.':'Gönderim doğrulanamadı.';
