@@ -209,3 +209,57 @@ def send_training_invitation(*, recipient, name, url, expires_at, idempotency_ke
     if not isinstance(result, dict) or not isinstance(result.get("id"), str) or not result["id"]:
         raise EmailDeliveryError("E-posta servisi gönderim onayı döndürmedi.")
     return result["id"]
+
+
+def inspect_sender_domain():
+    """Read-only Resend sender-domain probe for safe startup diagnostics.
+
+    Returns fixed status fields only, never raw API responses, credentials,
+    domain IDs, DNS records or names of unrelated domains. No email is sent.
+    A 401 on GET /domains often means the production key is send-only; that
+    is not evidence of invalid send permissions.
+    """
+    try:
+        key, sender = configured_sender()
+    except EmailConfigurationError:
+        return {"result":"missing_configuration"}
+    expected_domain = sender.rsplit("@",1)[1]
+    try:
+        request = Request(
+            "https://api.resend.com/domains?limit=100",
+            headers={"Authorization":"Bearer "+key,"Accept":"application/json"},
+            method="GET",
+        )
+        with urlopen(request,timeout=8) as response:
+            data=json.loads(response.read(131072))
+        domains=data.get("data",[]) if isinstance(data,dict) else []
+        if not isinstance(domains,list):
+            return {"result":"unexpected_response"}
+        for item in domains:
+            if isinstance(item,dict) and str(item.get("name","")).lower()==expected_domain:
+                status=str(item.get("status","")).lower()
+                if status not in {"verified","pending","not_started","failed","temporary_failure"}:
+                    status="unknown"
+                capabilities=item.get("capabilities",{})
+                sending=capabilities.get("sending",{}) if isinstance(capabilities,dict) else {}
+                enabled=sending.get("enabled") if isinstance(sending,dict) else None
+                sendstatus=sending.get("status") if isinstance(sending,dict) else None
+                if sendstatus not in {"verified","pending","not_started","failed","temporary_failure"}:
+                    sendstatus="unknown"
+                return {
+                    "result":"found","domain_status":status,
+                    "sending_enabled":enabled if type(enabled) is bool else None,
+                    "sending_status":sendstatus,
+                }
+        # A limited listing cannot conclusively establish nonexistence.
+        more=data.get("has_more") if isinstance(data,dict) else None
+        return {"result":"not_in_first_page" if more is True else "not_found"}
+    except HTTPError as exc:
+        status=int(getattr(exc,"code",0) or 0)
+        if status==401:
+            return {"result":"read_access_denied_401","note":"sending_only_key_may_be_valid"}
+        if status==403:
+            return {"result":"read_access_denied_403"}
+        return {"result":"provider_http_error","status":status if 400<=status<=599 else None}
+    except (URLError,TimeoutError,OSError,ValueError,TypeError):
+        return {"result":"read_request_failed"}
