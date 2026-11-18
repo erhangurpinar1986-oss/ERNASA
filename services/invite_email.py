@@ -21,6 +21,50 @@ class EmailDeliveryError(RuntimeError):
     pass
 
 
+def _safe_provider_error(error: HTTPError) -> str:
+    """Map Resend HTTP rejection to actionable, non-sensitive diagnostics.
+
+    Never disclose provider response bodies, recipients, invitation tokens,
+    API keys or other untrusted fields. Only whitelist known categories.
+    """
+    status = int(getattr(error, "code", 0) or 0)
+    try:
+        details = json.loads(error.read(2048))
+        if not isinstance(details, dict):
+            details = {}
+    except (ValueError, OSError, UnicodeError):
+        details = {}
+    message = str(details.get("message") or "").lower()
+    name = str(details.get("name") or "").lower()
+    if status in (401,):
+        meaning = "API anahtarı geçersiz veya erişim izni yetersiz. Resend API Keys bölümünü kontrol edin."
+    elif status == 403:
+        if "testing emails" in message or "test email" in message or "your own email" in message:
+            meaning = "Hesap yalnızca test alıcısına gönderime izin veriyor. Resend üzerinde ernasa.com alan adını doğrulayın."
+        elif "domain" in message or "verified" in message or "sender" in message:
+            meaning = "Gönderici alan adı doğrulanmamış veya gönderim için yetkili değil. Resend Domains bölümünü kontrol edin."
+        elif "restricted" in name or "permission" in message or "access" in message:
+            meaning = "API anahtarının gönderim yetkisi bulunmuyor. Resend API Keys izinlerini kontrol edin."
+        else:
+            meaning = "Resend gönderim yetkisini reddetti. Domains ve API Keys ayarlarını kontrol edin."
+    elif status in (400, 422):
+        if "from" in message or "sender" in message:
+            meaning = "Gönderen adresi reddedildi. iletisim@ernasa.com adresini ve doğrulanmış alan adını kontrol edin."
+        elif "to" in message or "recipient" in message:
+            meaning = "Alıcı adresi reddedildi. Kayıtlı katılımcı e-postasını kontrol edin."
+        elif "html" in message or "text" in message or "subject" in message:
+            meaning = "E-posta içeriği doğrulamadan geçemedi. ERNASA yazılım ekibi kontrol etmelidir."
+        else:
+            meaning = "E-posta isteği doğrulanamadı. Gönderici ve alıcı ayarları kontrol edilmeli."
+    elif status == 429:
+        meaning = "Resend gönderim sınırına ulaşıldı. Hesap limitlerini kontrol edin."
+    elif 500 <= status < 600:
+        meaning = "Resend servisinde geçici sunucu hatası var."
+    else:
+        meaning = "E-posta sağlayıcısı gönderimi reddetti. Resend işlem kayıtlarını kontrol edin."
+    return f"Resend HTTP {status}: {meaning}"
+
+
 _ALLOWED_SENDERS = {"iletisim@ernasa.com"}
 
 
@@ -82,9 +126,10 @@ def send_invitation(candidate, url, *, idempotency_key):
     try:
         with urlopen(request, timeout=15) as response:
             result = json.loads(response.read(8192))
-    except (HTTPError, URLError, TimeoutError, ValueError) as exc:
-        # No API keys, provider responses or candidate details in error messages.
-        raise EmailDeliveryError("Kurumsal e-posta servisi gönderimi kabul etmedi. Daha sonra yeniden deneyin.") from exc
+    except HTTPError as exc:
+        raise EmailDeliveryError(_safe_provider_error(exc)) from None
+    except (URLError, TimeoutError, ValueError):
+        raise EmailDeliveryError("E-posta servisine erişilemedi veya geçerli yanıt alınamadı.") from None
     if not isinstance(result, dict) or not isinstance(result.get("id"), str) or not result["id"]:
         raise EmailDeliveryError("Kurumsal e-posta servisinden gönderim onayı alınamadı.")
     return result["id"]
@@ -157,8 +202,10 @@ def send_training_invitation(*, recipient, name, url, expires_at, idempotency_ke
     try:
         with urlopen(request, timeout=15) as response:
             result = json.loads(response.read(8192))
-    except (HTTPError, URLError, TimeoutError, ValueError) as exc:
-        raise EmailDeliveryError("Eğitim daveti e-posta servisi tarafından kabul edilmedi.") from exc
+    except HTTPError as exc:
+        raise EmailDeliveryError(_safe_provider_error(exc)) from None
+    except (URLError, TimeoutError, ValueError):
+        raise EmailDeliveryError("E-posta servisine erişilemedi veya geçerli yanıt alınamadı.") from None
     if not isinstance(result, dict) or not isinstance(result.get("id"), str) or not result["id"]:
         raise EmailDeliveryError("E-posta servisi gönderim onayı döndürmedi.")
     return result["id"]
