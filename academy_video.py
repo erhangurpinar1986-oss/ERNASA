@@ -18,7 +18,7 @@ import ernasa_training
 from database import DATABASE_URL, get_connection
 
 router = APIRouter()
-MAX_VIDEO_BYTES = 20 * 1024 * 1024
+MAX_VIDEO_BYTES = 40 * 1024 * 1024
 RETENTION_DAYS = 30
 VIDEO_TYPES = frozenset(("video/webm", "video/mp4"))
 SCENARIOS = frozenset(("tanitim", "itiraz", "serbest"))
@@ -102,7 +102,7 @@ async def submit_video(request: Request, token: str, module_id: str = Form(...),
                 break
             total += len(chunk)
             if total > MAX_VIDEO_BYTES:
-                raise HTTPException(413, "Video en fazla 20 MB olabilir.")
+                raise HTTPException(413, "Video en fazla 40 MB olabilir.")
             data.append(chunk)
     finally:
         await video.close()
