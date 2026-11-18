@@ -101,3 +101,39 @@ def test_invalid_or_cross_origin_assignment_rejected(app_client):
 def test_pdf_invalid_format_rejected():
     with pytest.raises(Exception):
         subject.parse_pdf_bytes(b"not a pdf")
+
+
+def test_saved_reports_only_visible_within_own_company(app_client):
+    from contextlib import closing
+    with closing(database.get_connection()) as conn:
+        c=conn.cursor()
+        c.execute("""CREATE TABLE interview_links(
+            token TEXT PRIMARY KEY,name TEXT,position TEXT,
+            company_id BIGINT,status TEXT,created_at TEXT
+        )""")
+        c.execute("""CREATE TABLE interview_reports(
+            token TEXT PRIMARY KEY,job_fit_analysis TEXT
+        )""")
+        report="""GELİŞTİRİLMESİ GEREKEN ALANLAR:
+- CRM, KPI, 30/60/90 gün, müzakere ve ROI.
+DİKKAT EDİLMESİ GEREKEN NOKTALAR:
+- Veri eksik.
+"""
+        c.execute("INSERT INTO interview_links VALUES(?,?,?,?,?,?)",
+            ("tenant1case","Kurgusal Aday A","B2B Satis",1001,"completed","2026-11-18"))
+        c.execute("INSERT INTO interview_links VALUES(?,?,?,?,?,?)",
+            ("tenant2case","Kurgusal Aday B","B2B Satis",2002,"completed","2026-11-18"))
+        c.execute("INSERT INTO interview_reports VALUES(?,?)",("tenant1case",report))
+        c.execute("INSERT INTO interview_reports VALUES(?,?)",("tenant2case",report))
+        conn.commit()
+    client=app_client
+    own=client.get("/api/egitim/ik/kayitli-raporlar",headers={"X-Test-Tenant":"1001"})
+    assert own.status_code==200
+    assert [x["token"] for x in own.json()["reports"]]==["tenant1case"]
+    blocked=client.get("/api/egitim/ik/kayitli-raporlar/tenant2case/oneriler",
+                       headers={"X-Test-Tenant":"1001"})
+    assert blocked.status_code==404
+    allowed=client.get("/api/egitim/ik/kayitli-raporlar/tenant1case/oneriler",
+                       headers={"X-Test-Tenant":"1001"})
+    assert allowed.status_code==200
+    assert {x["module_id"] for x in allowed.json()["suggestions"]}>={"crm","müzakere"}
