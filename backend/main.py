@@ -1212,6 +1212,19 @@ def match_ats_document(application_id: str, document_id: str,
                        actor: portal_access.Actor = Depends(require_ats)):
     return ats_matching.evidence_match(UPLOAD_DIRECTORY, actor, application_id, document_id)
 
+class ATSManualCVText(BaseModel):
+    text: str = Field(min_length=10,max_length=40000)
+
+
+@app.post("/api/ik/ats/applications/{application_id}/documents/{document_id}/match-text")
+def match_ats_document_supplied_text(
+        application_id: str, document_id: str, body: ATSManualCVText,
+        actor: portal_access.Actor = Depends(require_ats)):
+    # No persistence: reviewer-entered evidence is scored only for this request.
+    # The original CV, completed interviews, answers and reports remain untouched.
+    return ats_matching.evidence_match(
+        UPLOAD_DIRECTORY,actor,application_id,document_id,override_text=body.text)
+
 
 def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=False, partner_questions=None,
                         partner_template=None, draft_id=None, cv_evidence=(), cv_document_id=None,
