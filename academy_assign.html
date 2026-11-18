@@ -100,7 +100,7 @@ async function create(){
  const link=document.createElement('a');link.href=v.link;link.textContent=v.link;link.rel='noreferrer';link.target='_blank';
  const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent='Bağlantıyı kopyala';copy.onclick=()=>navigator.clipboard?.writeText(v.link);
  const subject='ERNASA Eğitim Daveti';
- const body='Merhaba '+v.recipient+',\n\nSize özel ERNASA eğitim programınız için erişim bağlantısı aşağıdadır:\\n'+v.link+'\\n\\nBağlantı geçerlilik tarihi: '+new Date(v.expires_at).toLocaleString('tr-TR')+'\\n\\nEğitim boyunca sorularınız için İK yetkilinizle iletişime geçebilirsiniz.';
+ const body='Merhaba '+v.recipient+',\n\nSize özel ERNASA eğitim programınız için erişim bağlantısı aşağıdadır:\n'+v.link+'\n\nBağlantı geçerlilik tarihi: '+new Date(v.expires_at).toLocaleString('tr-TR')+'\n\nEğitim boyunca sorularınız için İK yetkilinizle iletişime geçebilirsiniz.';
  const email=document.createElement('a');email.textContent='E-posta taslağı aç';
  email.href='mailto:'+encodeURIComponent($('email').value.trim())+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
  email.className='secondary';email.style.marginLeft='10px';
