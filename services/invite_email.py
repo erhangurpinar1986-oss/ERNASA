@@ -21,12 +21,12 @@ class EmailDeliveryError(RuntimeError):
     pass
 
 
-_ALLOWED_SENDERS = {"office@ernasa.com", "iletisim@ernasa.com"}
+_ALLOWED_SENDERS = {"iletisim@ernasa.com"}
 
 
 def configured_sender():
     key = os.getenv("ERNASA_RESEND_API_KEY", "").strip()
-    sender = os.getenv("ERNASA_EMAIL_FROM", "office@ernasa.com").strip().lower()
+    sender = os.getenv("ERNASA_EMAIL_FROM", "iletisim@ernasa.com").strip().lower()
     if not key or sender not in _ALLOWED_SENDERS:
         raise EmailConfigurationError("Kurumsal e-posta gönderimi henüz yapılandırılmadı.")
     return key, sender
