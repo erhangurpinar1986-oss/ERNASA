@@ -1,0 +1,69 @@
+name: ERNASA Academy voice upload checks
+on:
+  push:
+    branches:
+      - feature/dijital-egitim-sesli-quiz-20261118
+  pull_request:
+    paths:
+      - academy_audio.py
+      - academy_video.py
+      - academy_assignments.py
+      - academy_assign.html
+      - academy_portal.html
+      - academy_preview/index.html
+      - ernasa_training.py
+      - backend/main.py
+      - tests/test_academy_audio.py
+      - tests/test_academy_assignments.py
+      - tests/test_academy_video.py
+      - .github/workflows/academy-tests.yml
+jobs:
+  test-academy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+      - name: Validate Python source
+        run: python -m py_compile academy_audio.py academy_assignments.py academy_video.py ernasa_training.py backend/main.py tests/test_academy_audio.py tests/test_academy_assignments.py tests/test_academy_video.py
+      - name: Run voice API tests
+        run: python -m pytest tests/test_academy_audio.py tests/test_academy_assignments.py tests/test_academy_video.py -q
+      - name: Validate academy JavaScript
+        run: |
+          python - <<'PY'
+          import re, pathlib
+          for item in ['academy_portal.html','academy_assign.html','academy_preview/index.html']:
+              html=pathlib.Path(item).read_text(encoding='utf-8')
+              scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
+              assert scripts, item
+              pathlib.Path('/tmp/'+item.replace('/','_')+'.js').write_text('\n'.join(scripts),encoding='utf-8')
+          PY
+          node --check /tmp/academy_portal.html.js
+          node --check /tmp/academy_assign.html.js
+          node --check /tmp/academy_preview_index.html.js
+      - name: Confirm voice and scenario features
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for path in ('academy_portal.html','academy_preview/index.html'):
+              html=Path(path).read_text(encoding='utf-8')
+              assert 'engine.interimResults=true' in html
+              assert 'function presentationBrief(m)' in html
+              assert 'function stopDictation()' in html
+              assert 'function videoPracticePanel(m)' in html
+              assert 'function scenarioPanel()' in html
+              for scenario,seconds in (('tanitim',90),('itiraz',180),('serbest',300)):
+                  marker=scenario+':{'
+                  assert marker in html, (path,scenario)
+                  fragment=html.split(marker,1)[1].split('}',1)[0]
+                  assert 'limit:'+str(seconds) in fragment, (path,scenario)
+              assert 'scenarioLimitSeconds(session.scenario)*1000' in html
+              assert 'scenarioLimitSeconds(run.scenario)*1000' in html
+              assert 'const VIDEO_LIMIT_BYTES=40*1024*1024;' in html
+              assert 'const AUDIO_MAX_BYTES=12*1024*1024;' in html
+          PY
