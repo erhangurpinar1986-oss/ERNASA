@@ -304,6 +304,20 @@ def create_assignment(request: Request, body: AssignmentRequest):
             "link":base+"/egitim/"+token,"sent":False}
 
 
+@router.get("/api/egitim/ik/eposta-durumu")
+def training_email_status(request: Request):
+    """Expose only whether corporate outbound email is configured; no secrets."""
+    _actor(request)
+    from services import invite_email
+    try:
+        _, sender=invite_email.configured_sender()
+    except invite_email.EmailConfigurationError:
+        return {"configured":False,"sender":None,
+                "message":"Kurumsal e-posta servisi yapılandırılmamış. Render'da ERNASA_RESEND_API_KEY ve ERNASA_EMAIL_FROM ayarlarını kontrol edin."}
+    return {"configured":True,"sender":sender,
+            "message":"ERNASA kurumsal e-posta gönderimi hazır."}
+
+
 @router.post("/api/egitim/ik/davet/{token}/gonder")
 def send_assignment_mail(request: Request, token: str):
     """Explicit send by authenticated HR: reuse existing invite, never reassign."""
