@@ -108,3 +108,44 @@ def test_duplicate_cv_does_not_replace_existing_record(sample_ats):
         ats.upload_document(root, actor, app_id, "sentetik_cv.pdf", path.read_bytes())
     assert duplicate.value.status_code == 409
     assert len(ats.details(actor, app_id)["documents"]) == 1
+
+
+def test_recovery_via_existing_ats_upload_queue_preserves_identity(sample_ats, monkeypatch):
+    from types import SimpleNamespace
+    import ats_upload_queue
+    import control_integration
+
+    root, actor, _, app_id, doc_id = sample_ats
+    path, _, _ = ats.get_document(root, actor, app_id, doc_id)
+    original = path.read_bytes()
+    with recruitment.write(actor.company_id) as cursor:
+        cursor.execute("DELETE FROM ats_document_blobs WHERE document_id=?", (doc_id,))
+    path.unlink()
+    uploader = SimpleNamespace(company_id=actor.company_id, user_id=actor.user_id,
+        role="hr_manager", products=("ats",),
+        portal=control_integration.Portal("test-company",""),
+        access_version="test-revision")
+    queued = ats_upload_queue.enqueue(uploader, app_id, "sentetik_cv.pdf", original)
+    assert queued["status"] == "pending"
+    monkeypatch.setattr(ats_upload_queue.control,"control_call", lambda *_args,**_kwargs: {
+        "company_id":actor.company_id,"version":"test-revision",
+        "role":"hr_manager","must_change_password":False,"products":["ats"]})
+    assert ats_upload_queue.process_one(root)
+    statuses = ats_upload_queue.jobs(uploader,app_id)
+    assert next(row for row in statuses if row["id"] == queued["id"])["status"] == "ready"
+    assert ats.get_document(root, actor, app_id, doc_id)[0].read_bytes() == original
+    assert len(ats.details(actor, app_id)["documents"]) == 1
+
+
+def test_corrupt_archive_fails_closed_without_creating_a_cv(sample_ats):
+    root, actor, _, app_id, doc_id = sample_ats
+    path, _, _ = ats.get_document(root, actor, app_id, doc_id)
+    with recruitment.write(actor.company_id) as cursor:
+        cursor.execute("UPDATE ats_document_blobs SET content_base64=? WHERE document_id=?",
+                       ("NOT-VALID-BASE64",doc_id))
+    path.unlink()
+    with pytest.raises(HTTPException) as failure:
+        ats.get_document(root, actor, app_id, doc_id)
+    assert failure.value.status_code == 503
+    assert not path.exists()
+    assert len(ats.details(actor, app_id)["documents"]) == 1
