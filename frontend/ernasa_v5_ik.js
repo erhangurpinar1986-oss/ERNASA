@@ -248,6 +248,14 @@ function showAssessmentControls(root, token, data) {
 }
 
 const companyPortalPage = location.hostname.endsWith(".ernasa.com") && location.hostname !== "www.ernasa.com";
+// On the public/non-tenant variant, the original static navigation is valid.
+// Tenant navigation stays hidden until its scoped menu is built.
+if (!companyPortalPage) {
+    const initialMenu = document.getElementById("portalSidebar");
+    initialMenu?.style.removeProperty("visibility");
+    initialMenu?.removeAttribute("aria-busy");
+}
+
 const portalMetadataPromise = companyPortalPage
     ? fetch("/api/ik/portal", {cache: "no-store"}).then(response => response.ok ? response.json() : null).catch(() => null)
     : Promise.resolve(null);
