@@ -297,6 +297,56 @@ def details(actor, app_id):
         return result
 
 
+def document_availability(root, actor, app_id):
+    """Read-only, tenant-scoped availability of existing ATS documents.
+
+    This diagnostic never modifies original files, candidate data or CV archives.
+    An existing disk file is verified against the stored content SHA-256.
+    """
+    with closing(get_connection()) as connection:
+        cursor = connection.cursor()
+        application(cursor,actor,app_id)
+        cursor.execute("""SELECT d.id,d.filename,d.size_bytes,di.digest,
+                b.document_id AS archive_id,
+                EXISTS(SELECT 1 FROM ats_interview_cv_sources s
+                    JOIN interview_links i ON i.token=s.token AND i.company_id=s.company_id
+                    WHERE s.company_id=d.company_id AND s.document_id=d.id
+                        AND i.application_id=d.application_id
+                        AND NULLIF(TRIM(i.cv_text),'') IS NOT NULL) AS has_text
+            FROM ats_documents d
+            LEFT JOIN ats_document_digests di ON di.document_id=d.id
+                AND di.company_id=d.company_id AND di.application_id=d.application_id
+            LEFT JOIN ats_document_blobs b ON b.document_id=d.id
+                AND b.company_id=d.company_id AND b.application_id=d.application_id
+            WHERE d.company_id=? AND d.application_id=?
+            ORDER BY d.created_at""",(actor.company_id,app_id))
+        documents = [dict(row) for row in cursor.fetchall()]
+    result = []
+    for document in documents:
+        base = document_path(root,actor.company_id,document["id"])
+        named_path = base.with_suffix(Path(document["filename"]).suffix.lower())
+        path = named_path if named_path.is_file() else base
+        verified = False
+        if path.is_file():
+            try:
+                if 0 < path.stat().st_size == document["size_bytes"] <= MAX_DOCUMENT:
+                    verified = (sha256(path.read_bytes()).hexdigest() == document["digest"])
+            except OSError:
+                pass
+        if verified:
+            status = "disk_verified"
+        elif document["archive_id"]:
+            status = "archived"
+        elif document["has_text"]:
+            status = "text_only"
+        else:
+            status = "missing"
+        result.append({"id":document["id"],"status":status,
+                       "original_file_available":verified,
+                       "stored_interview_text_available":bool(document["has_text"])})
+    return {"documents":result}
+
+
 def add_note(actor, app_id, fields):
     value = fields.note.strip()
     if not value:
