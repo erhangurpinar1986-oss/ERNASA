@@ -387,8 +387,24 @@ if (companyPortalPage) {
             link.classList.toggle("active",link.dataset.panelMain === mainForScreen.get(screen));
         }
     }
+    function showSidebarUnavailable() {
+        // Never expose legacy navigation, including hidden module routes, if
+        // the authenticated company metadata cannot be loaded.
+        navigation.replaceChildren();
+        const status = document.createElement("p");
+        status.textContent = "Menü yüklenemedi. Oturumunuzu kontrol edip yeniden deneyin.";
+        status.setAttribute("role","status");
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.textContent = "Yeniden dene";
+        retry.addEventListener("click", () => location.reload());
+        navigation.append(status,retry);
+    }
     portalMetadataPromise.then(metadata => {
-        if (!metadata) return;
+        if (!metadata || !Array.isArray(metadata.products)) {
+            showSidebarUnavailable();
+            return;
+        }
         const ats = metadata.products.includes("ats");
         const ai = metadata.products.includes("ai");
         const manager = ["supervisor","hr_manager"].includes(metadata.role);
@@ -486,6 +502,13 @@ if (companyPortalPage) {
         renderCandidates();
         displaySectionTabs("dashboard");
         if (window.lucide?.createIcons) window.lucide.createIcons();
+    }).catch(error => {
+        console.error("Firma menüsü oluşturulamadı:",error);
+        showSidebarUnavailable();
+    }).finally(() => {
+        // Reveal only the complete role-scoped menu, never the original HTML.
+        navigation.style.removeProperty("visibility");
+        navigation.removeAttribute("aria-busy");
     });
     document.addEventListener("ik-portal-screen", event => {
         if (event.detail === "positions" && window.ikSaasAccess.ats) loadPositions();
