@@ -71,6 +71,9 @@ def source_text(root,actor,app_id,document_id):
             return saved
         raise
     try:
+        if path.suffix.lower() == ".pdf":
+            lines = cv_lines(path)
+            return relevant_text("\n".join(line for line, _ in lines))
         result = extract_text(str(path))
     except (OSError,ValueError,RuntimeError):
         raise HTTPException(400, 'CV metni okunamadı.') from None
