@@ -70,6 +70,30 @@ class InvitationEmailTests(unittest.TestCase):
             self.assertEqual(request.get_header("Idempotency-key"), "test-invite")
             self.assertNotIn("test-only", str(payload))
 
+    def test_safe_resend_rejection_categories(self):
+        import io
+        from urllib.error import HTTPError
+        examples = [
+            (401,'{"name":"invalid_api_key","message":"Invalid API key"}',"API anahtarı"),
+            (403,'{"name":"validation_error","message":"You can only send testing emails to your own email address"}',"test alıcısına"),
+            (403,'{"name":"validation_error","message":"Domain is not verified"}',"alan adı"),
+            (422,'{"name":"validation_error","message":"Invalid from sender"}',"Gönderen adresi"),
+            (429,'{"name":"rate_limit_exceeded","message":"Too many requests"}',"sınırına"),
+        ]
+        for code, body, expected in examples:
+            with self.subTest(code=code,expected=expected):
+                err=HTTPError("https://api.resend.com/emails",code,"test",{},io.BytesIO(body.encode()))
+                mapped=invite_email._safe_provider_error(err)
+                self.assertIn(expected,mapped)
+                self.assertNotIn("Invalid API key",mapped)
+
+    def test_safe_resend_error_does_not_echo_untrusted_email(self):
+        import io
+        from urllib.error import HTTPError
+        err=HTTPError("https://api.resend.com/emails",422,"bad",{},
+            io.BytesIO(b'{"message":"recipient bad_person@example.com has failed validation"}'))
+        self.assertNotIn("bad_person@example.com",invite_email._safe_provider_error(err))
+
     def test_provider_error_does_not_leak_key(self):
         from urllib.error import URLError
         with patch.dict(os.environ, {
