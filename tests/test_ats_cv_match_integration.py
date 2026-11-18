@@ -230,3 +230,44 @@ def test_document_availability_is_tenant_scoped(sample_ats):
     with pytest.raises(HTTPException) as err:
         ats.document_availability(root,other,app_id)
     assert err.value.status_code == 404
+
+
+def test_reupload_same_cv_keeps_completed_interview_answers_report_and_link(sample_ats):
+    """Regression: restore a lost original without touching an already finished interview."""
+    root, actor, _, app_id, doc_id = sample_ats
+    token = _attach_synthetic_interview_text(actor,app_id,doc_id,
+                                             "WMS forklift tecrubem var")
+    with recruitment.write(actor.company_id) as cursor:
+        cursor.execute("""INSERT INTO interview_answers
+            (token,question_number,question,answer,created_at)
+            VALUES (?,?,?,?,?)""",
+            (token,1,"Kendinizi tanitin.","Sentetik mulakat yaniti",ats.now()))
+        cursor.execute("""INSERT INTO interview_reports (token,job_fit_analysis,created_at)
+            VALUES (?,?,?)""",
+            (token,"Sentetik degerlendirme raporu",ats.now()))
+        cursor.execute("SELECT token,status,application_id,cv_text FROM interview_links WHERE token=?",(token,))
+        link_before = dict(cursor.fetchone())
+        cursor.execute("SELECT token,question_number,question,answer,created_at FROM interview_answers WHERE token=?",(token,))
+        answers_before = [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT token,job_fit_analysis,created_at FROM interview_reports WHERE token=?",(token,))
+        report_before = dict(cursor.fetchone())
+    path, _, _ = ats.get_document(root,actor,app_id,doc_id)
+    original_bytes = path.read_bytes()
+    with recruitment.write(actor.company_id) as cursor:
+        cursor.execute("DELETE FROM ats_document_blobs WHERE document_id=?",(doc_id,))
+    path.unlink()  # Only test fixture: imitate Render ephemeral disk loss.
+    restored = ats.upload_document(root,actor,app_id,"sentetik_cv.pdf",original_bytes)
+    assert restored == {"id":doc_id,"restored":True}
+    with recruitment.write(actor.company_id) as cursor:
+        cursor.execute("SELECT token,status,application_id,cv_text FROM interview_links WHERE token=?",(token,))
+        assert dict(cursor.fetchone()) == link_before
+        cursor.execute("SELECT token,question_number,question,answer,created_at FROM interview_answers WHERE token=?",(token,))
+        assert [dict(row) for row in cursor.fetchall()] == answers_before
+        cursor.execute("SELECT token,job_fit_analysis,created_at FROM interview_reports WHERE token=?",(token,))
+        assert dict(cursor.fetchone()) == report_before
+        cursor.execute("SELECT token,company_id,document_id FROM ats_interview_cv_sources WHERE token=?",(token,))
+        source = dict(cursor.fetchone())
+        assert source["document_id"] == doc_id
+        assert source["company_id"] == actor.company_id
+    assert len(ats.details(actor,app_id)["documents"]) == 1
+    assert ats.get_document(root,actor,app_id,doc_id)[0].read_bytes() == original_bytes
