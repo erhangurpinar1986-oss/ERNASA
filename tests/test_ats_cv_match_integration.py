@@ -204,3 +204,29 @@ def test_stored_interview_text_is_tenant_scoped(sample_ats):
     with pytest.raises(HTTPException) as error:
         ats_matching.stored_cv_text(other,app_id,doc_id)
     assert error.value.status_code == 404
+
+
+def test_document_availability_reports_verified_and_missing_without_mutation(sample_ats):
+    root,actor,_,app_id,doc_id = sample_ats
+    original = ats.document_availability(root,actor,app_id)["documents"]
+    assert len(original) == 1
+    assert original[0]["id"] == doc_id
+    assert original[0]["status"] == "disk_verified"
+    file_path,_,_ = ats.get_document(root,actor,app_id,doc_id)
+    _attach_synthetic_interview_text(actor,app_id,doc_id,"WMS forklift")
+    with recruitment.write(actor.company_id) as cursor:
+        cursor.execute("DELETE FROM ats_document_blobs WHERE document_id=?",(doc_id,))
+    file_path.unlink()
+    recovered = ats.document_availability(root,actor,app_id)["documents"]
+    assert len(recovered) == 1
+    assert recovered[0]["status"] == "text_only"
+    assert recovered[0]["stored_interview_text_available"] is True
+    assert not file_path.exists()
+
+
+def test_document_availability_is_tenant_scoped(sample_ats):
+    root, actor, _, app_id, doc_id = sample_ats
+    other = SimpleNamespace(company_id=999,user_id=20,role="hr_manager",products=("ats",))
+    with pytest.raises(HTTPException) as err:
+        ats.document_availability(root,other,app_id)
+    assert err.value.status_code == 404
