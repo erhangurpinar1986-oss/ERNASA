@@ -202,6 +202,7 @@ function buildInterviewShare(invite) {
         autoEmail.disabled = !invite.email || !invite.interview_id;
         autoEmail.onclick = async () => {
             if (autoEmail.disabled) return;
+            if (!window.confirm("Kayıtlı aday adresine ERNASA kurumsal hesabından mülakat daveti gönderilsin mi?")) return;
             autoEmail.disabled = true;
             actionStatus.textContent = "Kurumsal gönderim servisine bağlanılıyor…";
             try {

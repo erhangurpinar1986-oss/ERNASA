@@ -191,8 +191,8 @@ async function loadCorporateMailStatus(){
   const state=await request('/api/egitim/ik/eposta-durumu');
   corporateMailConfigured=state.configured===true;
   $('corporateMailStatus').textContent=corporateMailConfigured?
-    '✉ Kurumsal gönderici: '+state.sender+' · Eğitim davetleri ERNASA hesabından gönderilir.':
-    '⚠ Kurumsal gönderim yapılandırılmamış. Render servisinde ERNASA_RESEND_API_KEY ve ERNASA_EMAIL_FROM ayarlarını kontrol edin.';
+    '✉ Kurumsal gönderici: '+state.sender+' · E-posta yapılandırıldı; İK onayıyla gönderilir. Gerçek teslimat doğrulanmadı.':
+    '⚠ Kurumsal gönderim yapılandırılmamış. Render servisinde e-posta sağlayıcısını, ilgili API anahtarını ve gönderici adresini kontrol edin.';
   $('sendExisting').disabled=!corporateMailConfigured;
  }catch(e){
   corporateMailConfigured=false;
