@@ -84,8 +84,17 @@ def initialize_schema():
             assigned_by BIGINT,
             program_id TEXT NOT NULL,
             modules_json TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            video_allowed INTEGER NOT NULL DEFAULT 0
         )""")
+        # Additive migration: existing assignments remain audio-only.
+        try:
+            cur.execute("ALTER TABLE ernasa_training_assignments ADD COLUMN video_allowed INTEGER NOT NULL DEFAULT 0")
+        except Exception as exc:
+            message = str(exc).lower()
+            if "duplicate column" not in message and "already exists" not in message:
+                raise
+            db.rollback() if "psycopg2" in type(db).__module__ else None
         cur.execute("CREATE INDEX IF NOT EXISTS ernasa_training_assignments_tenant ON ernasa_training_assignments(company_id,created_at)")
         db.commit()
 
@@ -184,6 +193,7 @@ class AssignmentRequest(BaseModel):
     program_id: str = Field(min_length=2,max_length=40)
     module_ids: list[str] = Field(min_length=1,max_length=16)
     days: int = Field(default=14,ge=1,le=30)
+    video_allowed: bool = False
 
 
 def _catalog():
@@ -285,12 +295,12 @@ def create_assignment(request: Request, body: AssignmentRequest):
             VALUES(?,?,?,?,?,0)""",
             (digest,body.recipient.strip(),email,now.isoformat(),expires))
         cur.execute("""INSERT INTO ernasa_training_assignments
-            (token_hash,company_id,assigned_by,program_id,modules_json,created_at)
-            VALUES(?,?,?,?,?,?)""",
-            (digest,company_id,user_id,body.program_id,json.dumps(modules,ensure_ascii=False),now.isoformat()))
+            (token_hash,company_id,assigned_by,program_id,modules_json,created_at,video_allowed)
+            VALUES(?,?,?,?,?,?,?)""",
+            (digest,company_id,user_id,body.program_id,json.dumps(modules,ensure_ascii=False),now.isoformat(),int(body.video_allowed)))
         db.commit()
     return {"recipient":body.recipient.strip(),"program_id":body.program_id,
-            "module_ids":modules,"expires_at":expires,
+            "module_ids":modules,"video_allowed":body.video_allowed,"expires_at":expires,
             "link":base+"/egitim/"+token,"sent":False}
 
 
@@ -318,12 +328,13 @@ def assigned_modules(token):
     with closing(get_connection()) as db:
         digest,_=ernasa_training._invite(db,token)
         cur=db.cursor()
-        cur.execute("SELECT modules_json,program_id FROM ernasa_training_assignments WHERE token_hash=?", (digest,))
+        cur.execute("SELECT modules_json,program_id,video_allowed FROM ernasa_training_assignments WHERE token_hash=?", (digest,))
         row=cur.fetchone()
         if not row:  # Old training links remain functional.
-            return {"program_id":"legacy","module_ids":list(MODULE_TITLES)}
+            return {"program_id":"legacy","module_ids":list(MODULE_TITLES),"video_allowed":False}
         return {"program_id":row["program_id"],
-                "module_ids":json.loads(row["modules_json"])}
+                "module_ids":json.loads(row["modules_json"]),
+                "video_allowed":bool(row["video_allowed"])}
 
 
 @router.get("/api/egitim/{token}/program")
