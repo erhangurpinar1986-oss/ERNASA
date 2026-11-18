@@ -276,6 +276,7 @@ def test_reupload_same_cv_keeps_completed_interview_answers_report_and_link(samp
 def test_image_only_pdf_uses_offline_ocr_for_cv_matching(sample_ats,monkeypatch):
     root,actor,_,app_id,doc_id=sample_ats
     import ats_matching
+    monkeypatch.setenv("ERNASA_ATS_ENABLE_LOCAL_OCR","1")
     original=ats_matching._pdf_text_lines
     # A scanned PDF has no legible native text; bounded offline OCR supplies lines.
     monkeypatch.setattr(ats_matching,"_pdf_text_lines",lambda path: [])
@@ -304,6 +305,49 @@ def test_unreadable_cv_is_not_scored_as_zero(sample_ats,monkeypatch):
     assert comparison["evidence_coverage"] == 0
     assert comparison["text_extraction_status"] == "unreadable"
     assert "OCR" in comparison["reason"]
+
+
+def test_pdf_ocr_is_disabled_by_default_on_memory_limited_render(sample_ats,monkeypatch):
+    import ats_matching
+    root,actor,_,app_id,doc_id=sample_ats
+    monkeypatch.delenv("ERNASA_ATS_ENABLE_LOCAL_OCR",raising=False)
+    monkeypatch.setattr(ats_matching,"_pdf_text_lines",lambda path: [])
+    import pdfplumber
+    monkeypatch.setattr(pdfplumber,"open",lambda *_a,**_kw: (_ for _ in ()).throw(RuntimeError("No text layer")))
+    monkeypatch.setattr(ats_matching,"_ocr_pdf_lines",
+                        lambda path: (_ for _ in ()).throw(AssertionError("OCR should not run")))
+    result=ats_matching.evidence_match(root,actor,app_id,doc_id)
+    assert result["text_extraction_status"] == "unreadable"
+    assert result["match_score"] is None
+
+
+def test_manual_cv_evidence_preserves_original_document_and_interview(sample_ats):
+    root,actor,_,app_id,doc_id=sample_ats
+    import ats_matching
+    token=_attach_synthetic_interview_text(actor,app_id,doc_id,"WMS forklift")
+    path,_,_=ats.get_document(root,actor,app_id,doc_id)
+    before=path.read_bytes()
+    result=ats_matching.evidence_match(root,actor,app_id,doc_id,
+                                       override_text="WMS ve forklift tecrubem var")
+    assert result["match_score"] == 100
+    assert result["manual_verification_required"] is True
+    assert result["source"] == "reviewer_transcribed_cv_text"
+    assert ats.get_document(root,actor,app_id,doc_id)[0].read_bytes() == before
+    with recruitment.write(actor.company_id) as cursor:
+        cursor.execute("SELECT status FROM interview_links WHERE token=?",(token,))
+        assert cursor.fetchone()["status"] == "completed"
+        cursor.execute("SELECT COUNT(*) AS n FROM ats_documents WHERE id=?",(doc_id,))
+        assert cursor.fetchone()["n"] == 1
+
+
+def test_manual_cv_text_tenant_isolation(sample_ats):
+    import ats_matching
+    root,actor,_,app_id,doc_id=sample_ats
+    other=SimpleNamespace(company_id=999,user_id=20,role="hr_manager",products=("ats",))
+    with pytest.raises(HTTPException) as error:
+        ats_matching.evidence_match(root,other,app_id,doc_id,
+                                    override_text="WMS forklift tecrubem var")
+    assert error.value.status_code == 404
 
 
 def test_offline_ocr_engine_reads_image_only_synthetic_pdf(tmp_path):
