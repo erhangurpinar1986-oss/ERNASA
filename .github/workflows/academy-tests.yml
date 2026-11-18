@@ -6,10 +6,13 @@ on:
   pull_request:
     paths:
       - academy_audio.py
+      - academy_assignments.py
+      - academy_assign.html
       - academy_portal.html
       - ernasa_training.py
       - backend/main.py
       - tests/test_academy_audio.py
+      - tests/test_academy_assignments.py
       - .github/workflows/academy-tests.yml
 jobs:
   test-academy:
@@ -24,6 +27,18 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest
       - name: Validate Python source
-        run: python -m py_compile academy_audio.py ernasa_training.py backend/main.py tests/test_academy_audio.py
+        run: python -m py_compile academy_audio.py academy_assignments.py ernasa_training.py backend/main.py tests/test_academy_audio.py tests/test_academy_assignments.py
       - name: Run voice API tests
-        run: python -m pytest tests/test_academy_audio.py -q
+        run: python -m pytest tests/test_academy_audio.py tests/test_academy_assignments.py -q
+      - name: Validate academy JavaScript
+        run: |
+          python - <<'PY'
+          import re, pathlib
+          for item in ['academy_portal.html','academy_assign.html']:
+              html=pathlib.Path(item).read_text(encoding='utf-8')
+              scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
+              assert scripts, item
+              pathlib.Path('/tmp/'+item+'.js').write_text('\n'.join(scripts),encoding='utf-8')
+          PY
+          node --check /tmp/academy_portal.html.js
+          node --check /tmp/academy_assign.html.js
