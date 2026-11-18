@@ -26,6 +26,10 @@ a{color:#25578c;overflow-wrap:anywhere}#status{padding:8px 0;color:#244d74}#resu
 </div></section>
 <section><h2>2 · Mülakat raporundan öneriler</h2>
 <p class="muted">PDF raporunu seçerseniz yalnızca gelişim alanları incelenir. Rapor dosyası saklanmaz. Öneriler otomatik atama veya işe alım kararı değildir.</p>
+<label for="savedReport">Sistemde kayıtlı tamamlanmış mülakat raporu</label>
+<select id="savedReport"><option value="">— Önce bir rapor seçin —</option></select>
+<div class="controls"><button id="fromSystem" type="button" class="secondary">Sistemdeki rapordan öner</button><button id="refreshReports" type="button" class="secondary">Rapor listesini yenile</button></div>
+<p class="muted">Rapor sistemde bulunmuyorsa aşağıdan PDF yükleyebilirsiniz.</p>
 <input type="file" id="report" accept=".pdf,application/pdf">
 <div class="controls"><button id="analyze" type="button">Rapordan eğitim öner</button>
 <button id="manual" type="button" class="secondary">Rapor olmadan devam et</button></div>
@@ -106,13 +110,32 @@ async function loadAssignments(){
  for(const x of v.assignments){const li=document.createElement('li');li.textContent=x.recipient+' · '+x.program_id+' · '+x.module_ids.length+' ders · '+new Date(x.created_at).toLocaleDateString('tr-TR');ul.append(li);}
  $('assignments').append(ul);}catch(e){$('assignments').textContent='Atamalar görüntülenemedi: '+e.message;}
 }
+async function loadReports(){
+ try{
+ const res=await request('/api/egitim/ik/kayitli-raporlar');
+ const select=$('savedReport');const existing=select.value;
+ select.replaceChildren();const empty=document.createElement('option');empty.value='';empty.textContent='— Tamamlanmış mülakat raporu seçin —';select.append(empty);
+ for(const r of res.reports){const option=document.createElement('option');option.value=r.token;option.textContent=(r.name||'Aday')+' · '+(r.position||'Pozisyon belirtilmemiş');select.append(option);}
+ if([...select.options].some(x=>x.value===existing))select.value=existing;
+ }catch(error){$('reportStatus').textContent='Kayıtlı raporlar yüklenemedi: '+error.message;}
+}
+async function readSavedReport(){
+ const token=$('savedReport').value;
+ if(!token){$('reportStatus').textContent='Sistemdeki raporlardan birini seçin.';return;}
+ $('fromSystem').disabled=true;$('reportStatus').textContent='Mevcut mülakat raporu inceleniyor…';
+ try{
+ const result=await request('/api/egitim/ik/kayitli-raporlar/'+encodeURIComponent(token)+'/oneriler');
+ renderSuggestions(result);
+ }catch(error){$('reportStatus').textContent='Rapor okunamadı: '+error.message;}
+ finally{$('fromSystem').disabled=false;}
+}
 async function init(){try{
  catalog=await request('/api/egitim/ik/katalog');
  renderModules();
  for(const p of catalog.programs){const o=document.createElement('option');o.value=p.id;o.textContent=p.title;$('program').append(o);}
- $('program').onchange=preset;preset();$('create').disabled=false;loadAssignments();
+ $('program').onchange=preset;preset();$('create').disabled=false;loadAssignments();loadReports();
  }catch(e){$('status').textContent='Eğitim kataloğu yüklenemedi: '+e.message;}}
- $('analyze').onclick=analyze;$('manual').onclick=()=>{$('reportStatus').textContent='Rapor olmadan seçim yapabilirsiniz.';$('suggestions').hidden=true;};
+ $('analyze').onclick=analyze;$('fromSystem').onclick=readSavedReport;$('refreshReports').onclick=loadReports;$('manual').onclick=()=>{$('reportStatus').textContent='Rapor olmadan seçim yapabilirsiniz.';$('suggestions').hidden=true;};
  $('defaults').onclick=preset;$('all').onclick=()=>selectModules(catalog.modules.map(m=>m.id));
  $('clear').onclick=()=>selectModules([]);$('create').onclick=create;$('refresh').onclick=loadAssignments;
  init();
