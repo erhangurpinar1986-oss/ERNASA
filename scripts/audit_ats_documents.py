@@ -24,11 +24,25 @@ def audit(upload_root):
     counters = Counter()
     with closing(get_connection()) as connection:
         cursor = connection.cursor()
-        cursor.execute("""SELECT d.id,d.company_id,d.filename,
-                    b.document_id AS archive_id
-            FROM ats_documents d
-            LEFT JOIN ats_document_blobs b ON b.document_id=d.id
-                AND b.company_id=d.company_id AND b.application_id=d.application_id""")
+        # Compatible with the currently deployed schema, before the new archive table exists.
+        if os.environ.get("DATABASE_URL"):
+            cursor.execute("""SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema=current_schema() AND table_name='ats_document_blobs'
+            ) AS archive_exists""")
+            archive_exists = bool(cursor.fetchone()["archive_exists"])
+        else:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ats_document_blobs'")
+            archive_exists = cursor.fetchone() is not None
+        if archive_exists:
+            cursor.execute("""SELECT d.id,d.company_id,d.filename,
+                        b.document_id AS archive_id
+                FROM ats_documents d
+                LEFT JOIN ats_document_blobs b ON b.document_id=d.id
+                    AND b.company_id=d.company_id AND b.application_id=d.application_id""")
+        else:
+            cursor.execute("""SELECT id,company_id,filename,NULL AS archive_id
+                FROM ats_documents""")
         for entry in cursor.fetchall():
             counters["total"] += 1
             base = document_path(upload_root, entry["company_id"], entry["id"])
