@@ -440,6 +440,7 @@ if (companyPortalPage) {
             if (!link || !availableScreens.has(name)) continue;
             activeLinks.set(name,link);
         }
+        const trainingLink = byId("trainingAssignmentMenu");
         navigation.replaceChildren();
         // Eski linkler DOM'da kalır: diğer modüllerin .click() çağrıları bozulmaz.
         const hiddenLinks = document.createElement("div");
@@ -486,7 +487,6 @@ if (companyPortalPage) {
         }
         // Eğitim Atama, firma içindeki yetkili üç İK rolünün tamamına açıktır.
         // Rol ve firma izolasyonu /egitim-atama API'sinde ayrıca doğrulanır.
-        const trainingLink = byId("trainingAssignmentMenu");
         if (trainingLink && ["supervisor","hr_manager","hr_staff"].includes(metadata.role)) {
             trainingLink.style.removeProperty("display");
             navigation.append(trainingLink);
