@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ERNASA · Eğitim Atama</title><style>
+:root{font-family:system-ui,"Segoe UI",Arial,sans-serif;color:#19324c;background:#f3f6fa;font-size:15px}
+*{box-sizing:border-box}body{max-width:1160px;margin:30px auto;padding:0 18px}h1,h2{color:#122c4c}h1{font-size:27px}
+section{background:#fff;border:1px solid #dbe5f0;border-radius:15px;padding:22px;margin:17px 0}
+h2{font-size:19px;margin:0 0 12px}.muted{color:#5c7187;font-size:13px}
+label{display:block;margin:12px 0 4px;font-weight:600}
+input,select,textarea,button{font:inherit;border:1px solid #b8c8db;border-radius:9px;padding:10px}
+input[type=text],input[type=email],select,textarea{width:100%}textarea{min-height:110px}
+button{background:#153a63;border-color:#153a63;color:white;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}.secondary{background:#fff;color:#173d63}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.controls{display:flex;flex-wrap:wrap;gap:10px;margin:15px 0}
+.check{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid #e0e7f0;border-radius:10px;font-weight:400}
+.check input{width:18px;height:18px;flex-shrink:0}.suggestions{border-left:3px solid #368a79;padding:10px 14px;background:#eef8f5}
+a{color:#25578c;overflow-wrap:anywhere}#status{padding:8px 0;color:#244d74}#result{padding:15px;background:#ecf7f1;border-radius:9px}
+@media(max-width:690px){.grid{grid-template-columns:1fr}}
+</style></head><body>
+<h1>ERNASA · Eğitim Atama Merkezi</h1>
+<p class="muted">Yetkili İK personeli için: eğitim kataloğu, rapordan ders önerisi, manuel seçim ve kişiye özel erişim bağlantısı.</p>
+<section><h2>1 · Katılımcı ve program</h2><div class="grid">
+<div><label for="candidate">Katılımcı adı</label><input id="candidate" type="text" maxlength="120" placeholder="Ad soyad" required></div>
+<div><label for="email">E-posta (isteğe bağlı)</label><input id="email" type="email" maxlength="254" placeholder="ornek@firma.com"></div>
+<div><label for="program">Eğitim programı</label><select id="program"></select></div>
+<div><label for="days">Bağlantı geçerliliği (gün)</label><input id="days" type="number" min="1" max="30" value="14"></div>
+</div></section>
+<section><h2>2 · Mülakat raporundan öneriler</h2>
+<p class="muted">PDF raporunu seçerseniz yalnızca gelişim alanları incelenir. Rapor dosyası saklanmaz. Öneriler otomatik atama veya işe alım kararı değildir.</p>
+<input type="file" id="report" accept=".pdf,application/pdf">
+<div class="controls"><button id="analyze" type="button">Rapordan eğitim öner</button>
+<button id="manual" type="button" class="secondary">Rapor olmadan devam et</button></div>
+<p id="reportStatus" aria-live="polite"></p><div id="suggestions" hidden class="suggestions"></div></section>
+<section><h2>3 · Atanacak dersleri seç</h2>
+<p class="muted">Programın standart dersleri işaretli gelir. Rapordan gelen öneriler seçimden önce gözden geçirilebilir. Son seçim İK personeline aittir.</p>
+<div class="controls"><button id="defaults" type="button" class="secondary">Program derslerine dön</button>
+<button id="all" type="button" class="secondary">Tüm dersleri seç</button>
+<button id="clear" type="button" class="secondary">Seçimi temizle</button></div>
+<div class="grid" id="modules"></div></section>
+<section><h2>4 · Eğitim atamasını oluştur</h2>
+<p class="muted">Bağlantı oluşturulduğunda otomatik e-posta gönderilmez. Bağlantıyı yalnızca yetkili personel kontrollü kanaldan katılımcıyla paylaşmalıdır.</p>
+<button id="create" type="button" disabled>Kişiye özel eğitim bağlantısı oluştur</button>
+<div id="status" role="status" aria-live="polite"></div><div id="result" hidden></div></section>
+<section><h2>Son atamalar</h2><button id="refresh" type="button" class="secondary">Listeyi yenile</button><div id="assignments" aria-live="polite"></div></section>
+<script>
+const $=id=>document.getElementById(id);
+let catalog={programs:[],modules:[]};let suggestions=[];
+async function request(url,opts){const res=await fetch(url,{credentials:'same-origin',cache:'no-store',...opts});const v=await res.json().catch(()=>({}));if(!res.ok)throw Error(typeof v.detail==='string'?v.detail:'HTTP '+res.status);return v;}
+function selected(){return [...document.querySelectorAll('#modules input:checked')].map(e=>e.value);}
+function renderModules(){
+ $('modules').replaceChildren();
+ for(const item of catalog.modules){
+ const label=document.createElement('label');label.className='check';
+ const input=document.createElement('input');input.type='checkbox';input.value=item.id;
+ const span=document.createElement('span');span.textContent=item.title;
+ label.append(input,span);$('modules').append(label);
+ }
+}
+function selectModules(ids){
+ const wanted=new Set(ids);
+ document.querySelectorAll('#modules input').forEach(x=>x.checked=wanted.has(x.value));
+}
+function currentProgram(){return catalog.programs.find(x=>x.id===$('program').value);}
+function preset(){selectModules(currentProgram()?.default_modules||[]);}
+function renderSuggestions(result){
+ suggestions=result.suggestions||[];
+ $('suggestions').replaceChildren();$('suggestions').hidden=false;
+ const title=document.createElement('strong');title.textContent='Önerilen ilave dersler ('+suggestions.length+')';
+ $('suggestions').append(title);
+ for(const x of suggestions){
+ const p=document.createElement('p');p.textContent='• '+x.title+' — '+x.reason;$('suggestions').append(p);
+ }
+ const apply=document.createElement('button');apply.type='button';apply.textContent='Önerileri seçime ekle';
+ apply.onclick=()=>selectModules([...selected(),...suggestions.map(x=>x.module_id)]);
+ $('suggestions').append(apply);
+ if(result.candidate_name && !$('candidate').value.trim())$('candidate').value=result.candidate_name;
+ $('reportStatus').textContent=result.notice||'Öneriler hazır.';
+}
+async function analyze(){
+ const file=$('report').files[0];if(!file){$('reportStatus').textContent='Önce PDF raporu seçin.';return;}
+ $('analyze').disabled=true;$('reportStatus').textContent='Rapor inceleniyor…';
+ try{const f=new FormData();f.append('report',file);
+ const v=await request('/api/egitim/ik/rapor-onerileri',{method:'POST',body:f});renderSuggestions(v);}
+ catch(e){$('reportStatus').textContent='Rapor okunamadı: '+e.message;}
+ finally{$('analyze').disabled=false;}
+}
+async function create(){
+ const name=$('candidate').value.trim();if(!name){$('status').textContent='Katılımcı adını girin.';return;}
+ const modules=selected();if(!modules.length){$('status').textContent='En az bir ders seçin.';return;}
+ $('create').disabled=true;$('status').textContent='Atama oluşturuluyor…';$('result').hidden=true;
+ try{
+ const v=await request('/api/egitim/ik/atama',{method:'POST',headers:{'Content-Type':'application/json'},
+ body:JSON.stringify({recipient:name,email:$('email').value.trim(),program_id:$('program').value,module_ids:modules,days:Number($('days').value)})});
+ $('status').textContent='Eğitim atandı. Bağlantı oluşturuldu; otomatik e-posta gönderilmedi.';
+ $('result').replaceChildren();
+ const p=document.createElement('p');p.textContent=v.recipient+' · '+v.module_ids.length+' ders · Son geçerlilik: '+new Date(v.expires_at).toLocaleString('tr-TR');
+ const link=document.createElement('a');link.href=v.link;link.textContent=v.link;link.rel='noreferrer';link.target='_blank';
+ const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent='Bağlantıyı kopyala';copy.onclick=()=>navigator.clipboard?.writeText(v.link);
+ $('result').append(p,link,document.createTextNode(' '),copy);$('result').hidden=false;loadAssignments();
+ }catch(e){$('status').textContent='Atama başarısız: '+e.message;}
+ finally{$('create').disabled=false;}
+}
+async function loadAssignments(){
+ try{const v=await request('/api/egitim/ik/atamalar');$('assignments').replaceChildren();
+ if(!v.assignments.length){$('assignments').textContent='Henüz eğitim atanmamış.';return;}
+ const ul=document.createElement('ul');
+ for(const x of v.assignments){const li=document.createElement('li');li.textContent=x.recipient+' · '+x.program_id+' · '+x.module_ids.length+' ders · '+new Date(x.created_at).toLocaleDateString('tr-TR');ul.append(li);}
+ $('assignments').append(ul);}catch(e){$('assignments').textContent='Atamalar görüntülenemedi: '+e.message;}
+}
+async function init(){try{
+ catalog=await request('/api/egitim/ik/katalog');
+ renderModules();
+ for(const p of catalog.programs){const o=document.createElement('option');o.value=p.id;o.textContent=p.title;$('program').append(o);}
+ $('program').onchange=preset;preset();$('create').disabled=false;loadAssignments();
+ }catch(e){$('status').textContent='Eğitim kataloğu yüklenemedi: '+e.message;}}
+ $('analyze').onclick=analyze;$('manual').onclick=()=>{$('reportStatus').textContent='Rapor olmadan seçim yapabilirsiniz.';$('suggestions').hidden=true;};
+ $('defaults').onclick=preset;$('all').onclick=()=>selectModules(catalog.modules.map(m=>m.id));
+ $('clear').onclick=()=>selectModules([]);$('create').onclick=create;$('refresh').onclick=loadAssignments;
+ init();
+</script></body></html>
