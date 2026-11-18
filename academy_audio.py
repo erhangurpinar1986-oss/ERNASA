@@ -138,7 +138,8 @@ def academy_page(token: str):
 
 @router.post("/api/egitim/{token}/ses", status_code=201)
 async def submit_voice(request: Request, token: str, module_id: str = Form(...),
-                       consent: str = Form(...), audio: UploadFile = File(...)):
+                       consent: str = Form(...), scenario_id: str = Form("tanitim"),
+                       audio: UploadFile = File(...)):
     _origin_ok(request)
     if module_id not in ALLOWED_MODULES:
         raise HTTPException(422, "Eğitim modülü geçersiz.")
@@ -147,6 +148,8 @@ async def submit_voice(request: Request, token: str, module_id: str = Form(...),
         raise HTTPException(403, "Bu ders katılımcıya atanmadı.")
     if consent != "yes":
         raise HTTPException(422, "Ses kaydını göndermek için açık onay gerekli.")
+    if scenario_id not in ("tanitim","itiraz","serbest"):
+        raise HTTPException(422, "Sunum senaryosu geçersiz.")
     media_type = _safe_type(audio.content_type)
     if media_type not in AUDIO_TYPES:
         raise HTTPException(415, "Yalnızca WebM, MP4 veya OGG ses kaydı kabul edilir.")
@@ -177,6 +180,8 @@ async def submit_voice(request: Request, token: str, module_id: str = Form(...),
                 byte_size=excluded.byte_size,consented_at=excluded.consented_at,
                 submitted_at=excluded.submitted_at""",
             (recording_id, digest, module_id, media_type, data, len(data), now, now))
+        from academy_video import save_context
+        save_context(db, digest, module_id, "ses", scenario_id)
         db.commit()
     return {"received": True, "module_id":module_id,
             "size_bytes":len(data), "submitted_at":now}
