@@ -70,8 +70,18 @@ def _safe_provider_error(error: HTTPError) -> str:
 _ALLOWED_SENDERS = {"iletisim@ernasa.com"}
 
 
+def _email_provider():
+    """Use exactly one explicit provider; never retry automatically via another."""
+    provider = os.getenv("ERNASA_EMAIL_PROVIDER", "resend").strip().lower()
+    if provider not in {"resend", "brevo"}:
+        raise EmailConfigurationError("Kurumsal e-posta sağlayıcısı desteklenmiyor.")
+    return provider
+
+
 def configured_sender():
-    key = os.getenv("ERNASA_RESEND_API_KEY", "").strip()
+    provider = _email_provider()
+    key_name = "ERNASA_BREVO_API_KEY" if provider == "brevo" else "ERNASA_RESEND_API_KEY"
+    key = os.getenv(key_name, "").strip()
     sender = os.getenv("ERNASA_EMAIL_FROM", "iletisim@ernasa.com").strip().lower()
     if not key or sender not in _ALLOWED_SENDERS:
         raise EmailConfigurationError("Kurumsal e-posta gönderimi henüz yapılandırılmadı.")
@@ -106,9 +116,67 @@ def invitation_message(candidate, url):
     return recipient, subject, body
 
 
+def _send_brevo(*, api_key, sender, recipient, subject, text, html=None):
+    """Send one explicitly approved invitation via HTTPS; no retries or fallbacks.
+
+    Brevo does not provide Resend's Idempotency-Key behavior. The interview
+    endpoint's persisted pending/sent guard prevents routine duplicate clicks.
+    Ambiguous network failures must be investigated before manual retry.
+    """
+    payload = {
+        "sender": {"name": "ERNASA Yazılım Sistemleri", "email": sender},
+        "to": [{"email": recipient}],
+        "subject": subject,
+        "textContent": text,
+    }
+    if html is not None:
+        payload["htmlContent"] = html
+    request = Request(
+        "https://api.brevo.com/v3/smtp/email",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "ERNASA-Mailer/1.0",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            result = json.loads(response.read(8192))
+    except HTTPError as exc:
+        # Do not read/log provider bodies: they can contain addresses or tokens,
+        # and reading itself can raise an OSError.
+        status = int(getattr(exc, "code", 0) or 0)
+        if status in (401, 403):
+            meaning = "API anahtarı veya gönderim yetkisi reddedildi. Brevo hesabını ve doğrulanmış göndericiyi kontrol edin."
+        elif status in (400, 404, 422):
+            meaning = "E-posta isteği veya gönderici reddedildi. Brevo gönderici ayarlarını kontrol edin."
+        elif status == 429:
+            meaning = "Brevo gönderim sınırına ulaşıldı."
+        elif 500 <= status < 600:
+            meaning = "Brevo servisinde geçici hata var."
+        else:
+            meaning = "E-posta sağlayıcısı isteği reddetti."
+        raise EmailDeliveryError(f"Brevo HTTP {status}: {meaning}") from None
+    except (URLError, TimeoutError, OSError, ValueError, UnicodeError, TypeError):
+        raise EmailDeliveryError(
+            "Brevo gönderim sonucu doğrulanamadı. Tekrar göndermeden önce işlem kayıtlarını kontrol edin."
+        ) from None
+    if not isinstance(result, dict) or not isinstance(result.get("messageId"), str) or not result["messageId"]:
+        raise EmailDeliveryError(
+            "Brevo gönderim onayı alınamadı. Tekrar göndermeden önce işlem kayıtlarını kontrol edin."
+        )
+    return result["messageId"]
+
+
 def send_invitation(candidate, url, *, idempotency_key):
     api_key, sender = configured_sender()
     recipient, subject, body = invitation_message(candidate, url)
+    if _email_provider() == "brevo":
+        return _send_brevo(api_key=api_key, sender=sender, recipient=recipient,
+                           subject=subject, text=body)
     payload = json.dumps({
         "from": f"ERNASA Yazılım Sistemleri <{sender}>",
         "to": [recipient],
@@ -187,6 +255,9 @@ def send_training_invitation(*, recipient, name, url, expires_at, idempotency_ke
         '<hr style="border:0;border-top:1px solid #e3eaf0;margin:22px 0">'
         '<small>ERNASA Yazılım ve Teknoloji Sistemleri</small></div></body></html>'
     )
+    if _email_provider() == "brevo":
+        return _send_brevo(api_key=api_key, sender=sender, recipient=email_address,
+                           subject=subject, text=plain, html=html)
     payload = json.dumps({
         "from": f"ERNASA Yazılım Sistemleri <{sender}>",
         "to": [email_address],
@@ -214,13 +285,18 @@ def send_training_invitation(*, recipient, name, url, expires_at, idempotency_ke
 
 
 def inspect_sender_domain():
-    """Read-only Resend sender-domain probe for safe startup diagnostics.
+    """Read-only Resend domain probe; never query Resend for Brevo setups.
 
     Returns fixed status fields only, never raw API responses, credentials,
     domain IDs, DNS records or names of unrelated domains. No email is sent.
-    A 401 on GET /domains often means the production key is send-only; that
-    is not evidence of invalid send permissions.
+    A 401 on GET /domains often means the production key is send-only.
     """
+    try:
+        if _email_provider() == "brevo":
+            configured_sender()
+            return {"result": "not_applicable", "provider": "brevo"}
+    except EmailConfigurationError:
+        return {"result": "missing_configuration"}
     try:
         key, sender = configured_sender()
     except EmailConfigurationError:
