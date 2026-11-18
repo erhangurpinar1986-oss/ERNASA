@@ -336,7 +336,7 @@ def send_assignment_mail(request: Request, token: str):
         provider_id=invite_email.send_training_invitation(
             recipient=row["email"],name=row["recipient"],url=url,
             expires_at=row["expires_at"],
-            idempotency_key="ernasa-academy-"+digest[:40])
+            idempotency_key="ernasa-academy-"+digest[:32]+"-"+secrets.token_hex(8))
     except invite_email.EmailConfigurationError as exc:
         raise HTTPException(503,str(exc)) from None
     except (invite_email.EmailDeliveryError, ValueError) as exc:
