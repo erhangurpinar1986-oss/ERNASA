@@ -5,6 +5,7 @@ import pytest
 
 import database
 import academy_audio
+import academy_assignments
 import ernasa_training
 
 
@@ -14,6 +15,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(database, "DATABASE_URL", None)
     monkeypatch.setattr(academy_audio, "DATABASE_URL", None)
     ernasa_training.initialize_schema()
+    academy_assignments.initialize_schema()
     academy_audio.initialize_schema()
     app = FastAPI()
     app.include_router(academy_audio.router)
