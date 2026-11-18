@@ -1,0 +1,27 @@
+name: Manual corporate email regression tests
+
+on:
+  pull_request:
+    paths:
+      - services/invite_email.py
+      - academy_assignments.py
+      - academy_assign.html
+      - frontend/ik_cv_invites.js
+      - backend/main.py
+      - tests/test_brevo_email.py
+      - tests/test_invite_email.py
+      - .github/workflows/manual-email-tests.yml
+  workflow_dispatch:
+
+jobs:
+  offline-mail-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile mail service and invitation routes
+        run: python -m py_compile services/invite_email.py backend/main.py academy_assignments.py tests/test_brevo_email.py
+      - name: Test Resend compatibility and Brevo HTTPS (mocked, no emails)
+        run: python -m unittest tests.test_invite_email tests.test_brevo_email -v
