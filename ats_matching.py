@@ -1,5 +1,6 @@
 """Evidence-only CV comparison for the ATS subscription."""
 import json
+import os
 import re
 import unicodedata
 from contextlib import closing
@@ -165,16 +166,18 @@ def cv_lines(path):
             pass
         if len(" ".join(line for line, _ in native)) >= 100:
             return native
-        # OCR is offline: no CV leaves the server. Always preserve the
-        # native text as a fallback if the optional OCR runtime fails.
-        try:
-            ocr_lines = _ocr_pdf_lines(path)
-            if len(" ".join(line for line, _ in ocr_lines)) > len(" ".join(line for line, _ in native)):
-                return ocr_lines
-        except (ImportError, OSError, RuntimeError, ValueError, MemoryError) as error:
-            import logging
-            logging.getLogger(__name__).warning(
-                "ATS PDF OCR failed: %s", type(error).__name__)
+        # On the 512 MB Render instance, ONNX OCR caused memory-limit
+        # restarts. Opt in ONLY on a separately capacity-tested larger host.
+        # Otherwise return an explicit, safe manual-text fallback to the UI.
+        if os.getenv("ERNASA_ATS_ENABLE_LOCAL_OCR") == "1":
+            try:
+                ocr_lines = _ocr_pdf_lines(path)
+                if len(" ".join(line for line, _ in ocr_lines)) > len(" ".join(line for line, _ in native)):
+                    return ocr_lines
+            except (ImportError, OSError, RuntimeError, ValueError, MemoryError) as error:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "ATS PDF OCR failed: %s", type(error).__name__)
         return native
     return [(line, None) for line in relevant_text(extract_text(str(path))).splitlines() if line.strip()]
 
@@ -223,22 +226,31 @@ def compare(criteria, lines):
             "human_review_required":True}
 
 
-def evidence_match(root,actor,app_id,document_id):
+def evidence_match(root,actor,app_id,document_id,override_text=None):
     source = "original_document"
-    try:
-        path, _, _ = get_document(root,actor,app_id,document_id)
+    if override_text is not None:
+        # Authenticated, scoped PDF lookup: manual text is NOT a new CV and
+        # cannot be used to guess or replace a different candidate's document.
+        get_document(root,actor,app_id,document_id)
+        lines = [(line,None) for line in relevant_text(override_text).splitlines() if line.strip()]
+        if not lines:
+            raise HTTPException(422,"Girdiğiniz metinde analiz edilebilir iş deneyimi veya yetkinlik bilgisi bulunamadı.")
+        source = "reviewer_transcribed_cv_text"
+    else:
         try:
-            lines = cv_lines(path)
-        except Exception:
-            lines = []
-    except HTTPException as error:
-        if error.status_code != 404:
-            raise
-        saved = stored_cv_text(actor,app_id,document_id)
-        if not saved:
-            raise  # Keep the missing-file error, never invent a CV.
-        lines = [(line,None) for line in saved.splitlines() if line.strip()]
-        source = "stored_interview_cv_text"
+            path, _, _ = get_document(root,actor,app_id,document_id)
+            try:
+                lines = cv_lines(path)
+            except (OSError,ValueError,RuntimeError):
+                lines = []
+        except HTTPException as error:
+            if error.status_code != 404:
+                raise
+            saved = stored_cv_text(actor,app_id,document_id)
+            if not saved:
+                raise  # Keep the missing-file error, never invent a CV.
+            lines = [(line,None) for line in saved.splitlines() if line.strip()]
+            source = "stored_interview_cv_text"
     with closing(get_connection()) as connection:
         cursor = connection.cursor()
         row = application(cursor,actor,app_id)
@@ -252,7 +264,8 @@ def evidence_match(root,actor,app_id,document_id):
                     source=source,original_file_available=(source=="original_document"))
     result = compare(criteria,lines)
     result["source"] = source
-    result["original_file_available"] = source == "original_document"
+    result["original_file_available"] = source in ("original_document","reviewer_transcribed_cv_text")
+    result["manual_verification_required"] = source == "reviewer_transcribed_cv_text"
     if not lines:
         result["reason"] = "PDF dosyasının metin katmanı okunamadı. Belge taranmış veya özel kodlamalı olabilir; OCR gerekli."
         result["text_extraction_status"] = "unreadable"
