@@ -451,16 +451,36 @@ if (companyPortalPage) {
                 (Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0)).at(-1);
             const selectedCv = lastUploaded(cvNamed.length ? cvNamed : cvDocuments);
 
-            async function analyzeCvMatch(doc, anchor, button) {
+            async function analyzeCvMatch(doc, anchor, button, suppliedText = null) {
                 button.disabled = true;
                 try {
-                    // API başvuruyu ve pozisyon kriterlerini şirket oturumuna göre doğrular.
-                    const matching = await api(appRoute(id)+"/documents/"+encodeURIComponent(doc.id)+"/match");
+                    const route = appRoute(id)+"/documents/"+encodeURIComponent(doc.id);
+                    // Unreadable PDF text can be supplied by an authorized reviewer;
+                    // never upload a new candidate or overwrite the original CV.
+                    const matching = suppliedText === null
+                        ? await api(route+"/match")
+                        : await api(route+"/match-text","POST",{text:suppliedText});
                     const evidence = el("div","",{class:"ats-evidence",tabindex:"-1"});
                     evidence.append(el("h4","CV–Pozisyon Eşleşme Sonucu"),
                         el("p","İncelenen CV: "+doc.filename+" · Pozisyon: "+row.position));
                     if (matching.source === "stored_interview_cv_text") {
                         evidence.append(el("p","Özgün PDF/DOCX dosyası sunucuda bulunmuyor. Bu analiz, aynı CV belgesine bağlı mülakatta saklanmış metinden yapıldı. Dosyayı yeniden açabilmek için orijinal CV'yi aynı başvuruya tekrar yükleyin.",{class:"saas-warning"}));
+                    }
+                    if (matching.source === "reviewer_transcribed_cv_text") {
+                        evidence.append(el("p","Analiz, İK yetkilisinin PDF'den aktardığı metne dayanmaktadır. Metnin orijinal belgeyle doğrulanması gerekir; otomatik işe alım veya ret kararı değildir.",{class:"saas-warning"}));
+                    }
+                    if (matching.text_extraction_status === "unreadable") {
+                        evidence.append(el("p","Bu PDF'nin metin katmanı sunucuda okunamıyor. Sunucu belleğini zorlayan OCR devre dışı. Orijinal PDF'yi açıp yalnızca iş deneyimleri, beceriler ve sertifikalar bölümündeki metni aşağıya yapıştırabilirsiniz."));
+                        const manual = textarea("manual_cv_text","",40000);
+                        manual.placeholder = "PDF'den kopyaladığınız mesleki deneyim ve yetkinlikler (en az 10 karakter)";
+                        manual.setAttribute("aria-label","CV'den kopyalanan mesleki metin");
+                        const manualForm = form([field("CV metnini yapıştır",manual)],
+                            "Bu metinle analiz et",async () => {
+                                const provided = manual.value.trim();
+                                if (provided.length < 10) throw new Error("En az 10 karakter CV metni girin.");
+                                await analyzeCvMatch(doc,anchor,button,provided);
+                            });
+                        evidence.append(manualForm);
                     }
                     if (matching.match_score === null) {
                         evidence.append(el("p","CV–pozisyon uyum yüzdesi hesaplanamadı."));
