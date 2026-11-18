@@ -149,3 +149,58 @@ def test_corrupt_archive_fails_closed_without_creating_a_cv(sample_ats):
     assert failure.value.status_code == 503
     assert not path.exists()
     assert len(ats.details(actor, app_id)["documents"]) == 1
+
+
+def _attach_synthetic_interview_text(actor, app_id, doc_id, text):
+    with recruitment.write(actor.company_id) as cursor:
+        token = ats.uid()
+        cursor.execute("""INSERT INTO interview_links
+            (token,name,company,position,created_at,status,cv_text,company_id,application_id)
+            VALUES (?,?,?,?,?,?,?,?,?)""",
+            (token,"Sentetik Aday","Test Firmasi","Depo Personeli",ats.now(),
+             "completed",text,actor.company_id,app_id))
+        cursor.execute("INSERT INTO ats_interview_cv_sources VALUES (?,?,?)",
+                       (token,actor.company_id,doc_id))
+    return token
+
+
+def test_missing_original_uses_exact_interview_cv_text_for_matching(sample_ats):
+    root, actor, _, app_id, doc_id = sample_ats
+    _attach_synthetic_interview_text(actor,app_id,doc_id,
+                                     "Yetkinlikler: WMS ve forklift tecrubem var")
+    path, _, _ = ats.get_document(root,actor,app_id,doc_id)
+    with recruitment.write(actor.company_id) as cursor:
+        cursor.execute("DELETE FROM ats_document_blobs WHERE document_id=?", (doc_id,))
+    path.unlink()
+    recovered = ats_matching.evidence_match(root,actor,app_id,doc_id)
+    assert recovered["match_score"] == 100
+    assert recovered["source"] == "stored_interview_cv_text"
+    assert recovered["original_file_available"] is False
+    assert "WMS" in ats_matching.source_text(root,actor,app_id,doc_id)
+    assert not path.exists()  # A text-only fallback never fabricates the original PDF.
+
+
+def test_missing_original_without_exact_document_link_does_not_guess(sample_ats):
+    root, actor, _, app_id, doc_id = sample_ats
+    with recruitment.write(actor.company_id) as cursor:
+        token = ats.uid()
+        cursor.execute("""INSERT INTO interview_links
+            (token,name,company,position,created_at,status,cv_text,company_id,application_id)
+            VALUES (?,?,?,?,?,?,?,?,?)""",
+            (token,"Sentetik Aday","Test Firmasi","Depo Personeli",ats.now(),
+             "completed","WMS forklift",actor.company_id,app_id))
+        cursor.execute("DELETE FROM ats_document_blobs WHERE document_id=?", (doc_id,))
+    path, _, _ = (ats.document_path(root,actor.company_id,doc_id).with_suffix(".pdf"),None,None)
+    path.unlink()
+    with pytest.raises(HTTPException) as error:
+        ats_matching.evidence_match(root,actor,app_id,doc_id)
+    assert error.value.status_code == 404
+
+
+def test_stored_interview_text_is_tenant_scoped(sample_ats):
+    root, actor, _, app_id, doc_id = sample_ats
+    _attach_synthetic_interview_text(actor,app_id,doc_id,"WMS forklift")
+    other = SimpleNamespace(company_id=999,user_id=20,role="hr_manager",products=("ats",))
+    with pytest.raises(HTTPException) as error:
+        ats_matching.stored_cv_text(other,app_id,doc_id)
+    assert error.value.status_code == 404
