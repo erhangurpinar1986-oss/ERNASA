@@ -118,8 +118,8 @@ async def lifespan(_app):
     academy_audio.initialize_schema()
     academy_assignments.initialize_schema()
     academy_video.initialize_schema()
-    # Read-only Resend sender-domain check. Emit fixed, non-sensitive fields only.
-    # A restricted sending-only API key may disallow domain listing.
+    # Read-only sender-domain diagnostic where supported; never send email at startup.
+    # A restricted sending-only Resend API key may disallow domain listing.
     try:
         domain_diagnostic = await asyncio.to_thread(invite_email.inspect_sender_domain)
         print("ERNASA_RESEND_DOMAIN_DIAGNOSTIC " + json.dumps(
