@@ -315,7 +315,7 @@ def training_email_status(request: Request):
         return {"configured":False,"sender":None,
                 "message":"Kurumsal e-posta servisi yapılandırılmamış. Render'da ERNASA_EMAIL_PROVIDER, ilgili API anahtarı ve ERNASA_EMAIL_FROM ayarlarını kontrol edin."}
     return {"configured":True,"sender":sender,
-            "message":"ERNASA kurumsal e-posta gönderimi hazır."}
+            "message":"Kurumsal e-posta yapılandırması mevcut; canlı gönderim yetkisi henüz bu kontrolle doğrulanmaz."}
 
 
 @router.post("/api/egitim/ik/davet/{token}/gonder")
