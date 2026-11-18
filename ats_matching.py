@@ -101,14 +101,51 @@ def parse_criteria(value):
     return rows
 
 
+def _pdf_text_lines(path):
+    """Return page-aware native PDF text without any external data transfer."""
+    from pymupdf import open as open_pdf
+    lines = []
+    with open_pdf(path) as pdf:
+        for number, page in enumerate(pdf, 1):
+            if number > 60:
+                break
+            lines.extend((line, number) for line in relevant_text(page.get_text()).splitlines() if line.strip())
+    return lines
+
+
 def cv_lines(path):
-    if path.suffix.lower()==".pdf":
-        from pymupdf import open as open_pdf
-        with open_pdf(path) as pdf:
-            pages = [(index,page.get_text()) for index,page in enumerate(pdf,1) if index <= 60]
-        if any(text.strip() for _,text in pages):
-            return [(line,index) for index,text in pages for line in relevant_text(text).splitlines() if line.strip()]
-    return [(line,None) for line in relevant_text(extract_text(str(path))).splitlines() if line.strip()]
+    if path.suffix.lower() == ".pdf":
+        native = _pdf_text_lines(path)
+        if len(" ".join(line for line, _ in native)) >= 100:
+            return native
+        # PDF files with nonstandard text encoding can sometimes be read by
+        # pdfplumber even when PyMuPDF returns an empty text layer.
+        try:
+            import pdfplumber
+            secondary = []
+            with pdfplumber.open(path) as pdf:
+                for number, page in enumerate(pdf.pages, 1):
+                    if number > 60:
+                        break
+                    secondary.extend((line, number) for line in
+                                     relevant_text(page.extract_text() or "").splitlines() if line.strip())
+            if len(" ".join(line for line, _ in secondary)) > len(" ".join(line for line, _ in native)):
+                native = secondary
+        except (OSError, ValueError, RuntimeError):
+            pass
+        if len(" ".join(line for line, _ in native)) >= 100:
+            return native
+        # OCR is optional: do not fail all ATS CV analyses when a scanned PDF
+        # needs an OCR engine not installed in the Render runtime.
+        try:
+            from services.cv_service import extract_text
+            optical = relevant_text(extract_text(str(path)))
+            if len(optical) > len(" ".join(line for line, _ in native)):
+                return [(line, None) for line in optical.splitlines() if line.strip()]
+        except Exception:
+            pass
+        return native
+    return [(line, None) for line in relevant_text(extract_text(str(path))).splitlines() if line.strip()]
 
 
 def compare(criteria, lines):
@@ -186,7 +223,11 @@ def evidence_match(root,actor,app_id,document_id):
     result["source"] = source
     result["original_file_available"] = source == "original_document"
     if not lines:
-        result["reason"] = "CV metni okunamadı."
+        result["reason"] = "PDF dosyasının metin katmanı okunamadı. Belge taranmış veya özel kodlamalı olabilir; OCR gerekli."
+        result["text_extraction_status"] = "unreadable"
     elif result["match_score"] is None:
-        result["reason"] = "Hiçbir kriter için CV’de kanıt bulunamadı."
+        result["reason"] = "Okunabilen CV metninde kriterlere ilişkin kanıt bulunamadı."
+        result["text_extraction_status"] = "readable_no_evidence"
+    else:
+        result["text_extraction_status"] = "readable"
     return result
