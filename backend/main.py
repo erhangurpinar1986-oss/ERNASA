@@ -122,10 +122,10 @@ async def lifespan(_app):
     # A restricted sending-only Resend API key may disallow domain listing.
     try:
         domain_diagnostic = await asyncio.to_thread(invite_email.inspect_sender_domain)
-        print("ERNASA_RESEND_DOMAIN_DIAGNOSTIC " + json.dumps(
+        print("ERNASA_EMAIL_PROVIDER_DIAGNOSTIC " + json.dumps(
             domain_diagnostic,ensure_ascii=True,sort_keys=True), flush=True)
     except Exception:
-        print("ERNASA_RESEND_DOMAIN_DIAGNOSTIC probe_unavailable",flush=True)
+        print("ERNASA_EMAIL_PROVIDER_DIAGNOSTIC probe_unavailable",flush=True)
     stop = asyncio.Event()
     with render_gateway.start_control() as control_server:
         _app.state.control_server = control_server
