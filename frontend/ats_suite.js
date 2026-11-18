@@ -457,6 +457,9 @@ if (companyPortalPage) {
                     const evidence = el("div","",{class:"ats-evidence",tabindex:"-1"});
                     evidence.append(el("h4","CV–Pozisyon Eşleşme Sonucu"),
                         el("p","İncelenen CV: "+doc.filename+" · Pozisyon: "+row.position));
+                    if (matching.source === "stored_interview_cv_text") {
+                        evidence.append(el("p","Özgün PDF/DOCX dosyası sunucuda bulunmuyor. Bu analiz, aynı CV belgesine bağlı mülakatta saklanmış metinden yapıldı. Dosyayı yeniden açabilmek için orijinal CV'yi aynı başvuruya tekrar yükleyin.",{class:"saas-warning"}));
+                    }
                     if (matching.match_score === null) {
                         evidence.append(el("p","CV–pozisyon uyum yüzdesi hesaplanamadı."));
                         evidence.append(el("p",matching.reason || "CV kanıtı veya pozisyon kriterleri eksik."));
