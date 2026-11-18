@@ -20,7 +20,7 @@ from database import DATABASE_URL, get_connection
 from shield_sessions import verify_ik_session
 
 router = APIRouter()
-MAX_BYTES = 6 * 1024 * 1024
+MAX_BYTES = 12 * 1024 * 1024
 ALLOWED_MODULES = frozenset((
     "vizyon", "paneller", "ats", "cv_analiz", "iki_asama", "mulakat",
     "rapor", "guvenlik", "demo", "avcilik", "kesif", "crm",
@@ -163,7 +163,7 @@ async def submit_voice(request: Request, token: str, module_id: str = Form(...),
                 break
             total += len(part)
             if total > MAX_BYTES:
-                raise HTTPException(413, "Ses kaydı en fazla 6 MB olabilir.")
+                raise HTTPException(413, "Ses kaydı en fazla 12 MB olabilir.")
             chunks.append(part)
     finally:
         await audio.close()
