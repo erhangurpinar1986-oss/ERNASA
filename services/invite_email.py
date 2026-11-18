@@ -39,7 +39,9 @@ def _safe_provider_error(error: HTTPError) -> str:
     if status in (401,):
         meaning = "API anahtarı geçersiz veya erişim izni yetersiz. Resend API Keys bölümünü kontrol edin."
     elif status == 403:
-        if "testing emails" in message or "test email" in message or "your own email" in message:
+        if name == "invalid_api_key":
+            meaning = "Resend API anahtarı geçersiz görünüyor. Render ortam değişkeninin yeni anahtarın tam değeri olduğunu kontrol edin."
+        elif "testing emails" in message or "test email" in message or "your own email" in message:
             meaning = "Hesap yalnızca test alıcısına gönderime izin veriyor. Resend üzerinde ernasa.com alan adını doğrulayın."
         elif "domain" in message or "verified" in message or "sender" in message:
             meaning = "Gönderici alan adı doğrulanmamış veya gönderim için yetkili değil. Resend Domains bölümünü kontrol edin."
@@ -256,10 +258,26 @@ def inspect_sender_domain():
         return {"result":"not_in_first_page" if more is True else "not_found"}
     except HTTPError as exc:
         status=int(getattr(exc,"code",0) or 0)
+        # Read only the provider's documented error name. Do not expose
+        # arbitrary messages, credentials, recipients, or request details.
+        try:
+            data=json.loads(exc.read(2048))
+            provider_name=str(data.get("name","")).lower() if isinstance(data,dict) else ""
+        except (ValueError,OSError,TypeError,UnicodeError):
+            provider_name=""
+        allowed_names={
+            "invalid_api_key","restricted_api_key","validation_error",
+            "missing_api_key","security_error","invalid_access",
+        }
+        error_name=provider_name if provider_name in allowed_names else "other"
         if status==401:
-            return {"result":"read_access_denied_401","note":"sending_only_key_may_be_valid"}
+            return {"result":"read_access_denied_401",
+                    "error_name":error_name,
+                    "note":"sending_only_key_may_be_valid"}
         if status==403:
-            return {"result":"read_access_denied_403"}
-        return {"result":"provider_http_error","status":status if 400<=status<=599 else None}
+            return {"result":"read_access_denied_403","error_name":error_name}
+        return {"result":"provider_http_error",
+                "status":status if 400<=status<=599 else None,
+                "error_name":error_name}
     except (URLError,TimeoutError,OSError,ValueError,TypeError):
         return {"result":"read_request_failed"}
