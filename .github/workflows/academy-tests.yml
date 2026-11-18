@@ -1,0 +1,29 @@
+name: ERNASA Academy voice upload checks
+on:
+  push:
+    branches:
+      - feature/dijital-egitim-sesli-quiz-20261118
+  pull_request:
+    paths:
+      - academy_audio.py
+      - academy_portal.html
+      - ernasa_training.py
+      - backend/main.py
+      - tests/test_academy_audio.py
+      - .github/workflows/academy-tests.yml
+jobs:
+  test-academy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+      - name: Validate Python source
+        run: python -m py_compile academy_audio.py ernasa_training.py backend/main.py tests/test_academy_audio.py
+      - name: Run voice API tests
+        run: python -m pytest tests/test_academy_audio.py -q

@@ -3,6 +3,8 @@ import control_integration as portal_access
 import recruitment
 import portal_interviews
 import partner_interview
+import academy_audio
+import ernasa_training
 import ats
 import ats_cv_import
 import ik_cv_invites
@@ -107,6 +109,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(_app):
+    # Isolated training schemas: do not modify existing candidate/interview data.
+    ernasa_training.initialize_schema()
+    academy_audio.initialize_schema()
     stop = asyncio.Event()
     with render_gateway.start_control() as control_server:
         _app.state.control_server = control_server
@@ -128,6 +133,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.add_middleware(SecurityHeadersMiddleware)
+app.include_router(ernasa_training.router)
+app.include_router(academy_audio.router)
 
 @app.middleware("http")
 async def route_control(request: Request, call_next):
