@@ -198,6 +198,50 @@ def catalog(request: Request):
     return _catalog()
 
 
+@router.get("/api/egitim/ik/kayitli-raporlar")
+def saved_interview_reports(request: Request):
+    company_id,_ = _actor(request)
+    with closing(get_connection()) as db:
+        c=db.cursor()
+        if company_id is None:
+            c.execute("""SELECT i.token,i.name,i.position,i.created_at
+                FROM interview_links i JOIN interview_reports r ON r.token=i.token
+                WHERE i.status='completed' AND r.job_fit_analysis IS NOT NULL
+                ORDER BY i.created_at DESC LIMIT 100""")
+        else:
+            c.execute("""SELECT i.token,i.name,i.position,i.created_at
+                FROM interview_links i JOIN interview_reports r ON r.token=i.token
+                WHERE i.company_id=? AND i.status='completed'
+                  AND r.job_fit_analysis IS NOT NULL
+                ORDER BY i.created_at DESC LIMIT 100""",(company_id,))
+        return {"reports":[dict(row) for row in c.fetchall()]}
+
+
+@router.get("/api/egitim/ik/kayitli-raporlar/{interview_token}/oneriler")
+def saved_report_suggestions(request: Request, interview_token: str):
+    company_id,_ = _actor(request)
+    if not interview_token or len(interview_token)>128:
+        raise HTTPException(404,"Mülakat raporu bulunamadı.")
+    with closing(get_connection()) as db:
+        c=db.cursor()
+        if company_id is None:
+            c.execute("""SELECT i.name,i.position,r.job_fit_analysis
+                FROM interview_links i JOIN interview_reports r ON r.token=i.token
+                WHERE i.token=? AND i.status='completed'""",(interview_token,))
+        else:
+            c.execute("""SELECT i.name,i.position,r.job_fit_analysis
+                FROM interview_links i JOIN interview_reports r ON r.token=i.token
+                WHERE i.token=? AND i.company_id=? AND i.status='completed'""",
+                (interview_token,company_id))
+        row=c.fetchone()
+    if not row:
+        raise HTTPException(404,"Bu firmaya ait tamamlanmış mülakat raporu bulunamadı.")
+    result=suggest_from_text(row["job_fit_analysis"] or "")
+    result["candidate_name"]=row["name"] or ""
+    result["position"]=row["position"] or ""
+    return result
+
+
 @router.post("/api/egitim/ik/rapor-onerileri")
 async def report_suggestions(request: Request, report: UploadFile=File(...)):
     _actor(request, write=True)
