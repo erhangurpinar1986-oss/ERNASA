@@ -133,6 +133,8 @@ def academy_page(token: str):
         ][:14]
     encoded = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     html = html[:data_start] + encoded + html[data_start + data_size:]
+    html = html.replace("const ACADEMY_VIDEO_ALLOWED=false;",
+                        "const ACADEMY_VIDEO_ALLOWED=" + ("true" if assignments.get("video_allowed") else "false") + ";", 1)
     return HTMLResponse(content=html, headers=_headers())
 
 
