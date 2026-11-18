@@ -304,3 +304,28 @@ def test_unreadable_cv_is_not_scored_as_zero(sample_ats,monkeypatch):
     assert comparison["evidence_coverage"] == 0
     assert comparison["text_extraction_status"] == "unreadable"
     assert "OCR" in comparison["reason"]
+
+
+def test_offline_ocr_engine_reads_image_only_synthetic_pdf(tmp_path):
+    """Smoke-test the installed OCR engine, not just a mocked fallback."""
+    from io import BytesIO
+    import pymupdf
+    from PIL import Image, ImageDraw, ImageFont
+    import ats_matching
+
+    picture = Image.new("RGB",(1000,220),"white")
+    draw = ImageDraw.Draw(picture)
+    draw.text((35,55),"WMS FORKLIFT SALES",(0,0,0),
+              font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",54))
+    buffer = BytesIO()
+    picture.save(buffer,format="PNG")
+    pdf = pymupdf.open()
+    page = pdf.new_page(width=600,height=160)
+    page.insert_image(pymupdf.Rect(0,0,600,160),stream=buffer.getvalue())
+    filepath = tmp_path / "scan.pdf"
+    pdf.save(filepath)
+    pdf.close()
+    assert ats_matching._pdf_text_lines(filepath) == []
+    found = ats_matching._ocr_pdf_lines(filepath)
+    assert found, "OCR did not detect text in a synthetic image-only PDF."
+    assert any("WMS" in line.upper() for line,_ in found)
