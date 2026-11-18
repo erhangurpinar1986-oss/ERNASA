@@ -105,9 +105,28 @@ def academy_page(token: str):
     if not ACADEMY_HTML.exists():
         raise HTTPException(503, "Eğitim ekranı henüz sunucuda bulunamadı.")
     import json
+    import academy_assignments
     html = ACADEMY_HTML.read_text(encoding="utf-8")
-    safe_name = json.dumps(recipient, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
-    html = html.replace('"name": "ERNASA_KATILIMCI_ADI"', '"name": ' + safe_name, 1)
+    start_marker = "const ACADEMY_DATA="
+    start = html.find(start_marker)
+    if start < 0:
+        raise HTTPException(503, "Eğitim içeriği bulunamadı.")
+    data_start = start + len(start_marker)
+    try:
+        data, data_size = json.JSONDecoder().raw_decode(html[data_start:])
+    except ValueError:
+        raise HTTPException(503, "Eğitim içeriği okunamadı.") from None
+    assignments = academy_assignments.assigned_modules(token)
+    selected = set(assignments["module_ids"])
+    data["name"] = recipient
+    data["modules"] = [module for module in data["modules"] if module["id"] in selected]
+    if not data["modules"]:
+        raise HTTPException(409, "Katılımcıya henüz eğitim atanmadı.")
+    # Final is common to the B2B training; other programs use course questions.
+    if assignments["program_id"] != "b2b_satis":
+        data["final"] = []
+    encoded = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+    html = html[:data_start] + encoded + html[data_start + data_size:]
     return HTMLResponse(content=html, headers=_headers())
 
 
@@ -117,6 +136,9 @@ async def submit_voice(request: Request, token: str, module_id: str = Form(...),
     _origin_ok(request)
     if module_id not in ALLOWED_MODULES:
         raise HTTPException(422, "Eğitim modülü geçersiz.")
+    from academy_assignments import assigned_modules
+    if module_id not in assigned_modules(token)["module_ids"]:
+        raise HTTPException(403, "Bu ders katılımcıya atanmadı.")
     if consent != "yes":
         raise HTTPException(422, "Ses kaydını göndermek için açık onay gerekli.")
     media_type = _safe_type(audio.content_type)
