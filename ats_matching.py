@@ -113,6 +113,33 @@ def _pdf_text_lines(path):
     return lines
 
 
+def _ocr_pdf_lines(path):
+    """Offline OCR of image-based PDF, bounded for Render's small CPU runtime."""
+    from rapidocr import ModelType, RapidOCR
+    from pymupdf import Matrix, open as open_pdf
+    import numpy as np
+    from PIL import Image
+
+    engine = RapidOCR(params={
+        "Det.model_type": ModelType.TINY,
+        "Rec.model_type": ModelType.TINY,
+    })
+    found = []
+    with open_pdf(path) as pdf:
+        for number, page in enumerate(pdf, 1):
+            if number > 3:
+                break
+            pix = page.get_pixmap(matrix=Matrix(1.3, 1.3), alpha=False)
+            image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            response = engine(np.asarray(image))
+            for text in (response.txts or ()):
+                if isinstance(text, str):
+                    filtered = relevant_text(text)
+                    if filtered.strip():
+                        found.append((filtered.strip(), number))
+    return found
+
+
 def cv_lines(path):
     if path.suffix.lower() == ".pdf":
         native = _pdf_text_lines(path)
@@ -135,15 +162,16 @@ def cv_lines(path):
             pass
         if len(" ".join(line for line, _ in native)) >= 100:
             return native
-        # OCR is optional: do not fail all ATS CV analyses when a scanned PDF
-        # needs an OCR engine not installed in the Render runtime.
+        # OCR is offline: no CV leaves the server. Always preserve the
+        # native text as a fallback if the optional OCR runtime fails.
         try:
-            from services.cv_service import extract_text
-            optical = relevant_text(extract_text(str(path)))
-            if len(optical) > len(" ".join(line for line, _ in native)):
-                return [(line, None) for line in optical.splitlines() if line.strip()]
-        except Exception:
-            pass
+            ocr_lines = _ocr_pdf_lines(path)
+            if len(" ".join(line for line, _ in ocr_lines)) > len(" ".join(line for line, _ in native)):
+                return ocr_lines
+        except (ImportError, OSError, RuntimeError, ValueError, MemoryError) as error:
+            import logging
+            logging.getLogger(__name__).warning(
+                "ATS PDF OCR failed: %s", type(error).__name__)
         return native
     return [(line, None) for line in relevant_text(extract_text(str(path))).splitlines() if line.strip()]
 
