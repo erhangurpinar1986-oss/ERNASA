@@ -58,14 +58,14 @@ class InvitationEmailTests(unittest.TestCase):
 
         with patch.dict(os.environ, {
             "ERNASA_RESEND_API_KEY": "test-only",
-            "ERNASA_EMAIL_FROM": "office@ernasa.com",
+            "ERNASA_EMAIL_FROM": "iletisim@ernasa.com",
         }), patch.object(invite_email, "urlopen", return_value=FakeResponse()) as call:
             msgid = invite_email.send_invitation(
                 self.candidate, "https://ernasa.com/interview/test", idempotency_key="test-invite")
             self.assertEqual(msgid, "test-msg-123")
             request = call.call_args.args[0]
             payload = json.loads(request.data)
-            self.assertEqual(payload["from"], "ERNASA Yazılım Sistemleri <office@ernasa.com>")
+            self.assertEqual(payload["from"], "ERNASA Yazılım Sistemleri <iletisim@ernasa.com>")
             self.assertEqual(payload["to"], ["candidate@example.org"])
             self.assertEqual(request.get_header("Idempotency-key"), "test-invite")
             self.assertNotIn("test-only", str(payload))
@@ -74,7 +74,7 @@ class InvitationEmailTests(unittest.TestCase):
         from urllib.error import URLError
         with patch.dict(os.environ, {
             "ERNASA_RESEND_API_KEY": "secret-testing-key",
-            "ERNASA_EMAIL_FROM": "office@ernasa.com",
+            "ERNASA_EMAIL_FROM": "iletisim@ernasa.com",
         }), patch.object(invite_email, "urlopen", side_effect=URLError("secret-testing-key")):
             with self.assertRaises(invite_email.EmailDeliveryError) as error:
                 invite_email.send_invitation(
