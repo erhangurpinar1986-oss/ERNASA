@@ -36,8 +36,40 @@ def relevant_text(value):
     return '\n'.join(line for line in value[:80000].splitlines() if safe_line(line))
 
 
+def stored_cv_text(actor, app_id, document_id):
+    """Read ONLY verified CV text linked to this exact ATS document and tenant.
+
+    The interview's extracted text can support an evidence comparison when an
+    ephemeral original PDF was lost; it is NOT a replacement for the PDF.
+    """
+    with closing(get_connection()) as connection:
+        cursor = connection.cursor()
+        application(cursor, actor, app_id)
+        cursor.execute("""SELECT 1 FROM ats_documents
+            WHERE id=? AND company_id=? AND application_id=?""",
+            (document_id, actor.company_id, app_id))
+        if not cursor.fetchone():
+            raise HTTPException(404, "Belge kaydı bulunamadı.")
+        cursor.execute("""SELECT i.cv_text FROM ats_interview_cv_sources s
+            JOIN interview_links i ON i.token=s.token AND i.company_id=s.company_id
+            WHERE s.document_id=? AND s.company_id=? AND i.application_id=?
+                AND NULLIF(TRIM(i.cv_text),'') IS NOT NULL
+            ORDER BY i.created_at DESC LIMIT 1""",
+            (document_id, actor.company_id, app_id))
+        row = cursor.fetchone()
+    return relevant_text(row["cv_text"]) if row else ""
+
+
 def source_text(root,actor,app_id,document_id):
-    path, _, _ = get_document(root,actor,app_id,document_id)
+    try:
+        path, _, _ = get_document(root,actor,app_id,document_id)
+    except HTTPException as error:
+        if error.status_code != 404:
+            raise
+        saved = stored_cv_text(actor,app_id,document_id)
+        if saved:
+            return saved
+        raise
     try:
         result = extract_text(str(path))
     except (OSError,ValueError,RuntimeError):
@@ -124,7 +156,21 @@ def compare(criteria, lines):
 
 
 def evidence_match(root,actor,app_id,document_id):
-    path, _, _ = get_document(root,actor,app_id,document_id)
+    source = "original_document"
+    try:
+        path, _, _ = get_document(root,actor,app_id,document_id)
+        try:
+            lines = cv_lines(path)
+        except Exception:
+            lines = []
+    except HTTPException as error:
+        if error.status_code != 404:
+            raise
+        saved = stored_cv_text(actor,app_id,document_id)
+        if not saved:
+            raise  # Keep the missing-file error, never invent a CV.
+        lines = [(line,None) for line in saved.splitlines() if line.strip()]
+        source = "stored_interview_cv_text"
     with closing(get_connection()) as connection:
         cursor = connection.cursor()
         row = application(cursor,actor,app_id)
@@ -134,12 +180,11 @@ def evidence_match(root,actor,app_id,document_id):
     profile = json.loads(position["fields"] or "{}") if position else {}
     criteria = parse_criteria(profile.get("matching_criteria",""))
     if not criteria:
-        return dict(compare([],[]),reason="Pozisyon için ağırlıklı kriter tanımlanmadı.")
-    try:
-        lines = cv_lines(path)
-    except Exception:
-        lines = []
+        return dict(compare([],[]),reason="Pozisyon için ağırlıklı kriter tanımlanmadı.",
+                    source=source,original_file_available=(source=="original_document"))
     result = compare(criteria,lines)
+    result["source"] = source
+    result["original_file_available"] = source == "original_document"
     if not lines:
         result["reason"] = "CV metni okunamadı."
     elif result["match_score"] is None:
