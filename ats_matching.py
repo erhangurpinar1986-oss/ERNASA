@@ -71,6 +71,9 @@ def source_text(root,actor,app_id,document_id):
             return saved
         raise
     try:
+        if path.suffix.lower() == ".pdf":
+            lines = cv_lines(path)
+            return relevant_text("\n".join(line for line, _ in lines))
         result = extract_text(str(path))
     except (OSError,ValueError,RuntimeError):
         raise HTTPException(400, 'CV metni okunamadı.') from None
@@ -101,14 +104,79 @@ def parse_criteria(value):
     return rows
 
 
+def _pdf_text_lines(path):
+    """Return page-aware native PDF text without any external data transfer."""
+    from pymupdf import open as open_pdf
+    lines = []
+    with open_pdf(path) as pdf:
+        for number, page in enumerate(pdf, 1):
+            if number > 60:
+                break
+            lines.extend((line, number) for line in relevant_text(page.get_text()).splitlines() if line.strip())
+    return lines
+
+
+def _ocr_pdf_lines(path):
+    """Offline OCR of image-based PDF, bounded for Render's small CPU runtime."""
+    from rapidocr import ModelType, RapidOCR
+    from pymupdf import Matrix, open as open_pdf
+    import numpy as np
+    from PIL import Image
+
+    engine = RapidOCR(params={
+        "Det.model_type": ModelType.TINY,
+        "Rec.model_type": ModelType.TINY,
+    })
+    found = []
+    with open_pdf(path) as pdf:
+        for number, page in enumerate(pdf, 1):
+            if number > 3:
+                break
+            pix = page.get_pixmap(matrix=Matrix(1.3, 1.3), alpha=False)
+            image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            response = engine(np.asarray(image))
+            for text in (response.txts or ()):
+                if isinstance(text, str):
+                    filtered = relevant_text(text)
+                    if filtered.strip():
+                        found.append((filtered.strip(), number))
+    return found
+
+
 def cv_lines(path):
-    if path.suffix.lower()==".pdf":
-        from pymupdf import open as open_pdf
-        with open_pdf(path) as pdf:
-            pages = [(index,page.get_text()) for index,page in enumerate(pdf,1) if index <= 60]
-        if any(text.strip() for _,text in pages):
-            return [(line,index) for index,text in pages for line in relevant_text(text).splitlines() if line.strip()]
-    return [(line,None) for line in relevant_text(extract_text(str(path))).splitlines() if line.strip()]
+    if path.suffix.lower() == ".pdf":
+        native = _pdf_text_lines(path)
+        if len(" ".join(line for line, _ in native)) >= 100:
+            return native
+        # PDF files with nonstandard text encoding can sometimes be read by
+        # pdfplumber even when PyMuPDF returns an empty text layer.
+        try:
+            import pdfplumber
+            secondary = []
+            with pdfplumber.open(path) as pdf:
+                for number, page in enumerate(pdf.pages, 1):
+                    if number > 60:
+                        break
+                    secondary.extend((line, number) for line in
+                                     relevant_text(page.extract_text() or "").splitlines() if line.strip())
+            if len(" ".join(line for line, _ in secondary)) > len(" ".join(line for line, _ in native)):
+                native = secondary
+        except (OSError, ValueError, RuntimeError):
+            pass
+        if len(" ".join(line for line, _ in native)) >= 100:
+            return native
+        # OCR is offline: no CV leaves the server. Always preserve the
+        # native text as a fallback if the optional OCR runtime fails.
+        try:
+            ocr_lines = _ocr_pdf_lines(path)
+            if len(" ".join(line for line, _ in ocr_lines)) > len(" ".join(line for line, _ in native)):
+                return ocr_lines
+        except (ImportError, OSError, RuntimeError, ValueError, MemoryError) as error:
+            import logging
+            logging.getLogger(__name__).warning(
+                "ATS PDF OCR failed: %s", type(error).__name__)
+        return native
+    return [(line, None) for line in relevant_text(extract_text(str(path))).splitlines() if line.strip()]
 
 
 def compare(criteria, lines):
@@ -186,7 +254,11 @@ def evidence_match(root,actor,app_id,document_id):
     result["source"] = source
     result["original_file_available"] = source == "original_document"
     if not lines:
-        result["reason"] = "CV metni okunamadı."
+        result["reason"] = "PDF dosyasının metin katmanı okunamadı. Belge taranmış veya özel kodlamalı olabilir; OCR gerekli."
+        result["text_extraction_status"] = "unreadable"
     elif result["match_score"] is None:
-        result["reason"] = "Hiçbir kriter için CV’de kanıt bulunamadı."
+        result["reason"] = "Okunabilen CV metninde kriterlere ilişkin kanıt bulunamadı."
+        result["text_extraction_status"] = "readable_no_evidence"
+    else:
+        result["text_extraction_status"] = "readable"
     return result

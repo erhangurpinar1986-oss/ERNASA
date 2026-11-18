@@ -271,3 +271,61 @@ def test_reupload_same_cv_keeps_completed_interview_answers_report_and_link(samp
         assert source["company_id"] == actor.company_id
     assert len(ats.details(actor,app_id)["documents"]) == 1
     assert ats.get_document(root,actor,app_id,doc_id)[0].read_bytes() == original_bytes
+
+
+def test_image_only_pdf_uses_offline_ocr_for_cv_matching(sample_ats,monkeypatch):
+    root,actor,_,app_id,doc_id=sample_ats
+    import ats_matching
+    original=ats_matching._pdf_text_lines
+    # A scanned PDF has no legible native text; bounded offline OCR supplies lines.
+    monkeypatch.setattr(ats_matching,"_pdf_text_lines",lambda path: [])
+    monkeypatch.setattr(ats_matching,"_ocr_pdf_lines",
+                        lambda path: [("WMS ve forklift tecrubem var",1)])
+    match=ats_matching.evidence_match(root,actor,app_id,doc_id)
+    assert match["match_score"] == 100
+    assert match["evidence_coverage"] == 100
+    assert match["text_extraction_status"] == "readable"
+    assert "WMS" in ats_matching.source_text(root,actor,app_id,doc_id)
+    monkeypatch.setattr(ats_matching,"_pdf_text_lines",original)
+
+
+def test_unreadable_cv_is_not_scored_as_zero(sample_ats,monkeypatch):
+    root,actor,_,app_id,doc_id=sample_ats
+    import ats_matching
+    monkeypatch.setattr(ats_matching,"_pdf_text_lines",lambda path: [])
+    monkeypatch.setattr(ats_matching,"_ocr_pdf_lines",lambda path: [])
+    # Emulate the second PDF parser being unable to read the image-only file.
+    import pdfplumber
+    def unreadable_pdf(*_args, **_kwargs):
+        raise RuntimeError("No text layer")
+    monkeypatch.setattr(pdfplumber,"open",unreadable_pdf)
+    comparison=ats_matching.evidence_match(root,actor,app_id,doc_id)
+    assert comparison["match_score"] is None
+    assert comparison["evidence_coverage"] == 0
+    assert comparison["text_extraction_status"] == "unreadable"
+    assert "OCR" in comparison["reason"]
+
+
+def test_offline_ocr_engine_reads_image_only_synthetic_pdf(tmp_path):
+    """Smoke-test the installed OCR engine, not just a mocked fallback."""
+    from io import BytesIO
+    import pymupdf
+    from PIL import Image, ImageDraw, ImageFont
+    import ats_matching
+
+    picture = Image.new("RGB",(1000,220),"white")
+    draw = ImageDraw.Draw(picture)
+    draw.text((35,55),"WMS FORKLIFT SALES",(0,0,0),
+              font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",54))
+    buffer = BytesIO()
+    picture.save(buffer,format="PNG")
+    pdf = pymupdf.open()
+    page = pdf.new_page(width=600,height=160)
+    page.insert_image(pymupdf.Rect(0,0,600,160),stream=buffer.getvalue())
+    filepath = tmp_path / "scan.pdf"
+    pdf.save(filepath)
+    pdf.close()
+    assert ats_matching._pdf_text_lines(filepath) == []
+    found = ats_matching._ocr_pdf_lines(filepath)
+    assert found, "OCR did not detect text in a synthetic image-only PDF."
+    assert any("WMS" in line.upper() for line,_ in found)
