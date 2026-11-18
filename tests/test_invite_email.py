@@ -70,6 +70,37 @@ class InvitationEmailTests(unittest.TestCase):
             self.assertEqual(request.get_header("Idempotency-key"), "test-invite")
             self.assertNotIn("test-only", str(payload))
 
+    def test_readonly_domain_probe_verified(self):
+        import json
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self,*args): return False
+            def read(self,*args): return json.dumps({"data":[
+                {"name":"ernasa.com","status":"verified",
+                 "capabilities":{"sending":{"enabled":True,"status":"verified"}}}
+            ]}).encode()
+        with patch.dict(os.environ, {
+            "ERNASA_RESEND_API_KEY":"test-only","ERNASA_EMAIL_FROM":"iletisim@ernasa.com"
+        }),patch.object(invite_email,"urlopen",return_value=FakeResponse()) as mock:
+            report=invite_email.inspect_sender_domain()
+            req=mock.call_args.args[0]
+            self.assertEqual(req.get_method(),"GET")
+            self.assertEqual(req.full_url,"https://api.resend.com/domains?limit=100")
+            self.assertEqual(report,{"result":"found","domain_status":"verified",
+                                    "sending_enabled":True,"sending_status":"verified"})
+            self.assertNotIn("test-only",str(report))
+
+    def test_readonly_domain_probe_restricted_key_is_inconclusive(self):
+        from urllib.error import HTTPError
+        import io
+        with patch.dict(os.environ, {
+            "ERNASA_RESEND_API_KEY":"test-only","ERNASA_EMAIL_FROM":"iletisim@ernasa.com"
+        }), patch.object(invite_email,"urlopen",
+            side_effect=HTTPError("https://api.resend.com/domains",401,"no",{},io.BytesIO(b'{}'))):
+            report=invite_email.inspect_sender_domain()
+            self.assertEqual(report["result"],"read_access_denied_401")
+            self.assertEqual(report["note"],"sending_only_key_may_be_valid")
+
     def test_safe_resend_rejection_categories(self):
         import io
         from urllib.error import HTTPError
