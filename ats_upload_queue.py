@@ -23,10 +23,17 @@ def enqueue(actor, application_id, filename, content):
     with write(actor.company_id) as cursor:
         ats.application(cursor,actor,application_id)
         scope = (actor.company_id,application_id,digest)
-        cursor.execute("""SELECT 1 FROM ats_document_digests
-            WHERE company_id=? AND application_id=? AND digest=?""",scope)
-        if cursor.fetchone():
+        cursor.execute("""SELECT d.document_id,b.document_id AS archived_id
+            FROM ats_document_digests d
+            LEFT JOIN ats_document_blobs b ON b.document_id=d.document_id
+                AND b.company_id=d.company_id AND b.application_id=d.application_id
+            WHERE d.company_id=? AND d.application_id=? AND d.digest=?""",scope)
+        existing = cursor.fetchone()
+        if existing and existing['archived_id']:
+            # Already stored durably: no duplicate record or redundant upload.
             raise HTTPException(409,"Bu dosya bu başvuruya zaten yüklenmiş.")
+        # An existing digest without an archived blob may be a legacy missing file.
+        # Permit upload; ats.upload_document verifies the original record/file.
         cursor.execute("""SELECT 1 FROM ats_upload_jobs
             WHERE company_id=? AND application_id=? AND content_hash=? AND status='pending'""",scope)
         if cursor.fetchone():
