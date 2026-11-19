@@ -66,7 +66,7 @@
             <i data-lucide="users"></i>
             Personel Yönetimi
         </a>
-        <a href="/egitim-atama" class="sidebar-item" id="trainingAssignmentMenu" style="display:none" target="_blank" rel="noopener noreferrer">
+        <a href="#training" class="sidebar-item" id="trainingAssignmentMenu" data-screen="training" style="display:none">
             <i data-lucide="graduation-cap"></i> Eğitim Ata
         </a>
         <a href="#" class="sidebar-item" id="settingsMenu" data-screen="suite_settings" style="display:none"><i data-lucide="settings"></i> Firma Ayarları</a>
@@ -626,6 +626,14 @@
         </form>
     </section>
     <section id="atsSuiteScreen" class="results-card saas-module" hidden></section>
+    <section id="trainingScreen" class="results-card saas-module" hidden>
+        <h2>ERNASA İK · Eğitim Ata</h2>
+        <p>Katılımcı eğitimlerini ve rapor önerilerini mevcut İK oturumunuzla yönetin.</p>
+        <div id="trainingEmbedStatus" role="status" aria-live="polite"></div>
+        <iframe id="trainingPanelFrame" title="ERNASA İK Eğitim Ata"
+            loading="lazy" referrerpolicy="no-referrer"
+            style="width:100%;height:min(78vh,1000px);min-height:740px;border:1px solid #dce5ef;border-radius:14px;background:white;"></iframe>
+    </section>
     <dialog id="profileDialog" aria-labelledby="profileDialogTitle">
         <h3 id="profileDialogTitle">Profilim</h3>
         <p id="profileIdentity"></p>
