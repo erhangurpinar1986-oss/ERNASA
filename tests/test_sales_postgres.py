@@ -7,7 +7,7 @@ from psycopg2.extensions import parse_dsn
 import pytest
 from uuid import uuid4
 
-from control import app, postgres, sales, sales_http
+from control import app, postgres, render_gateway, sales, sales_http
 
 
 def test_postgres_migrations_workflow_and_append_only_guards():
@@ -25,9 +25,18 @@ def test_postgres_migrations_workflow_and_append_only_guards():
             if cursor.fetchone() is None:
                 cursor.execute((root/'migrations/control_postgresql/001_schema_draft.up.sql').read_text(encoding='utf-8'))
                 cursor.execute((root/'migrations/control_postgresql/002_session_rules.up.sql').read_text(encoding='utf-8'))
-            cursor.execute('SET LOCAL search_path = ernasa_control, pg_catalog')
-            cursor.execute(sales.DDL)
-            cursor.execute((root/'migrations/control_postgresql/003_sales_hub.up.sql').read_text(encoding='utf-8'))
+        # This is the exact startup migration path, tested on a disposable PG DB.
+        setup = app.connect(postgres.Target(dsn))
+        try:
+            render_gateway.ensure_sales_schema(setup)
+            render_gateway.ensure_sales_schema(setup)  # idempotence
+            tables = {r[0] for r in setup.execute(
+                "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='ernasa_control'"
+            ).fetchall()}
+            assert render_gateway.SALES_TABLES <= tables
+            assert {'users','companies','sessions'} <= tables
+        finally:
+            setup.close()
         db = app.connect(postgres.Target(dsn))
         def execute(actor, action, **data):
             with db:
