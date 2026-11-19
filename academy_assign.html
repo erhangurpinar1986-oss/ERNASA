@@ -59,11 +59,27 @@ a{color:#25578c;overflow-wrap:anywhere}#status{padding:8px 0;color:#244d74}#resu
 <script>
 const $=id=>document.getElementById(id);
 let catalog={programs:[],modules:[]};let suggestions=[];
-async function request(url,opts){const res=await fetch(url,{credentials:'same-origin',cache:'no-store',...opts});const v=await res.json().catch(()=>({}));if(!res.ok)throw Error(typeof v.detail==='string'?v.detail:'HTTP '+res.status);return v;}
+async function request(url,opts){
+ const res=await fetch(url,{credentials:'same-origin',cache:'no-store',...opts});
+ const v=await res.json().catch(()=>({}));
+ if(!res.ok){
+   const detail=typeof v.detail==='string'?v.detail:
+       Array.isArray(v.detail)?v.detail.map(x=>(x.loc||[]).join('.')+': '+(x.msg||'Geçersiz alan')).join('; '):
+       'HTTP '+res.status;
+   throw Error(detail);
+ }
+ return v;
+}
 function selected(){return [...document.querySelectorAll('#modules input:checked')].map(e=>e.value);}
+function currentProgram(){return catalog.programs.find(x=>x.id===$('program').value);}
+function allowedModules(){
+ return new Set(currentProgram()?.allowed_modules||currentProgram()?.default_modules||[]);
+}
 function renderModules(){
  $('modules').replaceChildren();
+ const allowed=allowedModules();
  for(const item of catalog.modules){
+ if(!allowed.has(item.id))continue;
  const label=document.createElement('label');label.className='check';
  const input=document.createElement('input');input.type='checkbox';input.value=item.id;
  const span=document.createElement('span');span.textContent=item.title;
@@ -74,8 +90,12 @@ function selectModules(ids){
  const wanted=new Set(ids);
  document.querySelectorAll('#modules input').forEach(x=>x.checked=wanted.has(x.value));
 }
-function currentProgram(){return catalog.programs.find(x=>x.id===$('program').value);}
-function preset(){selectModules(currentProgram()?.default_modules||[]);}
+function preset(){
+ renderModules();
+ selectModules(currentProgram()?.default_modules||[]);
+ $('suggestions').hidden=true;
+ $('reportStatus').textContent='';
+}
 function renderSuggestions(result){
  suggestions=result.suggestions||[];
  $('suggestions').replaceChildren();$('suggestions').hidden=false;
@@ -85,7 +105,14 @@ function renderSuggestions(result){
  const p=document.createElement('p');p.textContent='• '+x.title+' — '+x.reason;$('suggestions').append(p);
  }
  const apply=document.createElement('button');apply.type='button';apply.textContent='Önerileri seçime ekle';
- apply.onclick=()=>selectModules([...selected(),...suggestions.map(x=>x.module_id)]);
+ apply.onclick=()=>{
+  const allowed=allowedModules();
+  const selectedSuggestions=suggestions.map(x=>x.module_id).filter(id=>allowed.has(id));
+  selectModules([...selected(),...selectedSuggestions]);
+  if(selectedSuggestions.length!==suggestions.length){
+    $('reportStatus').textContent='Rapordaki bazı öneriler bu eğitim programına ait olmadığından eklenmedi.';
+  }
+};
  $('suggestions').append(apply);
  if(result.candidate_name && !$('candidate').value.trim())$('candidate').value=result.candidate_name;
  $('reportStatus').textContent=result.notice||'Öneriler hazır.';
@@ -100,7 +127,12 @@ async function analyze(){
 }
 async function create(){
  const name=$('candidate').value.trim();if(!name){$('status').textContent='Katılımcı adını girin.';return;}
- const modules=selected();if(!modules.length){$('status').textContent='En az bir ders seçin.';return;}
+ const modules=selected();
+ if(!modules.length){$('status').textContent='En az bir ders seçin.';return;}
+ if($('program').value==='ernasa_v9' && !modules.includes('demo')){
+   $('status').textContent='V9 programında “7 dakikalık ürün tanıtımı” (demo) dersi zorunludur. Lütfen bu dersi de seçin.';
+   return;
+ }
  $('create').disabled=true;$('status').textContent='Atama oluşturuluyor…';$('result').hidden=true;
  try{
  const v=await request('/api/egitim/ik/atama',{method:'POST',headers:{'Content-Type':'application/json'},

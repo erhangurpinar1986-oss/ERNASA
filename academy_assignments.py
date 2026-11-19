@@ -265,7 +265,8 @@ class AssignmentRequest(BaseModel):
 
 
 def _catalog():
-    return {"programs":[{"id":key,"title":val["title"],"default_modules":list(val["modules"])}
+    return {"programs":[{"id":key,"title":val["title"],"default_modules":list(val["modules"]),
+                         "allowed_modules":list(V9_MODULE_TITLES if key == "ernasa_v9" else LEGACY_MODULE_TITLES)}
                         for key,val in PROGRAMS.items()],
             "modules":[{"id":key,"title":value} for key,value in MODULE_TITLES.items()]}
 
