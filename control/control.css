@@ -5,3 +5,20 @@
 .status-approved,.status-paid,.status-new {background:#e8f7ee;color:var(--green)}
 .status-rejected,.status-reversed {background:#fff0ef;color:#9f2921}
 .status-submitted,.status-revision,.status-pending {background:#fff5de;color:#75520c}
+
+/* Sales Hub presentation only: no changes to control permissions or data model. */
+.sales-section-tabs {
+  display:flex; flex-wrap:wrap; gap:8px; margin:0 0 18px;
+  padding:9px; background:#edf2fa; border:1px solid var(--line); border-radius:12px;
+}
+.sales-section-tabs a {
+  display:inline-flex; align-items:center; min-height:38px; padding:8px 11px;
+  border-radius:8px; background:#fff; border:1px solid var(--line);
+  color:var(--navy); text-decoration:none; font-size:13px; font-weight:700;
+}
+.sales-section-tabs a[aria-current="page"] {background:var(--navy);color:#fff;border-color:var(--navy)}
+.sales-record-code {font:600 12px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}
+@media(max-width:720px) {
+  .sales-section-tabs {display:flex; flex-wrap:nowrap; overflow-x:auto; overscroll-behavior-x:contain}
+  .sales-section-tabs a {white-space:nowrap;flex-shrink:0}
+}
