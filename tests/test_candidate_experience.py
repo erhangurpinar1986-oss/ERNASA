@@ -194,3 +194,59 @@ def test_feedback_form_requires_only_visible_questions_and_shows_confirmation():
     assert '</form><p id="status" role="status"' in html
     assert "Değerlendirmeniz alındı." in html
     assert "Değerlendirmeyi atladınız." in html
+
+
+def test_demo_cleanup_refuses_to_delete_if_snapshot_changed(monkeypatch):
+    import ik_demo_cleanup_20261120 as maintenance
+    import psycopg2
+    class DummyCursor:
+        def __init__(self):
+            self.rows = []
+            self.executed = []
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def execute(self, query, args=None):
+            self.executed.append(query)
+            if 'FROM public.interview_links' in query:
+                # A new 19th record must stop all writes.
+                self.rows = [(str(i), 'Deneme', 'expired') for i in range(19)]
+            else:
+                self.rows = []
+        def fetchall(self): return self.rows
+    class DummyConnection:
+        def __init__(self): self.c = DummyCursor()
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def cursor(self): return self.c
+        def close(self): pass
+    c=DummyConnection()
+    monkeypatch.setattr(psycopg2, 'connect', lambda *a,**kw: c)
+    with pytest.raises(RuntimeError, match='Beklenen 18 aday'):
+        maintenance.cleanup('mock_maintenance_only')
+    assert not any('DELETE FROM' in sql or 'CREATE TABLE' in sql
+                   or 'INSERT INTO' in sql for sql in c.c.executed)
+
+
+def test_demo_cleanup_is_idempotent_for_only_completed_merve(monkeypatch):
+    import ik_demo_cleanup_20261120 as maintenance
+    import psycopg2
+    class DummyCursor:
+        def __init__(self): self.executed=[]
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def execute(self, query, args=None): self.executed.append(query)
+        def fetchall(self):
+            return [('known-protected-token', maintenance.KEEP_NAME, 'completed')]
+    class DummyConnection:
+        def __init__(self): self.c=DummyCursor()
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def cursor(self): return self.c
+        def close(self): pass
+    c=DummyConnection()
+    monkeypatch.setattr(psycopg2, 'connect', lambda *a,**kw: c)
+    assert maintenance.cleanup('mock_maintenance_only') == {
+        'already_clean': True, 'kept':1, 'removed':0
+    }
+    assert not any('DELETE FROM' in sql or 'CREATE TABLE' in sql
+                   or 'INSERT INTO' in sql for sql in c.c.executed)
