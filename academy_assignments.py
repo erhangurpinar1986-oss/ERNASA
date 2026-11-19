@@ -136,6 +136,7 @@ RULES = (
 SECTION_START = re.compile(r"(?m)^\s*(?:GEL[İI]ŞT[İI]R[İI]LMES[İI]\s+GEREKEN\s+(?:ALANLAR|Y[ÖO]NLER)|GEL[İI]Ş[İI]M\s+ALANLARI)\s*:\s*$", re.I)
 SECTION_STOP = re.compile(r"(?m)^\s*(?:D[İI]KKAT\s+ED[İI]LMES[İI]\s+GEREKEN|[İI]K\s+DE[ĞG]ERLEND[İI]RME\s+[ÖO]ZET[İI]|M[ÜU]LAKAT\s+SORULARI|G[ÜU][ÇC]L[ÜU]\s+Y[ÖO]NLER)\b",re.I)
 ASSIGNMENT_HTML = Path(__file__).resolve().parent / "academy_assign.html"
+TRACKING_HTML = Path(__file__).resolve().parent / "academy_tracking.html"
 
 
 def initialize_schema():
@@ -163,6 +164,12 @@ def initialize_schema():
             token_hash TEXT PRIMARY KEY REFERENCES ernasa_training_invites(token_hash),
             state_json TEXT NOT NULL,
             updated_at TEXT NOT NULL
+        )""")
+        cur.execute("""CREATE TABLE IF NOT EXISTS ernasa_training_v9_activity (
+            token_hash TEXT PRIMARY KEY REFERENCES ernasa_training_invites(token_hash),
+            opened_at TEXT,
+            started_at TEXT,
+            last_activity_at TEXT
         )""")
         db.commit()
 
@@ -478,6 +485,125 @@ class V9ProgressState(BaseModel):
     answers: dict[str, dict[str, int]] = Field(default_factory=dict)
 
 
+@router.get("/api/egitim/ik/takip")
+def training_tracking(request: Request):
+    """HR-only, tenant-scoped progress overview. Never expose bearer invite tokens."""
+    company_id, _ = _actor(request)
+    now = datetime.now(timezone.utc)
+    with closing(get_connection()) as db:
+        cursor = db.cursor()
+        cursor.execute("""SELECT i.recipient,i.email,i.created_at,i.expires_at,i.revoked,
+                a.program_id,a.modules_json,p.state_json,p.updated_at,
+                act.opened_at,act.started_at,act.last_activity_at
+            FROM ernasa_training_assignments a
+            JOIN ernasa_training_invites i ON i.token_hash=a.token_hash
+            LEFT JOIN ernasa_training_v9_progress p ON p.token_hash=a.token_hash
+            LEFT JOIN ernasa_training_v9_activity act ON act.token_hash=a.token_hash
+            WHERE a.company_id IS NOT DISTINCT FROM ?
+            ORDER BY i.created_at DESC LIMIT 200""", (company_id,))
+        records = []
+        for row in cursor.fetchall():
+            modules = json.loads(row["modules_json"])
+            is_v9 = row["program_id"] == "ernasa_v9"
+            state = json.loads(row["state_json"]) if is_v9 and row["state_json"] else {}
+            done = state.get("done", {}) if isinstance(state, dict) else {}
+            answers = state.get("answers", {}) if isinstance(state, dict) else {}
+            if not isinstance(done, dict): done = {}
+            if not isinstance(answers, dict): answers = {}
+            completed = sum(done.get(mid) is True for mid in modules) if is_v9 else 0
+            total = len(modules)
+            answered = sum(len(q) for mid, q in answers.items()
+                           if mid in modules and isinstance(q, dict)) if is_v9 else 0
+            expired = datetime.fromisoformat(row["expires_at"]) <= now
+            started = bool(row["started_at"]) or completed > 0 or answered > 0
+            opened = bool(row["opened_at"]) or started
+            if row["revoked"]:
+                status = "revoked"
+            elif not is_v9:
+                status = "untracked"
+            elif total and completed == total:
+                status = "completed"
+            elif expired:
+                status = "expired"
+            elif started:
+                status = "in_progress"
+            elif opened:
+                status = "opened"
+            else:
+                status = "not_started"
+            records.append({
+                "recipient": row["recipient"], "email": row["email"],
+                "program_id": row["program_id"],
+                "program_title": PROGRAMS.get(row["program_id"], {}).get("title", row["program_id"]),
+                "assigned_at": row["created_at"], "expires_at": row["expires_at"],
+                "progress_saved_at": row["updated_at"] if is_v9 else None,
+                "opened_at": row["opened_at"] if is_v9 else None,
+                "started_at": row["started_at"] if is_v9 else None,
+                "last_activity_at": row["last_activity_at"] if is_v9 else None,
+                "status": status, "completed_lessons": completed,
+                "total_lessons": total, "percent": round(100 * completed / total) if is_v9 and total else None,
+                "answered_questions": answered, "is_self_reported": is_v9,
+                "lessons": [
+                    {"id": mid,
+                     "title": (V9_MODULE_TITLES if is_v9 else LEGACY_MODULE_TITLES).get(mid, mid),
+                     "completed": done.get(mid) is True if is_v9 else None}
+                    for mid in modules
+                ],
+            })
+    return {"participants": records, "generated_at": now.isoformat(),
+            "notice": "Ders tamamlama bilgisi katılımcının kaydettiği ilerlemedir; doğrulanmış sınav başarısı veya işe alım kararı değildir."}
+
+
+@router.get("/egitim-takip", include_in_schema=False)
+def tracking_page(request: Request):
+    _actor(request)
+    if not TRACKING_HTML.is_file():
+        raise HTTPException(503, "Eğitim takip ekranı bulunamadı.")
+    return HTMLResponse(TRACKING_HTML.read_text("utf-8"), headers={
+        "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow",
+        "Referrer-Policy": "no-referrer"
+    })
+
+
+class TrainingActivityEvent(BaseModel):
+    event: str
+
+
+@router.post("/api/egitim/{token}/v9/etkinlik")
+def v9_record_activity(token: str, body: TrainingActivityEvent, request: Request):
+    """Browser-initiated opened/start events; never count email link previews as study."""
+    if body.event not in ("opened", "started"):
+        raise HTTPException(422, "Bilinmeyen eğitim etkinliği.")
+    origin = request.headers.get("origin", "")
+    allowed = {"https://ernasa.com", "https://www.ernasa.com"}
+    if os.getenv("ERNASA_IK_LOCAL_PREVIEW") == "1":
+        allowed.update({"http://localhost:8081", "http://127.0.0.1:8081"})
+    if origin not in allowed:
+        raise HTTPException(403, "İstek kaynağı geçersiz.")
+    assigned = assigned_modules(token)
+    if assigned["program_id"] != "ernasa_v9":
+        raise HTTPException(404, "V9 eğitimi bulunamadı.")
+    now = datetime.now(timezone.utc).isoformat()
+    with closing(get_connection()) as db:
+        digest, _ = ernasa_training._invite(db, token)
+        if body.event == "opened":
+            db.cursor().execute("""INSERT INTO ernasa_training_v9_activity
+                (token_hash,opened_at,last_activity_at) VALUES(?,?,?)
+                ON CONFLICT(token_hash) DO UPDATE SET
+                    opened_at=COALESCE(ernasa_training_v9_activity.opened_at,excluded.opened_at),
+                    last_activity_at=excluded.last_activity_at""", (digest,now,now))
+        else:
+            db.cursor().execute("""INSERT INTO ernasa_training_v9_activity
+                (token_hash,opened_at,started_at,last_activity_at)
+                VALUES(?,?,?,?)
+                ON CONFLICT(token_hash) DO UPDATE SET
+                    opened_at=COALESCE(ernasa_training_v9_activity.opened_at,excluded.opened_at),
+                    started_at=COALESCE(ernasa_training_v9_activity.started_at,excluded.started_at),
+                    last_activity_at=excluded.last_activity_at""", (digest,now,now,now))
+        db.commit()
+    return {"recorded":True}
+
+
 @router.get("/api/egitim/{token}/v9/ilerleme")
 def v9_read_progress(token: str):
     selected = assigned_modules(token)
@@ -513,11 +639,19 @@ def v9_write_progress(token: str, state: V9ProgressState):
         raise HTTPException(413, "İlerleme kaydı çok büyük.")
     with closing(get_connection()) as db:
         digest, _ = ernasa_training._invite(db, token)
+        timestamp=datetime.now(timezone.utc).isoformat()
         db.cursor().execute("""INSERT INTO ernasa_training_v9_progress
             (token_hash,state_json,updated_at) VALUES (?,?,?)
             ON CONFLICT(token_hash) DO UPDATE SET state_json=excluded.state_json,
-                updated_at=excluded.updated_at""",
-            (digest,payload,datetime.now(timezone.utc).isoformat()))
+                updated_at=excluded.updated_at""", (digest,payload,timestamp))
+        if any(state.done.values()) or any(bool(answers) for answers in state.answers.values()):
+            db.cursor().execute("""INSERT INTO ernasa_training_v9_activity
+                (token_hash,opened_at,started_at,last_activity_at) VALUES (?,?,?,?)
+                ON CONFLICT(token_hash) DO UPDATE SET
+                    opened_at=COALESCE(ernasa_training_v9_activity.opened_at,excluded.opened_at),
+                    started_at=COALESCE(ernasa_training_v9_activity.started_at,excluded.started_at),
+                    last_activity_at=excluded.last_activity_at""",
+                (digest,timestamp,timestamp,timestamp))
         db.commit()
     return {"saved":True}
 
