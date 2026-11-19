@@ -774,6 +774,29 @@ function showPortalScreen(screenName) {
     document.getElementById("usageScreen").hidden = screenName !== "usage";
     const training = document.getElementById("trainingScreen");
     if (training) training.hidden = screenName !== "training";
+    const trainingTracking = document.getElementById("trainingTrackingScreen");
+    if (trainingTracking) trainingTracking.hidden = screenName !== "training_tracking";
+    if (screenName === "training_tracking") {
+        const frame = document.getElementById("trainingTrackingFrame");
+        const status = document.getElementById("trainingTrackingEmbedStatus");
+        if (frame && !frame.dataset.loaded && !frame.dataset.loading) {
+            frame.dataset.loading = "1";
+            if (status) status.textContent = "Eğitim takip ekranı yükleniyor…";
+            fetch("/egitim-takip", {credentials:"same-origin",cache:"no-store"})
+              .then(response => {
+                if (!response.ok) throw new Error("Eğitim Takip erişimi reddedildi (HTTP " + response.status + ").");
+                return response.text();
+              })
+              .then(html => {
+                if (!frame.isConnected) return;
+                frame.srcdoc = html.replace("<head>", '<head><base href="' + window.location.origin + '/">');
+                frame.dataset.loaded = "1";
+                if (status) status.textContent = "";
+              })
+              .catch(error => {if (status) status.textContent = error.message;})
+              .finally(() => {delete frame.dataset.loading;});
+        }
+    }
     if (screenName === "training") {
         const frame = document.getElementById("trainingPanelFrame");
         const status = document.getElementById("trainingEmbedStatus");
