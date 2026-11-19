@@ -136,7 +136,7 @@ async function loadAssignments(){
  try{const v=await request('/api/egitim/ik/atamalar');$('assignments').replaceChildren();
  if(!v.assignments.length){$('assignments').textContent='Henüz eğitim atanmamış.';return;}
  const ul=document.createElement('ul');
- for(const x of v.assignments){const li=document.createElement('li');li.textContent=x.recipient+' · '+x.program_id+' · '+x.module_ids.length+' ders · '+new Date(x.created_at).toLocaleDateString('tr-TR');ul.append(li);}
+ for(const x of v.assignments){const li=document.createElement('li');li.textContent=x.recipient+' · '+x.program_id+' · '+x.module_ids.length+' ders · '+new Date(x.created_at).toLocaleDateString('tr-TR')+(x.program_id==='ernasa_v9'?' · İlerleme: '+x.completed_lessons+'/'+x.total_lessons+' ders':'');ul.append(li);}
  $('assignments').append(ul);}catch(e){$('assignments').textContent='Atamalar görüntülenemedi: '+e.message;}
 }
 async function loadReports(){
