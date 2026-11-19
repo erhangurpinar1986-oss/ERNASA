@@ -239,3 +239,34 @@ OCR artık wheel'in model dosyalarını kullanır; paket sürümüne bağlı mod
 profilini düşük kaynaklı Render staging ortamında ayrıca ölçmek gerekir. Üretim
 model davranışı sentetik gerçek OCR testiyle doğrulanacak; test ağ koruması açık.
 Bu sürüm son üretim onayı veya eksiksiz ürün lansmanı değildir.
+
+
+## 19 Kasım 2026 — Codex oturum dökümüyle GitHub uzlaştırması
+
+Kullanıcının paylaştığı Codex oturum dökümünde, kota sınırına ulaşıldığında
+**8 dosya, +257/-9 satır** olarak görünen son çalışma grubu aşağıdaki dosyaları
+belirtiyor. Bu sayı GitHub'a henüz gönderilmemiş dosya sayısı anlamına gelmeyebilir;
+Codex arayüzü oturumun değişiklik özetini de gösterebilir.
+
+| Codex dökümündeki dosya | GitHub feature dalındaki kontrol |
+|---|---|
+| `control/app.py` | Var; menü script bağlantısı mevcut |
+| `control/sales-menu.js` | Var; mobil menüyü kapatma kodu mevcut |
+| `control/sales_http.py` | Var; **yerel son sürümle bire bir aynı olduğu doğrulanmadı** |
+| `tests/test_sales_hub.py` | Var; **yerel son sürümle bire bir aynı olduğu doğrulanmadı** |
+| `docs/sales-hub-handoff.md` | Var; kullanıcı aktarımı olan 125/0/1 sonucu güncellendi |
+| `requirements.txt` | Var; PR #35'in başlangıç dosya değişikliği listesinde yer almıyordu; yerel diff kontrol edilmeli |
+| `ats_matching.py` | Var; yerel OCR model kodu mevcut, son diff doğrulanmadı |
+| `docs/sales-hub-pr-description.md` | **Feature dalında yok**; PR #35 açıklaması GitHub üzerinde mevcut |
+
+**GitHub durumu:** `feature/ernasa-sales-hub` dalında açık
+[PR #35](https://github.com/erhangurpinar1986-oss/ERNASA/pull/35) var;
+`main` ile birleştirilmedi. Bu kontrol yeni uygulama kodunu veya üretim
+veritabanını değiştirmez. Son yerel değişiklikleri kurtarmanın kesin yolu,
+Codex bilgisayarında `git status --short`, `git diff --stat`,
+`git diff` ve `git log -3 --oneline` komutlarını çalıştırıp yalnız doğru
+feature dalına eksikleri commit/push etmektir. Yerel klasör silinmemeli.
+
+Özellikle `docs/sales-hub-pr-description.md` için bire bir orijinal dosyanın
+GitHub'da bulunduğu iddia edilmemeli; içerik gerekirse var olan PR #35
+metninden ayrı ve açıkça türetilmiş belge olarak oluşturulabilir.
