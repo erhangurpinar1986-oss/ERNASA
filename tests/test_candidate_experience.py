@@ -250,3 +250,58 @@ def test_demo_cleanup_is_idempotent_for_only_completed_merve(monkeypatch):
     }
     assert not any('DELETE FROM' in sql or 'CREATE TABLE' in sql
                    or 'INSERT INTO' in sql for sql in c.c.executed)
+
+
+def test_ats_demo_cleanup_aborts_when_four_names_do_not_match(monkeypatch):
+    import ats_demo_cleanup_20261120 as maintenance
+    import psycopg2
+    class DummyCursor:
+        def __init__(self): self.sql=[]; self.rows=[]
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def execute(self,sql,params=None):
+            self.sql.append(sql)
+            if 'count(*) FROM public.ats_candidates' in sql: self.rows=[(24,)]
+            elif 'count(*) FROM public.ats_applications' in sql: self.rows=[(24,)]
+            elif 'SELECT id,name FROM public.ats_candidates' in sql:
+                self.rows=[('only-one','Deniz Arman')]
+            else: self.rows=[]
+        def fetchone(self): return self.rows[0]
+        def fetchall(self): return self.rows
+    class DummyConnection:
+        def __init__(self): self.c=DummyCursor()
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def cursor(self): return self.c
+        def close(self): pass
+    conn=DummyConnection()
+    monkeypatch.setattr(psycopg2,'connect',lambda *a,**kw: conn)
+    with pytest.raises(RuntimeError, match='Dört aday'):
+        maintenance.cleanup('synthetic-only')
+    assert not any('INSERT INTO' in x or 'DELETE FROM' in x or 'CREATE TABLE' in x for x in conn.c.sql)
+
+
+def test_ats_demo_cleanup_is_idempotent_after_four_removed(monkeypatch):
+    import ats_demo_cleanup_20261120 as maintenance
+    import psycopg2
+    class DummyCursor:
+        def __init__(self): self.sql=[];self.rows=[]
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def execute(self,sql,params=None):
+            self.sql.append(sql)
+            if 'count(*) FROM public.ats_candidates' in sql: self.rows=[(20,)]
+            elif 'count(*) FROM public.ats_applications' in sql: self.rows=[(20,)]
+            else: self.rows=[]
+        def fetchone(self): return self.rows[0]
+        def fetchall(self): return self.rows
+    class DummyConnection:
+        def __init__(self):self.c=DummyCursor()
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def cursor(self):return self.c
+        def close(self):pass
+    conn=DummyConnection()
+    monkeypatch.setattr(psycopg2,'connect',lambda *a,**kw:conn)
+    assert maintenance.cleanup('synthetic-only') == {'already_clean':True,'removed':0,'remaining':20}
+    assert not any('INSERT INTO' in x or 'DELETE FROM' in x or 'CREATE TABLE' in x for x in conn.c.sql)
