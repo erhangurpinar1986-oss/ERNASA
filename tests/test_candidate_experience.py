@@ -305,3 +305,57 @@ def test_ats_demo_cleanup_is_idempotent_after_four_removed(monkeypatch):
     monkeypatch.setattr(psycopg2,'connect',lambda *a,**kw:conn)
     assert maintenance.cleanup('synthetic-only') == {'already_clean':True,'removed':0,'remaining':20}
     assert not any('INSERT INTO' in x or 'DELETE FROM' in x or 'CREATE TABLE' in x for x in conn.c.sql)
+
+
+def test_training_cleanup_aborts_if_invite_snapshot_changed(monkeypatch):
+    import training_demo_cleanup_20261120 as maintenance
+    import psycopg2
+    class DummyCursor:
+        def __init__(self):self.executed=[];self.rows=[]
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def execute(self,sql,params=None):
+            self.executed.append(sql)
+            if 'JOIN public.ernasa_training_assignments a' in sql:
+                self.rows=[('one', 'Merve Saye Aydoğdu Sipahi', 2, 'ernasa_v9'),
+                           ('two', 'Erhan Gürpınar', 2, 'ernasa_v9')]
+            else:self.rows=[]
+        def fetchall(self):return self.rows
+    class Conn:
+        def __init__(self):self.c=DummyCursor()
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def cursor(self):return self.c
+        def close(self):pass
+    conn=Conn()
+    monkeypatch.setattr(psycopg2,'connect',lambda *a,**kw:conn)
+    with pytest.raises(RuntimeError,match='sekiz eğitim daveti'):
+        maintenance.cleanup('synthetic-only')
+    assert not any('DELETE FROM' in x or 'INSERT INTO' in x or 'CREATE TABLE' in x for x in conn.c.executed)
+
+
+def test_training_cleanup_noops_if_only_merve_remains(monkeypatch):
+    import training_demo_cleanup_20261120 as maintenance
+    import psycopg2
+    class DummyCursor:
+        def __init__(self):self.executed=[];self.rows=[]
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def execute(self,sql,params=None):
+            self.executed.append(sql)
+            if 'JOIN public.ernasa_training_assignments a' in sql:
+                self.rows=[('protected',maintenance.KEEP_RECIPIENT,2,'ernasa_v9')]
+            else:self.rows=[]
+        def fetchall(self):return self.rows
+    class Conn:
+        def __init__(self):self.c=DummyCursor()
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def cursor(self):return self.c
+        def close(self):pass
+    conn=Conn()
+    monkeypatch.setattr(psycopg2,'connect',lambda *a,**kw:conn)
+    assert maintenance.cleanup('synthetic-only') == {
+        'already_clean':True,'removed':0,'remaining':1
+    }
+    assert not any('DELETE FROM' in x or 'INSERT INTO' in x or 'CREATE TABLE' in x for x in conn.c.executed)
