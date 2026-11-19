@@ -468,9 +468,20 @@ def test_sales_form_stays_in_selected_founder_section(web):
     response, _, html = http(web, '/satis?tab=accounts', cookie='control_session=founder-cookie')
     assert response == 200
     assert b'action="/control/satis?tab=accounts"' in html
+
+    # With no approved proposals, do not offer an unusable collection form.
+    response, _, html = http(web, '/satis?tab=finance', cookie='control_session=founder-cookie')
+    assert response == 200
+    assert 'Henüz CONTROL tarafından onaylanmış teklif yok'.encode() in html
+    assert b'name="action" value="collection"' not in html
+
+    # An approved proposal restores the normal scoped form/action.
+    with closing(app.connect(web.db_path)) as db:
+        setup_sale(db)
     response, _, html = http(web, '/satis?tab=finance', cookie='control_session=founder-cookie')
     assert response == 200
     assert b'action="/control/satis?tab=finance"' in html
+    assert b'name="action" value="collection"' in html
 
 
 def test_accounts_are_created_inactive_then_explicitly_activated(store,web):
