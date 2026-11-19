@@ -115,8 +115,24 @@ def input_field(c, name, label, kind='text', required=True, value='', maximum=10
 
 
 def select(c, name, label, options):
-    return f'<label>{c.e(label)}<select name="{name}" required>'+''.join(
-        f'<option value="{c.e(str(key))}">{c.e(str(value))}</option>' for key, value in options)+'</select></label>'
+    # Never show a blank native dropdown. The business prerequisite is handled
+    # by guided_form(), so an empty list cannot trigger an unusable submission.
+    entries = list(options)
+    placeholder = 'Seçiniz' if entries else 'Henüz seçim yapılabilecek kayıt yok'
+    choices = f'<option value="" disabled selected>{c.e(placeholder)}</option>'
+    choices += ''.join(
+        f'<option value="{c.e(str(key))}">{c.e(str(value))}</option>' for key, value in entries)
+    disabled = ' disabled' if not entries else ''
+    return f'<label>{c.e(label)}<select name="{name}" required{disabled}>'+choices+'</select></label>'
+
+
+def guided_form(c, can_submit, form_html, explanation, target=None, action_label=None):
+    """Show an actionable prerequisite instead of an empty form."""
+    if can_submit:
+        return form_html
+    link = (f' <a class="sales-next-step" href="{c.e(target)}">{c.e(action_label)}</a>'
+            if target and action_label else '')
+    return f'<div class="sales-prerequisite" role="status"><p>{c.e(explanation)}</p>{link}</div>'
 
 
 def form(c, path, csrf, action, fields, button='Kaydet'):
@@ -298,13 +314,28 @@ def content(c, db, identity, tab):
                  f('classify',c.hidden('id',r['id'])+options('classification','Müşteri sınıfı',[('new','Yeni müşteri'),('existing','Mevcut müşteri')])+inp('reason','Doğrulama gerekçesi')) if actor.founder else '']
                 for r in data['customers']]))
         if section == 'opportunities':
-            out += c.card('Fırsat oluştur',f('opportunity',options('customer_id','Müşteri',[(r['id'],r['name']) for r in data['customers']])+inp('title','İhtiyaç / fırsat başlığı')+options('kind','Satış türü',[(k,LABELS[k]) for k in ('subscription','upgrade','addon','project')])))
+            out += c.card('Fırsat oluştur',guided_form(c, bool(data['customers']) and not actor.founder,
+                f('opportunity',options('customer_id','Müşteri',[(r['id'],r['name']) for r in data['customers']])+inp('title','İhtiyaç / fırsat başlığı')+options('kind','Satış türü',[(k,LABELS[k]) for k in ('subscription','upgrade','addon','project')])),
+                'CONTROL bu adımda kayıt oluşturmaz. Temsilci kendi müşterisi üzerinden fırsat açmalıdır.' if actor.founder
+                else 'Henüz müşteriniz yok. Önce müşteri kaydı oluşturun.',
+                '/satis?tab=accounts' if actor.founder else '/sales?tab=customers',
+                'Temsilcilere git' if actor.founder else 'Müşteri kaydet'))
             out += c.card('Fırsatlar',sales_table(c,'Henüz satış fırsatı oluşturulmadı.',('Başlık','Kayıt','Müşteri','Tür'),[[c.e(r['title']),record_code(c,r['id'],'FIR'),record_code(c,r['customer_id'],'MST'),status(r['kind'])] for r in data['opportunities']]))
         if section == 'tasks':
-            out += c.card('Görüşme notu / görev',f('activity',options('opportunity_id','Fırsat',[(r['id'],r['title']) for r in data['opportunities']])+inp('note','İhtiyaç, görüşme notu veya görev')+inp('due_date','Takip tarihi','date',False)))
+            out += c.card('Görüşme notu / görev',guided_form(c, bool(data['opportunities']) and not actor.founder,
+                f('activity',options('opportunity_id','Fırsat',[(r['id'],r['title']) for r in data['opportunities']])+inp('note','İhtiyaç, görüşme notu veya görev')+inp('due_date','Takip tarihi','date',False)),
+                'Görüşme ve takip görevlerini satış temsilcisi kendi fırsatına ekler. CONTROL kayıtları izler.' if actor.founder
+                else 'Henüz fırsat kaydı bulunmuyor. Görüşme veya takip görevi için önce bir fırsat oluşturun.',
+                '/satis?tab=opportunities' if actor.founder else '/sales?tab=opportunities',
+                'Satış fırsatlarına git'))
             out += c.card('Görevler ve görüşmeler',sales_table(c,'Henüz görüşme notu veya takip görevi bulunmuyor.',('Fırsat','Not','Takip'),[[record_code(c,r['opportunity_id'],'FIR'),c.e(r['note']),c.e(local_date(r['due_date']))] for r in data['activities']]))
         if section == 'proposals':
-            out += c.card('Teklif taslağı / revizyon sürümü', '<p>Tutarları KDV hariç TL olarak girin (örnek: 1.234,56). Bu kayıt resmi teklif değildir.</p>'+f('proposal',options('opportunity_id','Fırsat',[(r['id'],r['title']) for r in data['opportunities']])+inp('requested_minor','Talep edilen tutar (kuruş)','number')+inp('brief','Kapsam ve ihtiyaç açıklaması')))
+            out += c.card('Teklif taslağı / revizyon sürümü', '<p>Tutarları KDV hariç TL olarak girin (örnek: 1.234,56). Bu kayıt resmi teklif değildir.</p>'+guided_form(c, bool(data['opportunities']) and not actor.founder,
+                f('proposal',options('opportunity_id','Fırsat',[(r['id'],r['title']) for r in data['opportunities']])+inp('requested_minor','Talep edilen tutar (kuruş)','number')+inp('brief','Kapsam ve ihtiyaç açıklaması')),
+                'Teklif taslağını satış temsilcisi oluşturur. CONTROL yalnız değerlendirme, revizyon ve resmi fiyat onayı verir.' if actor.founder
+                else 'Henüz teklif hazırlanabilecek bir satış fırsatı yok. Önce müşteri ve fırsat kaydını tamamlayın.',
+                '/satis?tab=opportunities' if actor.founder else '/sales?tab=opportunities',
+                'Satış fırsatlarına git'))
             proposals = []
             for r in data['proposals']:
                 action = ''
@@ -320,8 +351,18 @@ def content(c, db, identity, tab):
         if section == 'finance':
             if actor.founder:
                 approved = [(r['id'],r['id']) for r in data['proposals'] if r['status']=='approved']
-                out += c.card('Tahsilat doğrulama', '<p>KDV hariç tam dönem tutarı girin. Sağlayıcı maliyeti ayrı raporlanır. Gerçek ödeme veya e-posta işlemi yapılmaz.</p>'+f('collection',options('proposal_id','Onaylı teklif',approved)+inp('period','Abonelik dönemi (1, 2, …)','number')+inp('reference','Benzersiz tahsilat referansı')+inp('net_minor','Tahsil edilmiş net tutar (kuruş)','number')+inp('cost_minor','Sağlayıcı maliyeti (kuruş)','number')+inp('collected_on','Tahsilat tarihi','date')+inp('reason','Doğrulama dayanağı')))
-                out += c.card('Özel proje hak ediş kararı',f('project_commission',options('collection_id','Tahsilat',[(r['id'],r['id']) for r in data['collections']])+inp('amount_minor','Hak ediş tutarı (kuruş)','number')+inp('analysis','Maliyet / kâr analizi')+inp('reason','Açık yazılı komisyon kararı')))
+                out += c.card('Tahsilat doğrulama', '<p>KDV hariç tam dönem tutarı girin. Sağlayıcı maliyeti ayrı raporlanır. Gerçek ödeme veya e-posta işlemi yapılmaz.</p>'+guided_form(c, bool(approved),
+                    f('collection',options('proposal_id','Onaylı teklif',approved)+inp('period','Abonelik dönemi (1, 2, …)','number')+inp('reference','Benzersiz tahsilat referansı')+inp('net_minor','Tahsil edilmiş net tutar (kuruş)','number')+inp('cost_minor','Sağlayıcı maliyeti (kuruş)','number')+inp('collected_on','Tahsilat tarihi','date')+inp('reason','Doğrulama dayanağı')),
+                    'Henüz CONTROL tarafından onaylanmış teklif yok. Tahsilat doğrulamak için önce teklif kararını tamamlayın.',
+                    '/satis?tab=proposals','Teklif kararlarına git'))
+                project_opportunities = {r['id'] for r in data['opportunities'] if r['kind']=='project'}
+                project_proposals = {r['id'] for r in data['proposals'] if r['opportunity_id'] in project_opportunities}
+                eligible_projects = [(r['id'],r['id']) for r in data['collections']
+                    if r['proposal_id'] in project_proposals and not r['held']
+                    and not any(m['collection_id']==r['id'] for m in data['commissions'])]
+                out += c.card('Özel proje hak ediş kararı',guided_form(c, bool(eligible_projects),
+                    f('project_commission',options('collection_id','Tahsilat',eligible_projects)+inp('amount_minor','Hak ediş tutarı (kuruş)','number')+inp('analysis','Maliyet / kâr analizi')+inp('reason','Açık yazılı komisyon kararı')),
+                    'Hak ediş kararı bekleyen bir özel proje tahsilatı bulunmuyor. Yalnızca doğrulanmış, aktif proje tahsilatları burada seçilebilir.'))
             out += c.card('Doğrulanmış tahsilatlar',sales_table(c,'Henüz doğrulanmış tahsilat bulunmuyor.',('Kayıt','Dönem','Net tahsilat','Tarih','İnceleme','İşlem'),[
                 [record_code(c,r['id'],'TAH'),str(r['period']),money(r['net_minor']),c.e(local_date(r['collected_on'])),'İade/iptal bekletiliyor' if r['held'] else 'Doğrulandı',
                  f('hold',c.hidden('collection_id',r['id'])+inp('reason','İade/iptal gerekçesi'),'İncelemeye al') if actor.founder and not r['held'] else ''] for r in data['collections']]))
@@ -346,7 +387,7 @@ def content(c, db, identity, tab):
         if section == 'profile':
             out += c.card('Profil',f'<p>{c.e(info["name"])} · {c.e(info["email"])}</p><p>Firma: {actor.company_id}</p>')
             out += c.card('Parolayı değiştir',f('password',inp('old_password','Mevcut parola','password')+inp('password','Yeni parola (12–128 karakter)','password'),'Parolayı değiştir ve oturumları kapat'))
-    return out
+    return '<div class="sales-hub-ui">'+out+'</div>'
 
 
 def handle(h, path, post):

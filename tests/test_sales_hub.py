@@ -385,6 +385,55 @@ def test_founder_management_navigation_shared_design_and_existing_control_routes
 
 
 
+
+def test_sales_empty_dropdown_has_readable_placeholder():
+    html = sales_http.select(app, 'customer_id', 'Müşteri', [])
+    assert 'Henüz seçim yapılabilecek kayıt yok'.encode() in html.encode()
+    assert '<select name="customer_id" required disabled>' in html
+    assert 'disabled selected' in html
+    populated = sales_http.select(app, 'customer_id', 'Müşteri', [('c-123','Deneme AŞ')])
+    assert 'Seçiniz' in populated
+    assert 'value="c-123"' in populated
+    assert '<select name="customer_id" required disabled>' not in populated
+
+
+@pytest.mark.parametrize('route,tab,notice,action', [
+    ('/satis?tab=opportunities','opportunities','CONTROL bu adımda kayıt oluşturmaz','opportunity'),
+    ('/satis?tab=tasks','tasks','Görüşme ve takip görevlerini satış temsilcisi','activity'),
+    ('/satis?tab=proposals','proposals','Teklif taslağını satış temsilcisi','proposal'),
+    ('/satis?tab=finance','finance','Henüz CONTROL tarafından onaylanmış teklif yok','collection'),
+])
+def test_founder_empty_dependencies_do_not_show_action_forms(web,route,tab,notice,action):
+    status, _, content = http(web,route,cookie='control_session=founder-cookie')
+    assert status == 200
+    assert notice.encode() in content
+    assert b'role="status"' in content
+    assert ('name="action" value="'+action+'"').encode() not in content
+    assert b'href="/control/satis?tab=' in content or tab == 'finance'
+
+
+@pytest.mark.parametrize('route,notice,action', [
+    ('/sales?tab=opportunities','Henüz müşteriniz yok','opportunity'),
+    ('/sales?tab=tasks','Henüz fırsat kaydı bulunmuyor','activity'),
+    ('/sales?tab=proposals','Henüz teklif hazırlanabilecek','proposal'),
+])
+def test_representative_empty_dependencies_are_guided(web,route,notice,action):
+    cookie, _ = sign_in(web)
+    status, _, content = http(web,route,cookie=cookie)
+    assert status == 200
+    assert notice.encode() in content
+    assert ('name="action" value="'+action+'"').encode() not in content
+
+
+def test_sales_cards_and_navigation_are_consistently_grouped(web):
+    status, _, body = http(web,'/satis',cookie='control_session=founder-cookie')
+    assert status == 200
+    assert b'class="sales-hub-ui"' in body
+    assert 'Satış ve İş Geliştirme'.encode() in body
+    assert 'Yerel servis'.encode() not in body
+    assert 'Yönetim paneli'.encode() in body
+
+
 def test_sales_founder_sections_separated_without_changing_original_ids(web):
     from urllib.parse import quote
     status, _, page = http(web, '/satis', cookie='control_session=founder-cookie')
@@ -419,9 +468,20 @@ def test_sales_form_stays_in_selected_founder_section(web):
     response, _, html = http(web, '/satis?tab=accounts', cookie='control_session=founder-cookie')
     assert response == 200
     assert b'action="/control/satis?tab=accounts"' in html
+
+    # With no approved proposals, do not offer an unusable collection form.
+    response, _, html = http(web, '/satis?tab=finance', cookie='control_session=founder-cookie')
+    assert response == 200
+    assert 'Henüz CONTROL tarafından onaylanmış teklif yok'.encode() in html
+    assert b'name="action" value="collection"' not in html
+
+    # An approved proposal restores the normal scoped form/action.
+    with closing(app.connect(web.db_path)) as db:
+        setup_sale(db)
     response, _, html = http(web, '/satis?tab=finance', cookie='control_session=founder-cookie')
     assert response == 200
     assert b'action="/control/satis?tab=finance"' in html
+    assert b'name="action" value="collection"' in html
 
 
 def test_accounts_are_created_inactive_then_explicitly_activated(store,web):
