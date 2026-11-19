@@ -306,6 +306,40 @@ def sign_in(server,account='rep-a'):
     return cookie,json.loads(body)['csrf']
 
 
+
+def test_sales_login_explains_founder_route_and_allows_retry(web):
+    status, headers, body = http(web, '/sales/login')
+    assert status == 200
+    assert b'href="/control/giris"' in body
+    assert 'Satış temsilcisi girişi'.encode() in body
+    assert b'action="/control/sales/login"' in body
+    original_cookie = headers['Set-Cookie'].split(';')[0]
+    csrf = original_cookie.split('=', 1)[1]
+
+    status, headers, body = http(web, '/sales/login', 'POST',
+                                 {'email':'unknown@example.test','password':'wrong','csrf':csrf},
+                                 original_cookie)
+    assert status == 401
+    assert 'Giriş bilgileri geçersiz.'.encode() in body
+    assert b'role="alert"' in body
+    assert b'action="/control/sales/login"' in body
+    assert b'href="/control/giris"' in body
+    new_cookie = headers['Set-Cookie'].split(';')[0]
+    assert new_cookie != original_cookie
+    assert b'<input name="password"' in body
+
+
+def test_sales_founder_navigation_without_changing_auth_boundaries(web):
+    status,headers,_ = http(web,'/satis')
+    assert status == 303
+    assert headers['Location'] == '/control/giris'
+    status,headers,_ = http(web,'/sales/login',cookie='control_session=founder-cookie')
+    assert status == 303
+    assert headers['Location'] == '/control/satis'
+    status,_,_ = http(web,'/satis',cookie='control_session=founder-cookie')
+    assert status == 200
+
+
 def test_http_auth_roles_csrf_disabled_accounts_and_no_academy_elevation(store,web):
     db,_ = store
     assert http(web,'/sales/api')[0] == 401
