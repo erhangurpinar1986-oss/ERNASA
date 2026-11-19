@@ -270,3 +270,33 @@ feature dalına eksikleri commit/push etmektir. Yerel klasör silinmemeli.
 Özellikle `docs/sales-hub-pr-description.md` için bire bir orijinal dosyanın
 GitHub'da bulunduğu iddia edilmemeli; içerik gerekirse var olan PR #35
 metninden ayrı ve açıkça türetilmiş belge olarak oluşturulabilir.
+
+
+## 19 Kasım 2026 — ChatGPT güvenli UI geliştirme ve CI doğrulaması
+
+Bu güncelleme yalnız `feature/ernasa-sales-hub` dalına yapıldı; PR #35 hâlâ taslak ve
+`main` ile birleştirilmedi. Render, DNS, üretim PostgreSQL, gerçek müşteri/temsilci
+hesapları ve e-posta/ödeme servislerinde işlem yapılmadı. Var olan kimlikler,
+tahsilatlar ve aday/eğitim verileri değiştirilmedi.
+
+- `control/sales_http.py`: CONTROL içinde satış modülleri için ayrı sekmeler
+  (`/control/satis?tab=...`); sekme içinde form gönderimi sonrası aynı bölüme
+  dönüş; doğrulanmış temsilci/founder ayrımı korunarak görünür sekme izni.
+- Aynı dosya: yalnız HTML görüntüsünde kısa kayıt referansları ve Avrupa/İstanbul
+  saat diliminde yerel tarih biçimi. Asıl UUID ve UTC/DATE değerleri değişmez;
+  API'de ve form gizli alanlarında tam kimlikler kullanılmaya devam eder.
+- `control/control.css`: ortak ERNASA tasarımını koruyan duyarlı sekme
+  stilleri ve kısa referans biçimi.
+- `tests/test_sales_hub.py`: sekme geçişi, yetkisiz erişim, kısa kod ve tarih
+  biçimi, formun seçili sekmeyi koruması için üç sentetik regresyon testi.
+
+19 Kasım 2026 CI, `a79f0f803fd8442c40e7e33008a4799a796105db`
+commit'i üzerinde doğrulandı:
+- `ERNASA Sales Hub isolation and finance`: başarılı, finans/PG **61 geçti**;
+  Akademi/ATS uyum **46 geçti**, 4 uyarı.
+- `ERNASA Academy voice upload checks`: başarılı.
+- `ERNASA B2B Interview Template Tests`: başarılı.
+
+Kalan kapılar: Güncel `main` ile çatışmasız bütünleştirme, son masaüstü/mobil
+görsel kontrol, canlı öncesi bağımsız yedek/migration denetimi, kurucu kararı.
+Bu belgenin kendisi yayın veya migration onayı değildir.
