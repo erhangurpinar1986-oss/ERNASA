@@ -45,6 +45,7 @@ MODULE_TITLES = {
     "metrik": "Satış hunisi teşhisi ve A/B testleri",
 }
 # ERNASA Akademi V9: the full candidate curriculum, independently versioned.
+LEGACY_MODULE_TITLES = MODULE_TITLES.copy()
 V9_MODULE_TITLES = {
     "ernasa": "ERNASA nedir, neden kuruldu?",
     "kurulus": "Kuruluş amacı ve müşteri problemi",
@@ -344,8 +345,11 @@ def create_assignment(request: Request, body: AssignmentRequest):
         raise HTTPException(422,"Bu programda en fazla 16 ders atanabilir.")
     if not body.module_ids or len(body.module_ids)!=len(set(body.module_ids)):
         raise HTTPException(422,"Modül seçimi geçersiz.")
-    if any(module not in MODULE_TITLES for module in body.module_ids):
+    supported = V9_MODULE_TITLES if body.program_id == "ernasa_v9" else LEGACY_MODULE_TITLES
+    if any(module not in supported for module in body.module_ids):
         raise HTTPException(422,"Bilinmeyen eğitim modülü.")
+    if body.program_id == "ernasa_v9" and "demo" not in body.module_ids:
+        raise HTTPException(422,"V9 eğitiminde final ürün sunumu dersi zorunludur.")
     email=body.email.strip().lower()
     if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email):
         raise HTTPException(422,"E-posta adresi geçersiz.")
