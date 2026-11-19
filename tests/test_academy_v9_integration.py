@@ -80,3 +80,52 @@ def test_v9_progress_saved_and_shown_in_hr(client):
     assert assignments[0]["total_lessons"]==2
     invalid=client.post(url,json={"done":{"not-a-course":True},"answers":{}})
     assert invalid.status_code == 422
+
+
+def test_v9_hr_tracking_open_start_and_tenant_isolation(client, monkeypatch):
+    headers = {"Origin": "https://ernasa.com"}
+    created = client.post("/api/egitim/ik/atama", json={
+        "recipient": "Sentetik Takip Katılımcısı", "email": "test@example.invalid",
+        "program_id": "ernasa_v9", "module_ids": ["ernasa", "demo"], "days": 7,
+    }, headers=headers)
+    assert created.status_code == 201, created.text
+    token = created.json()["link"].split("/")[-1]
+    tracking_url = "/api/egitim/ik/takip"
+
+    initial = client.get(tracking_url)
+    assert initial.status_code == 200
+    row = initial.json()["participants"][0]
+    assert row["status"] == "not_started"
+    assert row["opened_at"] is None
+    assert row["started_at"] is None
+    assert row["percent"] == 0
+    assert row["total_lessons"] == 2
+    assert "token" not in row and "link" not in row
+
+    event_url = "/api/egitim/" + token + "/v9/etkinlik"
+    denied = client.post(event_url, json={"event":"opened"}, headers={"Origin":"https://evil.invalid"})
+    assert denied.status_code == 403
+    opened = client.post(event_url, json={"event":"opened"}, headers=headers)
+    assert opened.status_code == 200, opened.text
+    row = client.get(tracking_url).json()["participants"][0]
+    assert row["status"] == "opened"
+    assert row["opened_at"] and not row["started_at"]
+
+    started = client.post(event_url, json={"event":"started"}, headers=headers)
+    assert started.status_code == 200, started.text
+    row = client.get(tracking_url).json()["participants"][0]
+    assert row["status"] == "in_progress"
+    assert row["started_at"] and row["last_activity_at"]
+
+    progress = client.post("/api/egitim/"+token+"/v9/ilerleme", json={
+        "done":{"ernasa":True, "demo":True},
+        "answers":{"ernasa":{"0":1}},
+    })
+    assert progress.status_code == 200, progress.text
+    row = client.get(tracking_url).json()["participants"][0]
+    assert row["status"] == "completed"
+    assert row["percent"] == 100
+    assert all(x["completed"] for x in row["lessons"])
+
+    monkeypatch.setattr(academy_assignments, "_actor", lambda request, write=False: (2002, 31))
+    assert client.get(tracking_url).json()["participants"] == []
