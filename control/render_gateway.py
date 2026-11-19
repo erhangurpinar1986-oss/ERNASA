@@ -9,7 +9,53 @@ from urllib.parse import urlsplit
 import httpx
 from starlette.responses import PlainTextResponse, Response
 
-from . import app, postgres
+from . import app, postgres, sales
+
+
+# These are strictly new sales tables; existing CONTROL, İK and Academy tables stay untouched.
+SALES_TABLES = frozenset({
+    "sales_accounts", "sales_sessions", "sales_customers",
+    "sales_customer_identities", "sales_claims", "sales_opportunities",
+    "sales_activities", "sales_proposals", "sales_decisions",
+    "sales_subscriptions", "sales_collections", "sales_commissions",
+    "sales_adjustments", "sales_audit",
+})
+
+
+def ensure_sales_schema(db):
+    """Install only a missing, complete Sales Hub schema in one PG transaction.
+
+    Never repair a partly installed schema automatically; that needs operator review.
+    This is called only for configured CONTROL PostgreSQL, never for HR databases.
+    """
+    if not hasattr(db, "raw"):
+        return
+    with db.raw:
+        with db.raw.cursor() as cursor:
+            cursor.execute("SELECT pg_advisory_xact_lock(184093, 47622)")
+            cursor.execute(
+                "SELECT tablename FROM pg_catalog.pg_tables "
+                "WHERE schemaname='ernasa_control' AND tablename LIKE 'sales\\_%' ESCAPE '\\'"
+            )
+            existing = {row[0] for row in cursor.fetchall()}
+            missing = SALES_TABLES - existing
+            if not missing:
+                return
+            if existing:
+                raise RuntimeError(
+                    "Sales Hub şeması kısmen mevcut; otomatik kurulum durduruldu."
+                )
+            cursor.execute("SET LOCAL search_path = ernasa_control, pg_catalog")
+            cursor.execute(sales.DDL)
+            migrations = Path(__file__).resolve().parents[1] / "migrations" / "control_postgresql"
+            cursor.execute((migrations / "003_sales_hub.up.sql").read_text(encoding="utf-8"))
+            cursor.execute(
+                "SELECT tablename FROM pg_catalog.pg_tables "
+                "WHERE schemaname='ernasa_control' AND tablename LIKE 'sales\\_%' ESCAPE '\\'"
+            )
+            installed = {row[0] for row in cursor.fetchall()}
+            if not SALES_TABLES.issubset(installed):
+                raise RuntimeError("Sales Hub tablo doğrulaması başarısız.")
 
 
 @contextmanager
@@ -39,6 +85,8 @@ def start_control():
         if not db.execute("SELECT 1 FROM users WHERE role='founder' AND active=1").fetchone():
             raise RuntimeError("The existing CONTROL database has no active founder.")
         db.execute("SELECT 1 FROM ik_interview_templates LIMIT 1").fetchone()
+        if dsn:
+            ensure_sales_schema(db)
 
     with app.server(target,0) as server:
         import candidate_experience
