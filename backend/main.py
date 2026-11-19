@@ -118,6 +118,10 @@ async def lifespan(_app):
     academy_audio.initialize_schema()
     academy_assignments.initialize_schema()
     academy_video.initialize_schema()
+    if os.getenv("ERNASA_ATS_DEMO_CLEANUP") == "four-demo-applicants-20261120":
+        import ats_demo_cleanup_20261120
+        result = await asyncio.to_thread(ats_demo_cleanup_20261120.cleanup)
+        print("ERNASA_ATS_DEMO_CLEANUP " + json.dumps(result,ensure_ascii=True,sort_keys=True),flush=True)
     # Explicit, one-time live cleanup. The fixed snapshot and archive guards
     # abort without deleting if the targeted company data have changed.
     if os.getenv("ERNASA_IK_DEMO_CLEANUP") == "keep-merve-20261120":
