@@ -1,5 +1,7 @@
 """CONTROL-integrated Sales Hub HTTP adapter. No public signup or outbound actions."""
 from contextlib import closing
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 from http.cookies import SimpleCookie
 import hmac
 import json
@@ -21,6 +23,49 @@ LABELS = {
 }
 
 MONEY_FIELDS = {'requested_minor','official_minor','discount_minor','net_minor','cost_minor','amount_minor'}
+
+# Only presentation changes: primary keys, API values and timestamps remain untouched.
+ISTANBUL = ZoneInfo('Europe/Istanbul')
+FOUNDER_TABS = (
+    ('accounts','Temsilciler'), ('claims','Sahiplik incelemeleri'),
+    ('customers','Müşteriler'), ('opportunities','Satış fırsatları'),
+    ('proposals','Teklif kararları'), ('tasks','Görevler'),
+    ('finance','Tahsilat ve komisyon'), ('audit','Denetim kayıtları'),
+)
+
+
+def record_code(c, value, kind):
+    """Display a compact reference; retain the real ID in every form and API."""
+    raw = str(value or '')
+    if not re.fullmatch(r'[0-9a-f]{32}', raw):
+        return c.e(raw or '—')
+    display = f'{kind}-{raw[:6].upper()}-{raw[-4:].upper()}'
+    return f'<span class="sales-record-code" title="{c.e(raw)}">{c.e(display)}</span>'
+
+
+def local_date(value):
+    """Format existing UTC timestamps in Türkiye time without editing stored data."""
+    if not value:
+        return '—'
+    raw = str(value).strip()
+    try:
+        if re.fullmatch(r'\d{4}-\d{2}-\d{2}', raw):
+            return date.fromisoformat(raw).strftime('%d.%m.%Y')
+        parsed = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(ISTANBUL).strftime('%d.%m.%Y %H:%M') + ' TSİ'
+    except (ValueError, OverflowError):
+        return raw
+
+
+def founder_tabs(c, selected):
+    links = ''.join(
+        f'<a href="/satis?tab={key}"'+
+        (' aria-current="page"' if selected == key else '')+
+        f'>{c.e(label)}</a>' for key,label in FOUNDER_TABS)
+    return '<nav class="sales-section-tabs" aria-label="Satış Yönetimi bölümleri">'+links+'</nav>'
+
 
 
 def tl_to_minor(value):
@@ -199,13 +244,15 @@ def overview(c, data):
 def content(c, db, identity, tab):
     actor, csrf, info = identity
     data = sales.snapshot(db, actor)
-    path = '/satis' if actor.founder else '/sales?tab='+tab
+    path = '/satis?tab='+tab if actor.founder else '/sales?tab='+tab
     f = lambda action, fields, button='Kaydet': form(c,path,csrf,action,fields,button)
     inp = lambda name,label,kind='text',required=True: input_field(c,name,label,kind,required)
     options = lambda name,label,items: select(c,name,label,items)
     status = lambda value: badge(c,value)
     out = overview(c, data)
-    sections = ('accounts','claims','customers','opportunities','proposals','tasks','finance','audit') if actor.founder else (tab,)
+    if actor.founder:
+        out += founder_tabs(c, tab)
+    sections = (tab,)
     for section in sections:
         if section == 'overview':
             out += c.card('Satış akışı','<p>Müşterinizi kaydedin, fırsat açın ve teklif taslağını CONTROL değerlendirmesine gönderin. Resmi fiyat ve indirim yalnız CONTROL onayıyla oluşur.</p><p>Tahsilat doğrulaması ve hak ediş onayı ayrı adımlardır.</p>')
@@ -342,7 +389,7 @@ def handle(h, path, post):
                     h.reply(200,json.dumps(result).encode(),'application/json')
                 else:
                     tab = parse_qs(urlsplit(h.path).query).get('tab',['overview'])[0]
-                    location = '/satis' if actor.founder else '/sales?tab='+tab
+                    location = '/satis?tab='+tab if actor.founder else '/sales?tab='+tab
                     h.reply(303,headers=(('Location',h.server.public_prefix+location),))
                 return True
             query = parse_qs(urlsplit(h.path).query,max_num_fields=8)
@@ -365,8 +412,10 @@ def handle(h, path, post):
                 else:
                     h.reply(200,json.dumps(dict(row)).encode(),'application/json')
             elif path in ('/sales','/satis'):
-                tab = query.get('tab',['overview'])[0]
-                if tab not in ('overview','customers','opportunities','proposals','tasks','finance','resources','profile'):
+                default_tab = 'accounts' if actor.founder else 'overview'
+                tab = query.get('tab',[default_tab])[0]
+                allowed_tabs = tuple(key for key,_ in FOUNDER_TABS) if actor.founder else ('overview','customers','opportunities','proposals','tasks','finance','resources','profile')
+                if tab not in allowed_tabs:
                     sales.fail('Ekran bulunamadı.',404)
                 render(c,h,'Satış Yönetimi' if actor.founder else 'ERNASA Sales Hub',content(c,db,identity,tab),identity,tab=tab)
             else:
