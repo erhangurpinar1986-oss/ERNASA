@@ -78,13 +78,26 @@ izin verdi; gerekirse aynı izinli yürütme kullanılmalı.
 
 ## Test sonuçları
 
-Son test çalıştırmaları devam ediyor; bu bölüm commit öncesi kesin sonuçlarla
-güncellenecek. Önceki doğrulanmış sonuçlar: Sales Hub 38 başarılı;
-genel regresyon 105 başarılı / 1 eksik OCR bağımlılığı nedeniyle başarısız /
-1 offline PG DSN verilmediği için atlanan; ayrı yerel PG 1 başarılı.
-Başarısız test saklanmadı veya kapsamı azaltılmadı. OCR testindeki Linux'a sabit
-yazı tipi yolu Windows Arial/Linux DejaVu seçimiyle düzeltildi; OCR üretim kodu
-değişmedi.
+19 Kasım 2026 son Codex çalışma raporu (KULLANICI TARAFINDAN AKTARILAN,
+bu devir kaydı güncellemesinde yeniden çalıştırılmamış sonuçlar):
+- Tam çevrimdışı regresyon: **125 başarılı, 0 başarısız, 1 atlanan**.
+- Atlanan PostgreSQL senaryosu çevrimdışı koşuda DSN verilmemesinden kaynaklanıyor;
+  ayrı ve doğrulanmış yerel `sales_test_hub` PostgreSQL koşusu **1 başarılı**.
+- Gerçek OCR entegrasyon testi dış ağ kapalıyken başarılı olarak bildirildi.
+- PR #35 açıklamasındaki Sales Hub finans/yetki/TL test sonucu: 57 başarılı.
+- GitHub üzerinde ilk Sales Hub commit'ine bağlı CI iş akışları başarılı görünüyor:
+  ERNASA Sales Hub isolation and finance, ERNASA Academy voice upload checks,
+  ERNASA B2B Interview Template Tests.
+Bu bilgiler çalışan yerel oturumun raporlarıdır. GitHub'daki son kodla aynı
+snapshot'ın test edildiği, ayrı ortam ve CI üzerinden yeniden doğrulanmalıdır.
+Testi geçirmek için hata/skip gizlenmesi veya test kapsamının azaltılması yasaktır.
+
+ÖNEMLİ TESLİM SINIRI: Codex kullanım limiti dolmadan hemen önce
+"Edited 8 files +257/-9" olarak bir yerel değişiklik grubu bildirildi.
+Bu grubun tamamının GitHub'a push edildiği doğrulanamadı. Yerel
+`git status`, `git diff`, `git log` kontrol edilmeden "eksiksiz yedeklendi"
+denmemeli; çalışma klasörü silinmemeli. Kullanıcının son raporuna göre
+kesin test sayıları 125/0/1'dir; eski 105/1/1 sonucu güncel değildir.
 
 ## Tarayıcı / ekran dosyaları
 
@@ -115,9 +128,19 @@ yeni sentetik SQLite. Gerçek hesap, veri veya dış servis kullanılmaz.
 
 ## Git / PR
 
-Commit ve PR bilgileri teslimden önce güncellenecek. Yalnız feature dalına push;
-PR merge ve canlı dağıtım yapılmayacak. Devam ederken önce bu dosyayı, git status,
-dalı ve PR durumunu kontrol edin; tamamlanmış işleri baştan yapmayın.
+GitHub'da doğrulanan çalışma dalı: `feature/ernasa-sales-hub`.
+Kod ve devir dosyasıyla ilk gönderilmiş Sales Hub commit:
+`6d41b9ddc74c4fbc4e7693aa896725154ea6b869`.
+Açık PR: https://github.com/erhangurpinar1986-oss/ERNASA/pull/35
+Hedef dal: `main`. PR henüz birleştirilmedi; üretim dağıtımı yapılmadı.
+Bu devir kaydı güncellemesi ayrıca bir feature-dalı commit'i olarak yapılabilir;
+güncel head SHA sonradan değişirse GitHub PR head'inden doğrulanmalıdır.
+Özellikle Codex'in yerelde bırakmış olabileceği son 8 dosyayı `git status`
+ve `git diff` ile kontrol edin; yerel değişiklik varsa PR'a ayrıca gönderin.
+İlk bakılacak kaynak dosyalar: `control/app.py`, `control/sales-menu.js`,
+`control/sales_http.py` ve Codex'in diğer son değiştirdiği dosyalar.
+Yalnız feature dalına push; PR merge, `main` push, Render/DNS ve canlı
+migration için açık kullanıcı onayı gerekir. Tamamlanan işleri baştan yapmayın.
 
 
 ## Amaç, mimari ve dosya envanteri
