@@ -118,6 +118,11 @@ async def lifespan(_app):
     academy_audio.initialize_schema()
     academy_assignments.initialize_schema()
     academy_video.initialize_schema()
+    # Explicit, one-time ERNASA education demo cleanup. Never enabled by default.
+    if os.getenv("ERNASA_TRAINING_DEMO_CLEANUP") == "keep-merve-20261120":
+        import training_demo_cleanup_20261120
+        cleanup_result = await asyncio.to_thread(training_demo_cleanup_20261120.cleanup)
+        print("ERNASA_TRAINING_DEMO_CLEANUP " + json.dumps(cleanup_result,ensure_ascii=True,sort_keys=True),flush=True)
     if os.getenv("ERNASA_ATS_DEMO_CLEANUP") == "four-demo-applicants-20261120":
         import ats_demo_cleanup_20261120
         result = await asyncio.to_thread(ats_demo_cleanup_20261120.cleanup)
