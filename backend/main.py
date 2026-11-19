@@ -118,6 +118,12 @@ async def lifespan(_app):
     academy_audio.initialize_schema()
     academy_assignments.initialize_schema()
     academy_video.initialize_schema()
+    # Explicit, one-time live cleanup. The fixed snapshot and archive guards
+    # abort without deleting if the targeted company data have changed.
+    if os.getenv("ERNASA_IK_DEMO_CLEANUP") == "keep-merve-20261120":
+        import ik_demo_cleanup_20261120
+        outcome = await asyncio.to_thread(ik_demo_cleanup_20261120.cleanup)
+        print("ERNASA_IK_DEMO_CLEANUP " + json.dumps(outcome,ensure_ascii=True,sort_keys=True),flush=True)
     # Read-only sender-domain diagnostic where supported; never send email at startup.
     # A restricted sending-only Resend API key may disallow domain listing.
     try:
