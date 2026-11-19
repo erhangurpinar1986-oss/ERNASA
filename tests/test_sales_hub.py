@@ -350,6 +350,45 @@ def test_founder_management_navigation_shared_design_and_existing_control_routes
         assert http(web,path)[0] == 200
 
 
+
+def test_sales_founder_sections_separated_without_changing_original_ids(web):
+    from urllib.parse import quote
+    status, _, page = http(web, '/satis', cookie='control_session=founder-cookie')
+    assert status == 200
+    assert b'href="/control/satis?tab=accounts"' in page
+    assert 'Satış Yönetimi bölümleri'.encode() in page
+    assert 'Temsilci hesabı oluştur'.encode() in page
+    assert 'Tahsilat doğrulama'.encode() not in page
+    for tab in ('accounts', 'claims', 'customers', 'opportunities', 'proposals', 'tasks', 'finance', 'audit'):
+        status, _, html = http(web, '/satis?tab='+tab, cookie='control_session=founder-cookie')
+        assert status == 200, tab
+        assert b'aria-current="page"' in html
+    assert http(web, '/satis?tab=profile', cookie='control_session=founder-cookie')[0] == 404
+    assert http(web, '/satis?tab=finance')[0] == 401
+    cookie, _ = sign_in(web)
+    assert http(web, '/satis?tab=finance', cookie=cookie)[0] == 403
+
+
+def test_sales_compact_reference_and_turkiye_local_date_are_presentation_only():
+    raw = 'abcdef0123456789abcdef0123456789'
+    assert 'MST-ABCDEF-6789' in sales_http.record_code(app, raw, 'MST')
+    assert raw in sales_http.record_code(app, raw, 'MST')
+    assert sales_http.local_date('2026-11-19T18:00:00+00:00') == '19.11.2026 21:00 TSİ'
+    assert sales_http.local_date('2026-11-19 18:00:00') == '19.11.2026 21:00 TSİ'
+    assert sales_http.local_date('2026-11-19') == '19.11.2026'
+    assert sales_http.local_date(None) == '—'
+    assert sales_http.local_date('invalid') == 'invalid'
+
+
+def test_sales_form_stays_in_selected_founder_section(web):
+    response, _, html = http(web, '/satis?tab=accounts', cookie='control_session=founder-cookie')
+    assert response == 200
+    assert b'action="/control/satis?tab=accounts"' in html
+    response, _, html = http(web, '/satis?tab=finance', cookie='control_session=founder-cookie')
+    assert response == 200
+    assert b'action="/control/satis?tab=finance"' in html
+
+
 def test_accounts_are_created_inactive_then_explicitly_activated(store,web):
     db,_ = store
     result = execute(db,F,'account_create',company_id=1,name='Sentetik Yeni Temsilci',email='new@example.test',password=PASSWORD)
