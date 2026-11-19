@@ -258,7 +258,7 @@ class AssignmentRequest(BaseModel):
     recipient: str = Field(min_length=2,max_length=120)
     email: str = Field(default="",max_length=254)
     program_id: str = Field(min_length=2,max_length=40)
-    module_ids: list[str] = Field(min_length=1,max_length=16)
+    module_ids: list[str] = Field(min_length=1,max_length=53)
     days: int = Field(default=14,ge=1,le=30)
     video_allowed: bool = False
 
@@ -340,6 +340,8 @@ def create_assignment(request: Request, body: AssignmentRequest):
     company_id, user_id = _actor(request, write=True)
     if body.program_id not in PROGRAMS:
         raise HTTPException(422,"Eğitim programı geçersiz.")
+    if body.program_id != "ernasa_v9" and len(body.module_ids) > 16:
+        raise HTTPException(422,"Bu programda en fazla 16 ders atanabilir.")
     if not body.module_ids or len(body.module_ids)!=len(set(body.module_ids)):
         raise HTTPException(422,"Modül seçimi geçersiz.")
     if any(module not in MODULE_TITLES for module in body.module_ids):
