@@ -398,7 +398,8 @@ def test_sales_founder_sections_separated_without_changing_original_ids(web):
         assert status == 200, tab
         assert b'aria-current="page"' in html
     assert http(web, '/satis?tab=profile', cookie='control_session=founder-cookie')[0] == 404
-    assert http(web, '/satis?tab=finance')[0] == 401
+    status, headers, _ = http(web, '/satis?tab=finance')
+    assert status == 303 and headers['Location'] == '/control/giris'
     cookie, _ = sign_in(web)
     assert http(web, '/satis?tab=finance', cookie=cookie)[0] == 403
 
