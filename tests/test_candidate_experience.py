@@ -182,3 +182,15 @@ def test_candidate_summary_supports_postgres_none_returning_execute(monkeypatch)
     assert report["mulakat"]["ratings"]["overall"]["average"] == 5
     assert report["egitim"]["count"] == 0
     assert report["mulakat"]["comments"] == []
+
+
+def test_feedback_form_requires_only_visible_questions_and_shows_confirmation():
+    from pathlib import Path
+    html = (Path(candidate_experience.__file__).parent / "candidate_experience.html").read_text(encoding="utf-8")
+    assert "input.disabled=!applies;" in html
+    assert "input.required=applies;" in html
+    assert "name===\'interview\'&&source===\'mulakat\'" in html
+    assert "name===\'training\'&&source===\'egitim\'" in html
+    assert '</form><p id="status" role="status"' in html
+    assert "Değerlendirmeniz alındı." in html
+    assert "Değerlendirmeyi atladınız." in html

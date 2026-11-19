@@ -49,6 +49,10 @@ def test_personal_link_opens_v9_and_keeps_legacy(client):
     assert opened.status_code == 200, opened.text[:200]
     assert "ERNASA_V9_CONTEXT" in opened.text
     assert "v9SendAudio" in opened.text
+    assert 'id="v9ExperienceLink"' in opened.text
+    assert "function updateV9ExperienceLink()" in opened.text
+    assert "assigned.every(id=>data.done[id]===true)" in opened.text
+    assert "/aday-deneyimi?source=egitim&token=" in opened.text
     assert "Sentetik Katılımcı" in opened.text
     legacy = client.post("/api/egitim/ik/atama", json={
         **common, "program_id": "b2b_satis", "module_ids": ["vizyon", "demo"]
