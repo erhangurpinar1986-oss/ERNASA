@@ -136,5 +136,5 @@ def test_tracking_page_labels_invite_expiry_and_includes_disclaimer(client):
     assert screen.headers.get("cache-control") == "private, no-store"
     assert "Davet son tarihi" in screen.text
     assert "Derslere geçiş bir dersin izlendiğini kanıtlamaz." in screen.text
-    assert "Açılış / derslere geçiş" in screen.text
+    assert "Bağlantı açılışı / derslere geçiş" in screen.text
     assert "Son erişim</th>" not in screen.text
