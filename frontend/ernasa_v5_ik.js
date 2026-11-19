@@ -254,6 +254,8 @@ if (!companyPortalPage) {
     const initialMenu = document.getElementById("portalSidebar");
     initialMenu?.style.removeProperty("visibility");
     initialMenu?.removeAttribute("aria-busy");
+    // Kurucu İK görünümünde de takip ekranı kullanılabilir; API oturumu doğrular.
+    document.getElementById("trainingTrackingMenu")?.style.removeProperty("display");
 }
 
 const portalMetadataPromise = companyPortalPage
