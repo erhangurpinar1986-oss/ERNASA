@@ -120,6 +120,30 @@ def academy_page(token: str):
             "module_ids": assignments["module_ids"],
         }, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
         html = html.replace("</head>", '<script>window.ERNASA_V9_CONTEXT=' + context + ';</script></head>', 1)
+        # An open event is emitted by the executing browser, not by GET/link scanners.
+        # Only an intentional lesson view is counted as "training started".
+        activity_script = """<script>
+(function(){
+  const token=window.ERNASA_V9_CONTEXT?.token;
+  if(!token)return;
+  const path='/api/egitim/'+encodeURIComponent(token)+'/v9/etkinlik';
+  function log(event){
+    fetch(path,{method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({event})}).catch(()=>{});
+  }
+  log('opened');
+  let started=false;
+  document.addEventListener('click',function(e){
+    if(started)return;
+    const target=e.target.closest('[data-screen="lessons"],[data-go="lessons"],[data-lesson]');
+    if(!target)return;
+    started=true;
+    log('started');
+  },true);
+})();
+</script>"""
+        html = html.replace("</body>", activity_script + "</body>", 1)
         return HTMLResponse(content=html, headers=_headers())
     html = ACADEMY_HTML.read_text(encoding="utf-8")
     start_marker = "const ACADEMY_DATA="

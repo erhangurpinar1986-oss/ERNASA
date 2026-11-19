@@ -13,10 +13,14 @@ const portalIconPaths = {
     "chart-bar":"M3 3v18h18 M6 15h3v6H6z M11 10h3v11h-3z M16 5h3v16h-3z",
     calendar:"M3 5h18v16H3z M3 10h18 M8 3v4 M16 3v4",
     clipboard:"M8 5H5v16h14V5h-3 M8 3h8v5H8z M9 12h6 M9 16h6",
+    "clipboard-check":"M8 5H5v16h14V5h-3 M8 3h8v5H8z M9 14l2 2 4-4",
+    "graduation-cap":"M2 10l10-5 10 5-10 5-10-5 M6 12v6c3 3 9 3 12 0v-6 M22 10v7",
+    "chart-no-axes-column":"M5 12v9 M5 21h3v-9H5z M11 7v14h3V7h-3z M17 3v18h3V3h-3z",
     settings:"M4 6h16 M4 12h16 M4 18h16 M9 4v4 M15 10v4 M10 16v4",
     "log-out":"M10 4H4v16h6 M9 12h12 M17 8l4 4-4 4"
 };
-for (const placeholder of document.querySelectorAll("i[data-lucide]")) {
+function renderErnasaPortalIcons(root = document) {
+for (const placeholder of root.querySelectorAll("i[data-lucide]")) {
     const pathData = portalIconPaths[placeholder.dataset.lucide];
     if (!pathData) continue;
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -29,3 +33,6 @@ for (const placeholder of document.querySelectorAll("i[data-lucide]")) {
     svg.append(path);
     placeholder.replaceWith(svg);
 }
+}
+window.ernasaRenderPortalIcons = renderErnasaPortalIcons;
+renderErnasaPortalIcons();

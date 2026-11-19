@@ -7,7 +7,7 @@
     <title>ERNASA İK Portalı</title>
 
     <link rel="stylesheet" href="/static/ernasa_v5_ik.css">
-    <link rel="stylesheet" href="/static/portal-polish.css?v=20261118-ats-nav">
+    <link rel="stylesheet" href="/static/portal-polish.css?v=20261119-training-menu-aligned">
 </head>
 
 
@@ -68,6 +68,9 @@
         </a>
         <a href="#training" class="sidebar-item" id="trainingAssignmentMenu" data-screen="training" style="display:none">
             <i data-lucide="graduation-cap"></i> Eğitim Ata
+        </a>
+        <a href="#training_tracking" class="sidebar-item" id="trainingTrackingMenu" data-screen="training_tracking" style="display:none">
+            <i data-lucide="chart-no-axes-column"></i> Eğitim Takip
         </a>
         <a href="#" class="sidebar-item" id="settingsMenu" data-screen="suite_settings" style="display:none"><i data-lucide="settings"></i> Firma Ayarları</a>
         <a href="#" class="sidebar-item" id="historyMenu" data-screen="suite_history" style="display:none"><i data-lucide="clipboard"></i> İşlem Geçmişi</a>
@@ -626,6 +629,14 @@
         </form>
     </section>
     <section id="atsSuiteScreen" class="results-card saas-module" hidden></section>
+    <section id="trainingTrackingScreen" class="results-card saas-module" hidden>
+        <h2>ERNASA İK · Eğitim Takip</h2>
+        <p>Katılımcıların bağlantı açılışlarını, başlangıçlarını ve ders ilerlemesini izleyin.</p>
+        <div id="trainingTrackingEmbedStatus" role="status" aria-live="polite"></div>
+        <iframe id="trainingTrackingFrame" title="ERNASA İK Eğitim Takip"
+            loading="lazy" referrerpolicy="no-referrer"
+            style="width:100%;height:min(85vh,1100px);min-height:740px;border:1px solid #dce5ef;border-radius:14px;background:white;"></iframe>
+    </section>
     <section id="trainingScreen" class="results-card saas-module" hidden>
         <h2>ERNASA İK · Eğitim Ata</h2>
         <p>Katılımcı eğitimlerini ve rapor önerilerini mevcut İK oturumunuzla yönetin.</p>
@@ -662,9 +673,9 @@
 <script src="/static/ik_cv_invites.js?v=20261117-privateemail2"></script>
 <script src="/static/aday-takip.js"></script>
 <script src="/static/ernasa_v5_dashboard_only.js"></script>
-<script src="/static/saas_portal.js?v=20261118-sidebar-f5-fixed"></script>
+<script src="/static/saas_portal.js?v=20261119-training-menu-aligned"></script>
 <script src="/static/ats_suite.js?v=20261118-ocr-safe-text"></script>
-<script src="/static/portal_icons.js"></script>
+<script src="/static/portal_icons.js?v=20261119-training-icons"></script>
 <script>
 async function ernasaSecureLogout() {
     const button = document.getElementById("ernasaSecureLogout");

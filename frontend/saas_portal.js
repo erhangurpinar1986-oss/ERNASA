@@ -348,6 +348,8 @@ if (companyPortalPage) {
         positions: ["positions","suite_jobs"],
         interviews: ["interviews","suite_calendar"],
         evaluations: ["suite_evaluations","suite_reports","suite_offers"],
+        training: ["training"],
+        training_tracking: ["training_tracking"],
         settings: ["suite_settings","personnel","usage","suite_history"]
     };
     const mainForScreen = new Map(Object.entries(sectionGroups).flatMap(([section,screens]) =>
@@ -423,6 +425,8 @@ if (companyPortalPage) {
             suite_reports:byId("reportsMenu"),
             suite_settings:byId("settingsMenu"),
             suite_history:byId("historyMenu"),
+            training:byId("trainingAssignmentMenu"),
+            training_tracking:byId("trainingTrackingMenu"),
             candidates,
             cv:screenLink("cv"),
             interviews:screenLink("interviews"),
@@ -433,6 +437,12 @@ if (companyPortalPage) {
             "suite_evaluations","suite_offers"].forEach(name=>availableScreens.add(name));
         if (ai) ["cv","candidates","interviews","suite_reports"].forEach(name=>availableScreens.add(name));
         if (manager) ["personnel","usage","suite_settings","suite_history"].forEach(name=>availableScreens.add(name));
+        // Firma yetkilisi rolü eğitim atama ve takip ekranlarını görür.
+        // API erişimi de ayrıca sunucu tarafında denetlenir.
+        if (["supervisor","hr_manager","hr_staff"].includes(metadata.role)) {
+            availableScreens.add("training");
+            availableScreens.add("training_tracking");
+        }
         if (!metadata.can_manage_personnel) availableScreens.delete("personnel");
         if (!manager) ["suite_jobs","suite_offers","suite_reports"].forEach(name=>availableScreens.delete(name));
         availableScreens.add("dashboard");
@@ -440,7 +450,6 @@ if (companyPortalPage) {
             if (!link || !availableScreens.has(name)) continue;
             activeLinks.set(name,link);
         }
-        const trainingLink = byId("trainingAssignmentMenu");
         navigation.replaceChildren();
         // Eski linkler DOM'da kalır: diğer modüllerin .click() çağrıları bozulmaz.
         const hiddenLinks = document.createElement("div");
@@ -453,6 +462,8 @@ if (companyPortalPage) {
             ["positions","positions","Pozisyonlar ve İlanlar"],
             ["interviews",ai?"interviews":"suite_calendar","Mülakatlar"],
             ["evaluations","suite_evaluations","Değerlendirmeler"],
+            ["training","training","Eğitim Ata"],
+            ["training_tracking","training_tracking","Eğitim Takip"],
             ["settings","suite_settings","Ayarlar"]
         ];
         for (const [group,name,label] of primaries) {
@@ -468,7 +479,8 @@ if (companyPortalPage) {
             }
             const icons = {
                 dashboard:"house",pool:"users-round",positions:"briefcase",
-                interviews:"messages-square",evaluations:"clipboard-check",settings:"settings"
+                interviews:"messages-square",evaluations:"clipboard-check",
+                training:"graduation-cap",training_tracking:"chart-no-axes-column",settings:"settings"
             };
             const symbol = document.createElement("i");
             symbol.setAttribute("data-lucide",icons[group]);
@@ -484,12 +496,6 @@ if (companyPortalPage) {
                 link.dataset.panelMain = mainForScreen.get(name) || "dashboard";
                 hiddenLinks.append(link);
             }
-        }
-        // Eğitim Atama, firma içindeki yetkili üç İK rolünün tamamına açıktır.
-        // Rol ve firma izolasyonu /egitim-atama API'sinde ayrıca doğrulanır.
-        if (trainingLink && ["supervisor","hr_manager","hr_staff"].includes(metadata.role)) {
-            trainingLink.style.removeProperty("display");
-            navigation.append(trainingLink);
         }
         // Ana Sayfa ve Genel Bakış aynı dashboard ekranıdır: tek görünür
         // Ana Sayfa bağlantısı kullan; eski kök linki gizli tut.
@@ -509,6 +515,7 @@ if (companyPortalPage) {
         renderCandidates();
         displaySectionTabs("dashboard");
         if (window.lucide?.createIcons) window.lucide.createIcons();
+        window.ernasaRenderPortalIcons?.(navigation);
     }).catch(error => {
         console.error("Firma menüsü oluşturulamadı:",error);
         showSidebarUnavailable();
