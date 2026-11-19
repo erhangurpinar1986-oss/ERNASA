@@ -266,7 +266,7 @@ def content(c, db, identity, tab):
                 for a in data['accounts']]))
         if section == 'claims':
             out += c.card('Mükerrer müşteri ve sahiplik talepleri',c.table(('Talep','Müşteri','Talep eden','Durum','Karar'),[
-                [c.e(r['id']),c.e(r['customer_id']),c.e(r['owner_id']),status(r['status']),
+                [record_code(c,r['id'],'TALEP'),record_code(c,r['customer_id'],'MST'),record_code(c,r['owner_id'],'TEM'),status(r['status']),
                  f('resolve_claim',c.hidden('id',r['id'])+options('decision','Sahiplik kararı',[('rejected','Mevcut sahipte tut'),('accepted','Talep edene devret')])+inp('reason','Gerekçe')) if r['status']=='pending' else c.e(r['reason'])]
                 for r in data['claims']]))
         if section == 'customers':
@@ -274,15 +274,15 @@ def content(c, db, identity, tab):
                 out += c.card('Müşteri kaydet',f('customer',inp('name','Firma adı')+inp('tax_id','Vergi numarası','text',False)+inp('domain','Firma alan adı','text',False)))
                 out += c.card('Sahiplik başvurularım',c.table(('Başvuru','Durum','CONTROL açıklaması'),[[c.e(r['requested_name']),status(r['status']),c.e(r['reason'])] for r in data['claims']]))
             out += c.card('Müşteriler',c.table(('Firma','Kayıt','Sahip','Sınıf','İşlem'),[
-                [c.e(r['name']),c.e(r['id']),c.e(r['owner_id']),status(r['classification']),
+                [c.e(r['name']),record_code(c,r['id'],'MST'),record_code(c,r['owner_id'],'TEM'),status(r['classification']),
                  f('classify',c.hidden('id',r['id'])+options('classification','Müşteri sınıfı',[('new','Yeni müşteri'),('existing','Mevcut müşteri')])+inp('reason','Doğrulama gerekçesi')) if actor.founder else '']
                 for r in data['customers']]))
         if section == 'opportunities':
             out += c.card('Fırsat oluştur',f('opportunity',options('customer_id','Müşteri',[(r['id'],r['name']) for r in data['customers']])+inp('title','İhtiyaç / fırsat başlığı')+options('kind','Satış türü',[(k,LABELS[k]) for k in ('subscription','upgrade','addon','project')])))
-            out += c.card('Fırsatlar',c.table(('Başlık','Kayıt','Müşteri','Tür'),[[c.e(r['title']),c.e(r['id']),c.e(r['customer_id']),status(r['kind'])] for r in data['opportunities']]))
+            out += c.card('Fırsatlar',c.table(('Başlık','Kayıt','Müşteri','Tür'),[[c.e(r['title']),record_code(c,r['id'],'FIR'),record_code(c,r['customer_id'],'MST'),status(r['kind'])] for r in data['opportunities']]))
         if section == 'tasks':
             out += c.card('Görüşme notu / görev',f('activity',options('opportunity_id','Fırsat',[(r['id'],r['title']) for r in data['opportunities']])+inp('note','İhtiyaç, görüşme notu veya görev')+inp('due_date','Takip tarihi','date',False)))
-            out += c.card('Görevler ve görüşmeler',c.table(('Fırsat','Not','Takip'),[[c.e(r['opportunity_id']),c.e(r['note']),c.e(r['due_date'])] for r in data['activities']]))
+            out += c.card('Görevler ve görüşmeler',c.table(('Fırsat','Not','Takip'),[[record_code(c,r['opportunity_id'],'FIR'),c.e(r['note']),c.e(local_date(r['due_date']))] for r in data['activities']]))
         if section == 'proposals':
             out += c.card('Teklif taslağı / revizyon sürümü', '<p>Tutarları KDV hariç TL olarak girin (örnek: 1.234,56). Bu kayıt resmi teklif değildir.</p>'+f('proposal',options('opportunity_id','Fırsat',[(r['id'],r['title']) for r in data['opportunities']])+inp('requested_minor','Talep edilen tutar (kuruş)','number')+inp('brief','Kapsam ve ihtiyaç açıklaması')))
             proposals = []
@@ -294,16 +294,16 @@ def content(c, db, identity, tab):
                     action = f('decide',c.hidden('id',r['id'])+options('decision','Karar',[('approved','Onayla'),('revision','Revizyon iste'),('rejected','Reddet')])+inp('reason','Karar gerekçesi')+inp('official_minor','Resmi liste tutarı (kuruş)','number',False)+inp('discount_minor','CONTROL indirimi (kuruş)','number',False),'Kararı kaydet')
                 if r['status']=='approved':
                     action = f'<a href="/sales/official?id={r["id"]}">Onaylı teklifi görüntüle</a>'
-                proposals.append([c.e(r['id']),str(r['version']),c.e(r['brief']),status(r['status']),money(r['requested_minor']),money(None if r['official_minor'] is None else r['official_minor']-r['discount_minor']),action])
+                proposals.append([record_code(c,r['id'],'TEK'),str(r['version']),c.e(r['brief']),status(r['status']),money(r['requested_minor']),money(None if r['official_minor'] is None else r['official_minor']-r['discount_minor']),action])
             out += c.card('Teklif değerlendirme',c.table(('Kayıt','Sürüm','Kapsam','Durum','Talep','Resmi net','İşlem'),proposals))
-            out += c.card('Yönetim karar geçmişi',c.table(('Teklif','Karar','Gerekçe','Karar sahibi','Tarih'),[[c.e(r['proposal_id']),status(r['decision']),c.e(r['reason']),str(r['actor_id']),c.e(r['stamp'])] for r in data['decisions']]))
+            out += c.card('Yönetim karar geçmişi',c.table(('Teklif','Karar','Gerekçe','Karar sahibi','Tarih'),[[record_code(c,r['proposal_id'],'TEK'),status(r['decision']),c.e(r['reason']),record_code(c,r['actor_id'],'YNT'),c.e(local_date(r['stamp']))] for r in data['decisions']]))
         if section == 'finance':
             if actor.founder:
                 approved = [(r['id'],r['id']) for r in data['proposals'] if r['status']=='approved']
                 out += c.card('Tahsilat doğrulama', '<p>KDV hariç tam dönem tutarı girin. Sağlayıcı maliyeti ayrı raporlanır. Gerçek ödeme veya e-posta işlemi yapılmaz.</p>'+f('collection',options('proposal_id','Onaylı teklif',approved)+inp('period','Abonelik dönemi (1, 2, …)','number')+inp('reference','Benzersiz tahsilat referansı')+inp('net_minor','Tahsil edilmiş net tutar (kuruş)','number')+inp('cost_minor','Sağlayıcı maliyeti (kuruş)','number')+inp('collected_on','Tahsilat tarihi','date')+inp('reason','Doğrulama dayanağı')))
                 out += c.card('Özel proje hak ediş kararı',f('project_commission',options('collection_id','Tahsilat',[(r['id'],r['id']) for r in data['collections']])+inp('amount_minor','Hak ediş tutarı (kuruş)','number')+inp('analysis','Maliyet / kâr analizi')+inp('reason','Açık yazılı komisyon kararı')))
             out += c.card('Doğrulanmış tahsilatlar',c.table(('Kayıt','Dönem','Net tahsilat','Tarih','İnceleme','İşlem'),[
-                [c.e(r['id']),str(r['period']),money(r['net_minor']),c.e(r['collected_on']),'İade/iptal bekletiliyor' if r['held'] else 'Doğrulandı',
+                [record_code(c,r['id'],'TAH'),str(r['period']),money(r['net_minor']),c.e(local_date(r['collected_on'])),'İade/iptal bekletiliyor' if r['held'] else 'Doğrulandı',
                  f('hold',c.hidden('collection_id',r['id'])+inp('reason','İade/iptal gerekçesi'),'İncelemeye al') if actor.founder and not r['held'] else ''] for r in data['collections']]))
             commissions = []
             for r in data['commissions']:
@@ -314,13 +314,13 @@ def content(c, db, identity, tab):
                         action = f('reverse',c.hidden('id',r['id'])+inp('reason','Ters kayıt için kurucu kararı'),'Tam ters kayıt oluştur')
                     elif r['status']!='paid':
                         action = f('commission_action',c.hidden('id',r['id'])+c.hidden('decision',decision)+inp('reason','Karar gerekçesi'),'Hak edişi onayla' if decision=='approved' else 'Ödendi olarak işaretle')
-                commissions.append([c.e(r['id']),money(r['amount_minor']),str(r['rate'])+'%',status(r['status']),c.e(r['payable_from']+' – '+r['payable_until']),action])
+                commissions.append([record_code(c,r['id'],'KOM'),money(r['amount_minor']),str(r['rate'])+'%',status(r['status']),c.e(local_date(r['payable_from'])+' – '+local_date(r['payable_until'])),action])
             out += c.card('Komisyonlar',c.table(('Kayıt','Hak ediş','Oran','Durum','Ödeme takvimi','CONTROL'),commissions))
-            out += c.card('Düzeltme kayıtları',c.table(('Hak ediş','Düzeltme (kuruş)','Gerekçe','Tarih'),[[c.e(r['commission_id']),str(r['amount_minor']),c.e(r['reason']),c.e(r['stamp'])] for r in data['adjustments']]))
+            out += c.card('Düzeltme kayıtları',c.table(('Hak ediş','Düzeltme (kuruş)','Gerekçe','Tarih'),[[record_code(c,r['commission_id'],'KOM'),money(r['amount_minor']),c.e(r['reason']),c.e(local_date(r['stamp']))] for r in data['adjustments']]))
             if actor.founder:
                 out += c.card('Kârlılık özeti',f'<p>Net tahsilat: {money(sum(r["net_minor"] for r in data["collections"]))} · Sağlayıcı maliyeti: {money(sum(r["cost_minor"] for r in data["collections"]))}</p><p>İade/iptal incelemesindeki kayıtlar ayrıca değerlendirilmelidir. Sağlayıcı maliyeti temsilci matrahından düşülmez.</p>')
         if section == 'audit':
-            out += c.card('Silme ve güncellemeye kapalı satış denetimi',c.table(('Tarih','İşlemi yapan','İşlem','Hedef','Açıklama'),[[c.e(r['stamp']),c.e(r['actor_id']),c.e(r['event']),c.e(r['target']),c.e(r['detail'])] for r in data['audit']]))
+            out += c.card('Silme ve güncellemeye kapalı satış denetimi',c.table(('Tarih','İşlemi yapan','İşlem','Hedef','Açıklama'),[[c.e(local_date(r['stamp'])),record_code(c,r['actor_id'],'YNT'),c.e(r['event']),record_code(c,r['target'],'KYT'),c.e(r['detail'])] for r in data['audit']]))
         if section == 'resources':
             out += c.card('Yetki ve komisyon rehberi','<p>Yeni müşterinin ilk ürün aboneliği: ilk tahsil edilmiş dönem %25; aynı aboneliğin devamı %5. Paket yükseltme ve mevcut müşteriye ek ürün %0. Özel projede maliyet/kâr analizi ve açık CONTROL kararı gerekir.</p><p>Resmi fiyat, indirim ve taahhüt için onaylı teklif kullanın. Tahsilat yoksa hak ediş yoktur. Ödeme takvimi sonraki ayın 1–15 günleridir ve CONTROL onayına bağlıdır.</p>')
         if section == 'profile':
@@ -388,7 +388,7 @@ def handle(h, path, post):
                 if api:
                     h.reply(200,json.dumps(result).encode(),'application/json')
                 else:
-                    tab = parse_qs(urlsplit(h.path).query).get('tab',['overview'])[0]
+                    tab = parse_qs(urlsplit(h.path).query).get('tab',['accounts' if actor.founder else 'overview'])[0]
                     location = '/satis?tab='+tab if actor.founder else '/sales?tab='+tab
                     h.reply(303,headers=(('Location',h.server.public_prefix+location),))
                 return True
@@ -407,7 +407,7 @@ def handle(h, path, post):
                 if path == '/sales/official':
                     if row['status']!='approved':
                         sales.fail('Resmi teklif için CONTROL onayı gerekli.',409)
-                    body = c.card('CONTROL onaylı teklif',f'<p>Teklif: {c.e(row["id"])} · Sürüm {row["version"]}</p><p>{c.e(row["brief"])}</p><p>Liste: {money(row["official_minor"])} · İndirim: {money(row["discount_minor"])} · KDV hariç net: <strong>{money(row["official_minor"]-row["discount_minor"])}</strong></p>')
+                    body = c.card('CONTROL onaylı teklif',f'<p>Teklif: {record_code(c,row["id"],"TEK")} · Sürüm {row["version"]}</p><p>{c.e(row["brief"])}</p><p>Liste: {money(row["official_minor"])} · İndirim: {money(row["discount_minor"])} · KDV hariç net: <strong>{money(row["official_minor"]-row["discount_minor"])}</strong></p>')
                     render(c,h,'Onaylı teklif',body,identity)
                 else:
                     h.reply(200,json.dumps(dict(row)).encode(),'application/json')
