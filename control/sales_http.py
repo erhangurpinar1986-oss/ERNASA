@@ -314,24 +314,26 @@ def content(c, db, identity, tab):
                  f('classify',c.hidden('id',r['id'])+options('classification','Müşteri sınıfı',[('new','Yeni müşteri'),('existing','Mevcut müşteri')])+inp('reason','Doğrulama gerekçesi')) if actor.founder else '']
                 for r in data['customers']]))
         if section == 'opportunities':
-            out += c.card('Fırsat oluştur',guided_form(c, bool(data['customers']),
+            out += c.card('Fırsat oluştur',guided_form(c, bool(data['customers']) and not actor.founder,
                 f('opportunity',options('customer_id','Müşteri',[(r['id'],r['name']) for r in data['customers']])+inp('title','İhtiyaç / fırsat başlığı')+options('kind','Satış türü',[(k,LABELS[k]) for k in ('subscription','upgrade','addon','project')])),
-                'Henüz seçilebilecek müşteri bulunmuyor. Önce bir temsilci müşteriyi kaydetmeli.' if actor.founder
+                'CONTROL bu adımda kayıt oluşturmaz. Temsilci kendi müşterisi üzerinden fırsat açmalıdır.' if actor.founder
                 else 'Henüz müşteriniz yok. Önce müşteri kaydı oluşturun.',
                 '/satis?tab=accounts' if actor.founder else '/sales?tab=customers',
                 'Temsilcilere git' if actor.founder else 'Müşteri kaydet'))
             out += c.card('Fırsatlar',sales_table(c,'Henüz satış fırsatı oluşturulmadı.',('Başlık','Kayıt','Müşteri','Tür'),[[c.e(r['title']),record_code(c,r['id'],'FIR'),record_code(c,r['customer_id'],'MST'),status(r['kind'])] for r in data['opportunities']]))
         if section == 'tasks':
-            out += c.card('Görüşme notu / görev',guided_form(c, bool(data['opportunities']),
+            out += c.card('Görüşme notu / görev',guided_form(c, bool(data['opportunities']) and not actor.founder,
                 f('activity',options('opportunity_id','Fırsat',[(r['id'],r['title']) for r in data['opportunities']])+inp('note','İhtiyaç, görüşme notu veya görev')+inp('due_date','Takip tarihi','date',False)),
-                'Henüz fırsat kaydı bulunmuyor. Görüşme veya takip görevi için önce bir fırsat oluşturun.',
+                'Görüşme ve takip görevlerini satış temsilcisi kendi fırsatına ekler. CONTROL kayıtları izler.' if actor.founder
+                else 'Henüz fırsat kaydı bulunmuyor. Görüşme veya takip görevi için önce bir fırsat oluşturun.',
                 '/satis?tab=opportunities' if actor.founder else '/sales?tab=opportunities',
                 'Satış fırsatlarına git'))
             out += c.card('Görevler ve görüşmeler',sales_table(c,'Henüz görüşme notu veya takip görevi bulunmuyor.',('Fırsat','Not','Takip'),[[record_code(c,r['opportunity_id'],'FIR'),c.e(r['note']),c.e(local_date(r['due_date']))] for r in data['activities']]))
         if section == 'proposals':
-            out += c.card('Teklif taslağı / revizyon sürümü', '<p>Tutarları KDV hariç TL olarak girin (örnek: 1.234,56). Bu kayıt resmi teklif değildir.</p>'+guided_form(c, bool(data['opportunities']),
+            out += c.card('Teklif taslağı / revizyon sürümü', '<p>Tutarları KDV hariç TL olarak girin (örnek: 1.234,56). Bu kayıt resmi teklif değildir.</p>'+guided_form(c, bool(data['opportunities']) and not actor.founder,
                 f('proposal',options('opportunity_id','Fırsat',[(r['id'],r['title']) for r in data['opportunities']])+inp('requested_minor','Talep edilen tutar (kuruş)','number')+inp('brief','Kapsam ve ihtiyaç açıklaması')),
-                'Henüz teklif hazırlanabilecek bir satış fırsatı yok. Önce müşteri ve fırsat kaydını tamamlayın.',
+                'Teklif taslağını satış temsilcisi oluşturur. CONTROL yalnız değerlendirme, revizyon ve resmi fiyat onayı verir.' if actor.founder
+                else 'Henüz teklif hazırlanabilecek bir satış fırsatı yok. Önce müşteri ve fırsat kaydını tamamlayın.',
                 '/satis?tab=opportunities' if actor.founder else '/sales?tab=opportunities',
                 'Satış fırsatlarına git'))
             proposals = []
