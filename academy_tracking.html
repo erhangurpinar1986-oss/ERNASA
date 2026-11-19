@@ -33,9 +33,9 @@ details{margin:5px 0}details summary{cursor:pointer;color:#163f6b;font-weight:60
 <p id="message" class="note" role="status" aria-live="polite"></p></section>
 <section class="stats" id="stats" aria-label="Eğitim özeti"></section>
 <section><h2>Katılımcı eğitim kayıtları</h2><div class="table-wrap">
-<table><thead><tr><th>Katılımcı</th><th>Eğitim durumu</th><th>Ders ilerlemesi</th><th>Bağlantı açılışı / başlangıç</th><th>Son etkinlik</th><th>Son erişim</th><th>Dersler</th></tr></thead>
+<table><thead><tr><th>Katılımcı</th><th>Eğitim durumu</th><th>Ders ilerlemesi</th><th>Bağlantı açılışı / derslere geçiş</th><th>Son etkinlik</th><th>Davet son tarihi</th><th>Dersler</th></tr></thead>
 <tbody id="rows"><tr><td colspan="7">Yükleniyor…</td></tr></tbody></table></div>
-<p class="note">Bağlantı açılışı, eğitimin tarayıcıda çalıştığını gösterir; e-posta teslimini veya kişinin kimliğini kanıtlamaz. Ders tamamlama katılımcı tarafından işaretlenir; sınav sertifikası veya işe alım kararı değildir. Kayıtlar otomatik 60 saniyede bir yenilenir.</p></section>
+<p class="note">Bağlantı açılışı, eğitim sayfasının tarayıcıda çalıştığını gösterir; e-posta teslimini veya kişinin kimliğini kanıtlamaz. Derslere geçiş bir dersin izlendiğini kanıtlamaz. Ders tamamlama katılımcı tarafından işaretlenir; sınav sertifikası veya işe alım kararı değildir. Kayıtlar otomatik 60 saniyede bir yenilenir.</p></section>
 <script>
 const $=id=>document.getElementById(id);
 const labels={not_started:'Henüz açılmadı',opened:'Bağlantı açıldı',in_progress:'Devam ediyor',completed:'Tamamlandı',expired:'Süresi doldu',revoked:'İptal edildi',untracked:'Eski eğitim · takip yok'};
@@ -46,7 +46,7 @@ function draw(){
  const q=$('search').value.trim().toLocaleLowerCase('tr-TR'),state=$('filter').value;
  const shown=participants.filter(x=>(!state||x.status===state)&&(!q||(x.recipient+' '+(x.email||'')).toLocaleLowerCase('tr-TR').includes(q)));
  const counter=key=>participants.filter(x=>x.status===key).length;
- const stats=[['Toplam',participants.length],['Bağlantı açıldı',counter('opened')],['Devam ediyor',counter('in_progress')],['Tamamlandı',counter('completed')],['Süresi doldu',counter('expired')]];
+ const stats=[['Toplam davet',participants.length],['Bağlantı açanlar',participants.filter(x=>Boolean(x.opened_at)).length],['Derslere geçenler',participants.filter(x=>Boolean(x.started_at)).length],['Devam ediyor',counter('in_progress')],['Tamamlandı',counter('completed')],['Süresi doldu',counter('expired')]];
  $('stats').replaceChildren();
  for(const [name,count] of stats){const box=document.createElement('div');box.className='stat';const n=document.createElement('strong');n.textContent=String(count);const txt=document.createElement('span');txt.textContent=name;box.append(n,txt);$('stats').append(box);}
  $('rows').replaceChildren();
@@ -57,7 +57,7 @@ function draw(){
   const status=cell(tr,labels[x.status]||x.status);status.className='state '+x.status;
   const progress=cell(tr,x.percent===null?'Takip verisi yok':x.completed_lessons+'/'+x.total_lessons+' ders · %'+x.percent);
   if(x.percent!==null){const meter=document.createElement('div');meter.className='meter';meter.setAttribute('role','progressbar');meter.setAttribute('aria-valuenow',String(x.percent));meter.setAttribute('aria-valuemin','0');meter.setAttribute('aria-valuemax','100');const fill=document.createElement('i');fill.style.width=x.percent+'%';meter.append(fill);progress.append(meter);}
-  cell(tr,format(x.opened_at),'Başlangıç: '+format(x.started_at));
+  cell(tr,format(x.opened_at),'Derslere geçiş: '+format(x.started_at));
   cell(tr,format(x.last_activity_at||x.progress_saved_at));
   cell(tr,format(x.expires_at));
   const td=document.createElement('td');
