@@ -22,7 +22,7 @@ button.secondary{background:#fff;border:1px solid #c7d4e3;color:#173e69;margin-l
 <textarea id="comment" maxlength="500" placeholder="Önerinizi yazabilirsiniz. Lütfen ad, iletişim bilgisi veya diğer kişisel bilgileri eklemeyin."></textarea>
 <label class="consent"><input type="checkbox" id="voluntary"><span><b>Değerlendirmeyi gönüllü olarak gönderiyorum.</b> Yanıtlarımın ürün geliştirmek için toplu biçimde kullanılmasını kabul ediyorum.</span></label>
 <button type="submit" id="submit">Değerlendirmeyi Gönder</button><button type="button" class="secondary" id="skip">Şimdi değil</button>
-<p id="status" role="status" aria-live="polite"></p></form>
+</form><p id="status" role="status" aria-live="polite"></p>
 <p class="small">Geri bildirimler işe alım kararına bağlanmaz. Bir davetten yalnızca bir değerlendirme kabul edilir; tekrar gönderimler yeni kayıt oluşturmaz.</p>
 </main>
 <script>
@@ -34,7 +34,7 @@ for(const el of document.querySelectorAll('.stars')){
  const name=el.dataset.field;
  for(let n=1;n<=5;n++){
   const label=document.createElement('label');
-  const input=document.createElement('input');input.type='radio';input.name=name;input.value=String(n);input.required=true;
+  const input=document.createElement('input');input.type='radio';input.name=name;input.value=String(n);const applies=name!=='interview'&&name!=='training'||(name==='interview'&&source==='mulakat')||(name==='training'&&source==='egitim');input.required=applies;input.disabled=!applies;
   const span=document.createElement('span');span.textContent=n+' ★';
   label.append(input,span);el.append(label);
  }
