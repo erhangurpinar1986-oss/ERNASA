@@ -69,6 +69,9 @@
         <a href="#training" class="sidebar-item" id="trainingAssignmentMenu" data-screen="training" style="display:none">
             <i data-lucide="graduation-cap"></i> Eğitim Ata
         </a>
+        <a href="#training_tracking" class="sidebar-item" id="trainingTrackingMenu" data-screen="training_tracking" style="display:none">
+            <i data-lucide="chart-no-axes-column"></i> Eğitim Takip
+        </a>
         <a href="#" class="sidebar-item" id="settingsMenu" data-screen="suite_settings" style="display:none"><i data-lucide="settings"></i> Firma Ayarları</a>
         <a href="#" class="sidebar-item" id="historyMenu" data-screen="suite_history" style="display:none"><i data-lucide="clipboard"></i> İşlem Geçmişi</a>
     </nav>
@@ -626,6 +629,14 @@
         </form>
     </section>
     <section id="atsSuiteScreen" class="results-card saas-module" hidden></section>
+    <section id="trainingTrackingScreen" class="results-card saas-module" hidden>
+        <h2>ERNASA İK · Eğitim Takip</h2>
+        <p>Katılımcıların bağlantı açılışlarını, başlangıçlarını ve ders ilerlemesini izleyin.</p>
+        <div id="trainingTrackingEmbedStatus" role="status" aria-live="polite"></div>
+        <iframe id="trainingTrackingFrame" title="ERNASA İK Eğitim Takip"
+            loading="lazy" referrerpolicy="no-referrer"
+            style="width:100%;height:min(85vh,1100px);min-height:740px;border:1px solid #dce5ef;border-radius:14px;background:white;"></iframe>
+    </section>
     <section id="trainingScreen" class="results-card saas-module" hidden>
         <h2>ERNASA İK · Eğitim Ata</h2>
         <p>Katılımcı eğitimlerini ve rapor önerilerini mevcut İK oturumunuzla yönetin.</p>
