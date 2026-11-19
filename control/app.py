@@ -7,7 +7,7 @@ import os
 from base64 import b64decode
 from email.parser import BytesParser
 from email.policy import default as email_policy
-from . import address_catalog, firma, ik_bridge, interview_templates
+from . import address_catalog, firma, ik_bridge, interview_templates, sales, sales_http
 from contextlib import closing
 from datetime import date, timedelta
 from http.cookies import SimpleCookie
@@ -23,6 +23,7 @@ ERNASA_INVITE_PATH = '/ernasa-aday-davetleri'
 ERNASA_INVITE_SLUG = 'ernasa-davet'
 NAV[ERNASA_INVITE_PATH] = 'ERNASA Aday Davetleri'
 NAV['/aday-deneyimi'] = 'Aday Deneyimi'
+NAV['/satis'] = 'Satış Yönetimi'
 ROLES = {'founder':'Kurucu', 'supervisor':'Firma Süpervizörü', 'staff':'Personel'}
 ACCESS = {'founder':set(NAV), 'supervisor':{'/', '/kullanicilar'}, 'staff':{'/'}}
 STAFF_PERMISSION = 'subscription_read'
@@ -45,6 +46,8 @@ ICONS = (
     'M4 6h16 M4 12h16 M4 18h16 M8 4v4m8 2v4m-6 2v4',
 )
 ASSETS = {'/control.css': ('control.css', 'text/css; charset=utf-8'),
+          '/sales-menu.js': ('sales-menu.js', 'application/javascript; charset=utf-8'),
+          '/design-system.css': ('design-system.css', 'text/css; charset=utf-8'),
           '/ernasalogo.png': ('ernasalogo.png', 'image/png')}
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS companies(id INTEGER PRIMARY KEY, name TEXT UNIQUE COLLATE NOCASE NOT NULL, status TEXT NOT NULL);
@@ -83,7 +86,7 @@ def init(path):
     with closing(connect(path)) as db:
         db.execute('PRAGMA journal_mode=WAL')
         db.executescript(SCHEMA)
-        db.executescript('BEGIN IMMEDIATE;'+firma.DDL+ik_bridge.SCHEMA+interview_templates.SCHEMA+'COMMIT;')
+        db.executescript('BEGIN IMMEDIATE;'+firma.DDL+ik_bridge.SCHEMA+interview_templates.SCHEMA+sales.DDL+sales.SQLITE_GUARDS+'COMMIT;')
 
 
 def digest(password, salt=None):
@@ -1298,7 +1301,8 @@ class Handler(BaseHTTPRequestHandler):
         page = ('<!doctype html><html lang="tr"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
                 f'<title>{e(title)} · ERNASA CONTROL</title><link rel="stylesheet" href="/control.css">'
-                '<link rel="icon" type="image/png" href="/ernasalogo.png">'
+                '<link rel="icon" type="image/png" href="/ernasalogo.png">'+
+                ('<script src="/sales-menu.js" defer></script>' if path=='/satis' else '')+
                 f'</head><body>{body}</body></html>')
         if self.server.public_prefix:
             page = re.sub(r'((?:href|src|action)="/)(?!/)', lambda match: match[0][:-1] + self.server.public_prefix + '/', page)
@@ -1394,6 +1398,8 @@ class Handler(BaseHTTPRequestHandler):
             if not post and path in ASSETS:
                 filename, content_type = ASSETS[path]
                 return self.reply(200,(ROOT/filename).read_bytes(),content_type)
+            if sales_http.handle(self,path,post):
+                return
             if not post and path == '/ernasa-invite-copy.js':
                 return self.reply(200,(ROOT/'ernasa-invite-copy.js').read_bytes(),'application/javascript; charset=utf-8')
             if not post and path == '/address-picker.js':

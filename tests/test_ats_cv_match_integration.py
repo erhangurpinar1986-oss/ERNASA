@@ -359,8 +359,15 @@ def test_offline_ocr_engine_reads_image_only_synthetic_pdf(tmp_path):
 
     picture = Image.new("RGB",(1000,220),"white")
     draw = ImageDraw.Draw(picture)
+    from pathlib import Path
+    import os
+    # Use an installed font on either Linux CI or a Windows development machine.
+    fonts = [Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'),
+             Path(os.environ.get('WINDIR','C:/Windows'))/'Fonts'/'arial.ttf']
+    font_path = next((path for path in fonts if path.is_file()), None)
+    assert font_path is not None, 'OCR regression needs an installed DejaVu Sans or Arial font'
     draw.text((35,55),"WMS FORKLIFT SALES",(0,0,0),
-              font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",54))
+              font=ImageFont.truetype(str(font_path),54))
     buffer = BytesIO()
     picture.save(buffer,format="PNG")
     pdf = pymupdf.open()

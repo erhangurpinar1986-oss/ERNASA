@@ -4,6 +4,7 @@ import os
 import re
 import unicodedata
 from contextlib import closing
+from pathlib import Path
 
 from fastapi import HTTPException
 
@@ -119,15 +120,25 @@ def _pdf_text_lines(path):
 
 def _ocr_pdf_lines(path):
     """Offline OCR of image-based PDF, bounded for Render's small CPU runtime."""
-    from rapidocr import ModelType, RapidOCR
+    import rapidocr
+    from rapidocr import RapidOCR
     from pymupdf import Matrix, open as open_pdf
     import numpy as np
     from PIL import Image
 
-    engine = RapidOCR(params={
-        "Det.model_type": ModelType.TINY,
-        "Rec.model_type": ModelType.TINY,
-    })
+    # Use only model assets shipped in the installed PyPI wheel. Selecting TINY
+    # can otherwise trigger an unexpected ModelScope download on first inference.
+    model_dir = Path(rapidocr.__file__).resolve().parent / "models"
+    params = {
+        "EngineConfig.onnxruntime.intra_op_num_threads": 2,
+        "EngineConfig.onnxruntime.inter_op_num_threads": 2,
+    }
+    for stage, pattern in (("Det", "*det*.onnx"), ("Rec", "*rec*.onnx"), ("Cls", "*cls*.onnx")):
+        models = sorted(model_dir.glob(pattern))
+        if len(models) != 1:
+            raise RuntimeError("Offline OCR requires one bundled ONNX model per stage.")
+        params[f"{stage}.model_path"] = str(models[0])
+    engine = RapidOCR(params=params)
     found = []
     with open_pdf(path) as pdf:
         for number, page in enumerate(pdf, 1):

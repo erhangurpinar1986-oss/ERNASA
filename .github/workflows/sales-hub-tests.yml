@@ -1,0 +1,35 @@
+name: ERNASA Sales Hub isolation and finance
+on:
+  pull_request:
+    paths:
+      - 'control/**'
+      - 'migrations/**'
+      - 'tests/test_sales*'
+      - '.github/workflows/sales-hub-tests.yml'
+  workflow_dispatch:
+jobs:
+  sales:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: sales_test_ci
+          POSTGRES_USER: sales_test
+          POSTGRES_PASSWORD: synthetic-ci-only-password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SALES_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 dbname=sales_test_ci user=sales_test password=synthetic-ci-only-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt pytest
+      - run: python -m pytest tests/test_sales_hub.py tests/test_sales_postgres.py -q
+      - run: python tests/control_smoke.py
+        env:
+          PYTHONPATH: .
+      - run: python -m pytest tests/test_academy_assignments.py tests/test_academy_v9_integration.py tests/test_academy_audio.py tests/test_academy_video.py tests/test_candidate_experience.py tests/test_ats_cv_match_criteria.py tests/test_ats_cv_match_integration.py -q
