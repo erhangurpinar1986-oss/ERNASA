@@ -32,8 +32,10 @@ STATES = ('Aktif', 'Askıda')
 SUB = STATES + ('Bekliyor', 'Sona erdi')
 TTL = 28800
 LOGIN_CSRF_TTL = 600
-GROUPS = (('Platform', tuple(NAV)[:4]), ('Yönetim', tuple(NAV)[4:7]),
-          ('Güvenlik ve Sistem', tuple(NAV)[7:]))
+GROUPS = (('Platform', tuple(NAV)[:4]),
+          ('Yönetim', tuple(NAV)[4:7]),
+          ('Güvenlik ve Sistem', tuple(route for route in NAV if route not in tuple(NAV)[:7] and route != '/satis')),
+          ('Satış ve İş Geliştirme', ('/satis',)))
 ICONS = (
     'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
     'M5 21V5h14v16 M9 9h1m4 0h1m-6 4h1m4 0h1m-6 4h1m4 0h1 M3 21h18',
@@ -1291,7 +1293,7 @@ class Handler(BaseHTTPRequestHandler):
                     f'<aside>{brand_block(brand)}<div class="desktop-nav">{menu}</div>'
                     f'<details class="mobile-nav"><summary>Yönetim menüsü</summary>{menu}</details></aside>'
                     f'<div class="shell"><header><p class="breadcrumb">{e(group)} <span>/</span> {e(title)}</p>'
-                    '<div class="account"><span class="health">Yerel servis</span>'
+                    '<div class="account"><span class="health">Yönetim paneli</span>'
                     f'<div><strong>{e(actor["name"])}</strong><small>{e(actor["email"])} · {ROLES[actor["role"]]}</small></div>'
                     f'{form("/cikis",actor,"","Çıkış")}</div></header>'
                     f'<main id="icerik"><h1>{e(title)}</h1>{content}</main></div>')
