@@ -129,3 +129,56 @@ def test_provider_builds_real_html_button_not_plain_mailto(monkeypatch):
     assert "Eğitime Başla" in seen[0]["html"]
     assert link in seen[0]["text"]
     assert "mailto:" not in seen[0]["html"]
+
+
+def test_postgres_cursor_wrapper_supports_sqlite_style_chained_fetch(monkeypatch):
+    """psycopg2 execute returns None, but existing app code chains .fetchall()."""
+    class DriverCursor:
+        def __init__(self):
+            self.query = None
+            self.params = None
+        def execute(self, query, params=None):
+            self.query, self.params = query, params
+            return None  # psycopg2 behavior
+        def executemany(self, query, params):
+            self.query, self.params = query, params
+            return None
+        def fetchall(self):
+            return [{"source": "egitim", "overall": 5}]
+        def fetchone(self):
+            return {"source": "egitim", "overall": 5}
+    raw = DriverCursor()
+    wrapped = database.PostgresCursorWrapper(raw)
+    assert wrapped.execute("SELECT * FROM ernasa_candidate_experience WHERE source=?", ("egitim",)) is wrapped
+    assert raw.query.endswith("source=%s")
+    assert raw.params == ("egitim",)
+    assert wrapped.fetchall()[0]["overall"] == 5
+    assert wrapped.execute("SELECT 1").fetchone()["source"] == "egitim"
+    assert wrapped.executemany("INSERT INTO survey VALUES(?)", [("egitim",)]) is wrapped
+
+
+def test_candidate_summary_supports_postgres_none_returning_execute(monkeypatch):
+    """CONTROL founder summary must work against a psycopg2-like cursor."""
+    sample = {"source": "mulakat", "ease": 4, "clarity": 5, "interview": 3,
+              "training": None, "overall": 5, "comment": "Test"}
+    class DriverCursor:
+        def execute(self, sql, params=None):
+            assert "ernasa_candidate_experience" in sql
+            return None
+        def fetchall(self):
+            return [sample]
+        def close(self):
+            pass
+    class Connection:
+        def __init__(self):
+            self.raw = DriverCursor()
+        def cursor(self):
+            return database.PostgresCursorWrapper(self.raw)
+        def close(self):
+            pass
+    monkeypatch.setattr(candidate_experience, "get_connection", Connection)
+    report = candidate_experience.summary()
+    assert report["mulakat"]["count"] == 1
+    assert report["mulakat"]["ratings"]["overall"]["average"] == 5
+    assert report["egitim"]["count"] == 0
+    assert report["mulakat"]["comments"] == []
