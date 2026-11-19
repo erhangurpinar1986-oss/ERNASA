@@ -37,15 +37,19 @@ class PostgresCursorWrapper:
 
     def execute(self, sql, params=None):
         sql = self._convert_sql(sql)
-
+        # psycopg2 cursor.execute() returns None; sqlite3 returns the cursor.
+        # Preserve sqlite3-style chaining for existing .execute(...).fetch*() callers
+        # (e.g. Aday Deneyimi), without modifying any SQL or data.
         if params is None:
-            return self.cursor.execute(sql)
-
-        return self.cursor.execute(sql, params)
+            self.cursor.execute(sql)
+        else:
+            self.cursor.execute(sql, params)
+        return self
 
     def executemany(self, sql, params):
         sql = self._convert_sql(sql)
-        return self.cursor.executemany(sql, params)
+        self.cursor.executemany(sql, params)
+        return self
 
     def fetchone(self):
         return self.cursor.fetchone()
