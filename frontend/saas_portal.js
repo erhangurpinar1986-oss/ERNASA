@@ -515,6 +515,7 @@ if (companyPortalPage) {
         renderCandidates();
         displaySectionTabs("dashboard");
         if (window.lucide?.createIcons) window.lucide.createIcons();
+        window.ernasaRenderPortalIcons?.(navigation);
     }).catch(error => {
         console.error("Firma menüsü oluşturulamadı:",error);
         showSidebarUnavailable();
