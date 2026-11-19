@@ -169,3 +169,23 @@
     .company-portal .portal-subnav-button { flex: 0 0 auto; white-space: nowrap; }
     .company-portal .sidebar-menu .portal-home-link { margin-top: 0; }
 }
+
+/* Main HR navigation uses one visual rhythm, including training links. */
+.company-portal .sidebar-menu .portal-main-link {
+    width: 100%;
+    box-sizing: border-box;
+    gap: 10px;
+    padding: 10px 12px;
+    justify-content: flex-start;
+    text-align: left;
+}
+.company-portal .sidebar-menu .portal-main-link > svg,
+.company-portal .sidebar-menu .portal-main-link > i {
+    display: block;
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+}
+@media (max-width: 900px) {
+    .company-portal .sidebar-menu .portal-main-link { width: auto; }
+}
