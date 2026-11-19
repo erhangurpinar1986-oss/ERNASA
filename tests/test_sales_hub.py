@@ -431,7 +431,7 @@ def test_sales_cards_and_navigation_are_consistently_grouped(web):
     assert b'class="sales-hub-ui"' in body
     assert 'Satış ve İş Geliştirme'.encode() in body
     assert 'Yerel servis'.encode() not in body
-    assert b'YÃ¶netim paneli' in body
+    assert 'Yönetim paneli'.encode() in body
 
 
 def test_sales_founder_sections_separated_without_changing_original_ids(web):
