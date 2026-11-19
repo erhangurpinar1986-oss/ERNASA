@@ -33,6 +33,7 @@ AUDIO_TYPES = {
     "audio/ogg": "ogg",
 }
 ACADEMY_HTML = Path(__file__).resolve().parent / "academy_portal.html"
+ACADEMY_V9_HTML = Path(__file__).resolve().parent / "academy_portal_v9.html"
 
 
 def initialize_schema():
@@ -106,6 +107,20 @@ def academy_page(token: str):
         raise HTTPException(503, "Eğitim ekranı henüz sunucuda bulunamadı.")
     import json
     import academy_assignments
+    assignments = academy_assignments.assigned_modules(token)
+    if assignments["program_id"] == "ernasa_v9":
+        if not ACADEMY_V9_HTML.exists():
+            raise HTTPException(503, "ERNASA Akademi V9 henüz yayınlanmamış.")
+        from html import escape
+        html = ACADEMY_V9_HTML.read_text(encoding="utf-8")
+        context = json.dumps({
+            "name": recipient,
+            "token": token,
+            "video_allowed": bool(assignments.get("video_allowed", False)),
+            "module_ids": assignments["module_ids"],
+        }, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+        html = html.replace("</head>", '<script>window.ERNASA_V9_CONTEXT=' + context + ';</script></head>', 1)
+        return HTMLResponse(content=html, headers=_headers())
     html = ACADEMY_HTML.read_text(encoding="utf-8")
     start_marker = "const ACADEMY_DATA="
     start = html.find(start_marker)

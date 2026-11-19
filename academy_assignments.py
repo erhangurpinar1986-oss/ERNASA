@@ -44,7 +44,70 @@ MODULE_TITLES = {
     "almanya": "Almanya pazarı: doğrulama ve açılım",
     "metrik": "Satış hunisi teşhisi ve A/B testleri",
 }
+# ERNASA Akademi V9: the full candidate curriculum, independently versioned.
+LEGACY_MODULE_TITLES = MODULE_TITLES.copy()
+V9_MODULE_TITLES = {
+    "ernasa": "ERNASA nedir, neden kuruldu?",
+    "kurulus": "Kuruluş amacı ve müşteri problemi",
+    "degerler": "Kurumsal değerler, dürüst satış ve sorumluluk",
+    "urunharita": "ERNASA ürün ailesi ve sınırlar",
+    "2036": "ERNASA 2036 vizyonu ve teknoloji yol haritası",
+    "hakkaniyet": "Hakkaniyet ve insan kararı",
+    "control": "CONTROL: kurucu ve merkezi yönetim",
+    "roller": "Firma paneli, roller ve yetkiler",
+    "dashboard": "İK kontrol panelinin tüm bölümleri",
+    "workflow": "İK müdürünün günlük iş akışı",
+    "pozisyon": "İşe alım pozisyonu oluşturma",
+    "basvuru": "Aday kaydı ve başvuru akışı",
+    "cv": "CV yükleme, biçim ve OCR",
+    "ats": "ATS aday havuzu ve aşama yönetimi",
+    "eslestirme": "İşe uygunluk kriterleri ve kanıt eşleştirme",
+    "davet": "Mülakat bağlantısı ve 8 saat kuralı",
+    "sorular": "10 soruluk mülakatın kurgusu",
+    "adaydeneyim": "Aday portalı ve görüşme deneyimi",
+    "ikinciasama": "Birinci değerlendirmeden ikinci görüşmeye",
+    "analiz": "AI değerlendirme: güçlü ve gelişime açık yönler",
+    "pdf": "PDF rapor indirme ve doğrulama",
+    "karar": "İnsan onaylı aday kararı ve geri bildirim",
+    "gelisim": "Raporun eksik yönlerinden ders önerme",
+    "atama": "Eğitim atama merkezinin tüm adımları",
+    "katilimci": "Katılımcı Akademisi: dersleri tamamlama",
+    "kayit": "Sesli anlatım, mikrofon ve kamera uygulamaları",
+    "olcme": "Eğitim sonrası gelişim ve yeniden değerlendirme",
+    "guvenlik": "KVKK, veri ayrımı ve güvenli işletim",
+    "teknik": "Hata ayıklama ve güvenli test",
+    "uygulama-hatalar": "Gerçek müşteri sorularına teknik cevaplar",
+    "musteri": "İK müşterisine uçtan uca ürün demosu",
+    "satis-hesap": "Aktif satış hesabı ve yetki sınırı",
+    "musteri-kaydi": "Müşteri kaydı ve fırsat oluşturma",
+    "abonelik": "Paket, abonelik ve müşteri yaşam döngüsü",
+    "teklif-talep": "Özel proje teklif talebi oluşturma",
+    "control-teklif": "CONTROL onay, revizyon ve ret akışı",
+    "onayli-teklif": "Onaylı teklifin müşteriye sunulması",
+    "komisyon-ilk": "Yeni müşteri ilk abonelik komisyonu: %25",
+    "komisyon-devam": "Devam eden abonelik komisyonu: %5",
+    "komisyon-sifir": "Paket yükseltme ve ek ürün: %0",
+    "komisyon-tahsil": "Tahsilat, ödeme günü ve hak ediş kontrolü",
+    "satis-panel-rapor": "Satış paneli raporları ve müşteri takibi",
+    "demo": "Ürün sunumu ve etkili demo",
+    "kesif": "Danışmanlık temelli müşteri keşfi",
+    "crm": "CRM ve 30/60/90 günlük takip",
+    "muzakere": "Fiyat itirazı, ROI ve müzakere",
+    "kurumsal": "Kurumsal satın alma ve çok paydaşlı süreç",
+    "rol-oyun": "İK müdürüyle canlı ürün tanıtımı",
+    "itiraz-guvenlik": "KVKK, AI hatası ve veri ayrımı itirazları",
+    "fiyat-deger": "Fiyatı değil ölçülebilir değeri sunma",
+    "satis-kapat": "Satış kapatma, takip ve yazılı taahhüt",
+    "prova-multi": "Çok paydaşlı satış provası: CFO, BT ve İK",
+    "prova-son": "Final satış provası ve İK değerlendirmesi",
+}
+MODULE_TITLES.update({key: title for key, title in V9_MODULE_TITLES.items() if key not in MODULE_TITLES})
+
 PROGRAMS = {
+    "ernasa_v9": {
+        "title": "ERNASA Akademi V9 — Tam Ürün ve B2B Satış Eğitimi",
+        "modules": tuple(V9_MODULE_TITLES),
+    },
     "b2b_satis": {
         "title": "B2B Satış Ortaklığı",
         "modules": ("vizyon","paneller","ats","cv_analiz","iki_asama","mulakat","rapor","guvenlik","demo","kesif"),
@@ -96,6 +159,11 @@ def initialize_schema():
             if "video_allowed" not in {row["name"] for row in cur.fetchall()}:
                 cur.execute("ALTER TABLE ernasa_training_assignments ADD COLUMN video_allowed INTEGER NOT NULL DEFAULT 0")
         cur.execute("CREATE INDEX IF NOT EXISTS ernasa_training_assignments_tenant ON ernasa_training_assignments(company_id,created_at)")
+        cur.execute("""CREATE TABLE IF NOT EXISTS ernasa_training_v9_progress (
+            token_hash TEXT PRIMARY KEY REFERENCES ernasa_training_invites(token_hash),
+            state_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )""")
         db.commit()
 
 
@@ -191,7 +259,7 @@ class AssignmentRequest(BaseModel):
     recipient: str = Field(min_length=2,max_length=120)
     email: str = Field(default="",max_length=254)
     program_id: str = Field(min_length=2,max_length=40)
-    module_ids: list[str] = Field(min_length=1,max_length=16)
+    module_ids: list[str] = Field(min_length=1,max_length=53)
     days: int = Field(default=14,ge=1,le=30)
     video_allowed: bool = False
 
@@ -273,10 +341,15 @@ def create_assignment(request: Request, body: AssignmentRequest):
     company_id, user_id = _actor(request, write=True)
     if body.program_id not in PROGRAMS:
         raise HTTPException(422,"Eğitim programı geçersiz.")
+    if body.program_id != "ernasa_v9" and len(body.module_ids) > 16:
+        raise HTTPException(422,"Bu programda en fazla 16 ders atanabilir.")
     if not body.module_ids or len(body.module_ids)!=len(set(body.module_ids)):
         raise HTTPException(422,"Modül seçimi geçersiz.")
-    if any(module not in MODULE_TITLES for module in body.module_ids):
+    supported = V9_MODULE_TITLES if body.program_id == "ernasa_v9" else LEGACY_MODULE_TITLES
+    if any(module not in supported for module in body.module_ids):
         raise HTTPException(422,"Bilinmeyen eğitim modülü.")
+    if body.program_id == "ernasa_v9" and "demo" not in body.module_ids:
+        raise HTTPException(422,"V9 eğitiminde final ürün sunumu dersi zorunludur.")
     email=body.email.strip().lower()
     if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email):
         raise HTTPException(422,"E-posta adresi geçersiz.")
@@ -363,19 +436,27 @@ def list_assignments(request: Request):
     company_id,_=_actor(request)
     with closing(get_connection()) as db:
         c=db.cursor()
-        if company_id is None:
-            c.execute("""SELECT i.recipient,i.created_at,i.expires_at,a.program_id,a.modules_json
-                        FROM ernasa_training_assignments a JOIN ernasa_training_invites i
-                        ON i.token_hash=a.token_hash WHERE a.company_id IS NULL
-                        ORDER BY i.created_at DESC LIMIT 50""")
-        else:
-            c.execute("""SELECT i.recipient,i.created_at,i.expires_at,a.program_id,a.modules_json
-                        FROM ernasa_training_assignments a JOIN ernasa_training_invites i
-                        ON i.token_hash=a.token_hash WHERE a.company_id=?
-                        ORDER BY i.created_at DESC LIMIT 50""",(company_id,))
-        return {"assignments":[{"recipient":x["recipient"],"program_id":x["program_id"],
-                 "module_ids":json.loads(x["modules_json"]),
-                 "created_at":x["created_at"],"expires_at":x["expires_at"]} for x in c.fetchall()]}
+        query = """SELECT i.recipient,i.created_at,i.expires_at,
+                    a.program_id,a.modules_json,p.state_json
+                    FROM ernasa_training_assignments a
+                    JOIN ernasa_training_invites i ON i.token_hash=a.token_hash
+                    LEFT JOIN ernasa_training_v9_progress p ON p.token_hash=a.token_hash
+                    WHERE a.company_id IS NOT DISTINCT FROM ?
+                    ORDER BY i.created_at DESC LIMIT 50"""
+        c.execute(query,(company_id,))
+        assignments=[]
+        for row in c.fetchall():
+            modules=json.loads(row["modules_json"])
+            progress=json.loads(row["state_json"]) if row["state_json"] else {}
+            done=progress.get("done",{})
+            completed=sum(1 for key in modules if done.get(key) is True)
+            assignments.append({
+                "recipient":row["recipient"],"program_id":row["program_id"],
+                "module_ids":modules,"created_at":row["created_at"],
+                "expires_at":row["expires_at"],
+                "completed_lessons":completed,"total_lessons":len(modules)
+            })
+        return {"assignments":assignments}
 
 
 def assigned_modules(token):
@@ -389,6 +470,55 @@ def assigned_modules(token):
         return {"program_id":row["program_id"],
                 "module_ids":json.loads(row["modules_json"]),
                 "video_allowed":bool(row["video_allowed"])}
+
+
+class V9ProgressState(BaseModel):
+    done: dict[str, bool] = Field(default_factory=dict)
+    answers: dict[str, dict[str, int]] = Field(default_factory=dict)
+
+
+@router.get("/api/egitim/{token}/v9/ilerleme")
+def v9_read_progress(token: str):
+    selected = assigned_modules(token)
+    if selected["program_id"] != "ernasa_v9":
+        raise HTTPException(404, "Bu eğitimde V9 ilerlemesi bulunmuyor.")
+    with closing(get_connection()) as db:
+        digest, _ = ernasa_training._invite(db, token)
+        row = db.cursor().execute(
+            "SELECT state_json,updated_at FROM ernasa_training_v9_progress WHERE token_hash=?",
+            (digest,)
+        ).fetchone()
+    if not row:
+        return {"done": {}, "answers": {}, "updated_at": None}
+    return {**json.loads(row["state_json"]), "updated_at": row["updated_at"]}
+
+
+@router.post("/api/egitim/{token}/v9/ilerleme")
+def v9_write_progress(token: str, state: V9ProgressState):
+    selected = assigned_modules(token)
+    if selected["program_id"] != "ernasa_v9":
+        raise HTTPException(404, "Bu eğitimde V9 ilerlemesi bulunmuyor.")
+    known = set(V9_MODULE_TITLES)
+    if len(state.done)>53 or any(key not in known for key in state.done):
+        raise HTTPException(422, "Ders ilerleme verisi geçersiz.")
+    if len(state.answers)>53 or any(key not in known for key in state.answers):
+        raise HTTPException(422, "Sınav verisi geçersiz.")
+    for answers in state.answers.values():
+        if len(answers)>5 or any(not str(index).isdigit() or int(index)>4 or not 0<=value<=9
+                                 for index,value in answers.items()):
+            raise HTTPException(422, "Sınav yanıtı geçersiz.")
+    payload = json.dumps(state.model_dump(),ensure_ascii=False)
+    if len(payload.encode("utf-8"))>24000:
+        raise HTTPException(413, "İlerleme kaydı çok büyük.")
+    with closing(get_connection()) as db:
+        digest, _ = ernasa_training._invite(db, token)
+        db.cursor().execute("""INSERT INTO ernasa_training_v9_progress
+            (token_hash,state_json,updated_at) VALUES (?,?,?)
+            ON CONFLICT(token_hash) DO UPDATE SET state_json=excluded.state_json,
+                updated_at=excluded.updated_at""",
+            (digest,payload,datetime.now(timezone.utc).isoformat()))
+        db.commit()
+    return {"saved":True}
 
 
 @router.get("/api/egitim/{token}/program")

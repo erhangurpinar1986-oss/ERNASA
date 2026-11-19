@@ -772,6 +772,30 @@ function showPortalScreen(screenName) {
     if (personnelScreen) personnelScreen.hidden = true;
     document.getElementById("positionsScreen").hidden = screenName !== "positions";
     document.getElementById("usageScreen").hidden = screenName !== "usage";
+    const training = document.getElementById("trainingScreen");
+    if (training) training.hidden = screenName !== "training";
+    if (screenName === "training") {
+        const frame = document.getElementById("trainingPanelFrame");
+        const status = document.getElementById("trainingEmbedStatus");
+        if (frame && !frame.dataset.loaded && !frame.dataset.loading) {
+            frame.dataset.loading = "1";
+            if (status) status.textContent = "Eğitim atama ekranı yükleniyor…";
+            fetch("/egitim-atama", {credentials:"same-origin", cache:"no-store"})
+              .then(response => {
+                if (!response.ok) throw new Error("Eğitim Atama erişimi reddedildi (HTTP " + response.status + ").");
+                return response.text();
+              })
+              .then(html => {
+                if (!frame.isConnected) return;
+                const base = '<base href="' + window.location.origin + '/">';
+                frame.srcdoc = html.replace("<head>", "<head>" + base);
+                frame.dataset.loaded = "1";
+                if (status) status.textContent = "";
+              })
+              .catch(error => {if (status) status.textContent = error.message;})
+              .finally(() => {delete frame.dataset.loading;});
+        }
+    }
 
     if (screenName === "dashboard") {
         dashboardHome.style.display = "block";

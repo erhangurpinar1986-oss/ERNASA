@@ -16,6 +16,8 @@ on:
       - academy_assignments.py
       - academy_assign.html
       - academy_portal.html
+      - academy_portal_v9.html
+      - tests/test_academy_v9_integration.py
       - academy_preview/index.html
       - ernasa_training.py
       - backend/main.py
@@ -38,20 +40,21 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest
       - name: Validate Python source
-        run: python -m py_compile academy_audio.py academy_assignments.py academy_video.py candidate_experience.py services/invite_email.py control/app.py control/render_gateway.py ernasa_training.py backend/main.py tests/test_academy_audio.py tests/test_academy_assignments.py tests/test_academy_video.py tests/test_candidate_experience.py tests/test_invite_email.py
+        run: python -m py_compile academy_audio.py academy_assignments.py academy_video.py candidate_experience.py services/invite_email.py control/app.py control/render_gateway.py ernasa_training.py backend/main.py tests/test_academy_audio.py tests/test_academy_assignments.py tests/test_academy_video.py tests/test_candidate_experience.py tests/test_invite_email.py tests/test_academy_v9_integration.py
       - name: Run voice API tests
-        run: python -m pytest tests/test_academy_audio.py tests/test_academy_assignments.py tests/test_academy_video.py tests/test_candidate_experience.py -q
+        run: python -m pytest tests/test_academy_audio.py tests/test_academy_assignments.py tests/test_academy_video.py tests/test_candidate_experience.py tests/test_academy_v9_integration.py -q
       - name: Validate academy JavaScript
         run: |
           python - <<'PY'
           import re, pathlib
-          for item in ['academy_portal.html','academy_assign.html','academy_preview/index.html','candidate_experience.html']:
+          for item in ['academy_portal.html','academy_portal_v9.html','academy_assign.html','academy_preview/index.html','candidate_experience.html']:
               html=pathlib.Path(item).read_text(encoding='utf-8')
               scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
               assert scripts, item
               pathlib.Path('/tmp/'+item.replace('/','_')+'.js').write_text('\n'.join(scripts),encoding='utf-8')
           PY
           node --check /tmp/academy_portal.html.js
+          node --check /tmp/academy_portal_v9.html.js
           node --check /tmp/academy_assign.html.js
           node --check /tmp/academy_preview_index.html.js
           node --check /tmp/candidate_experience.html.js
