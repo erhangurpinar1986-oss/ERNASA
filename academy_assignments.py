@@ -430,19 +430,27 @@ def list_assignments(request: Request):
     company_id,_=_actor(request)
     with closing(get_connection()) as db:
         c=db.cursor()
-        if company_id is None:
-            c.execute("""SELECT i.recipient,i.created_at,i.expires_at,a.program_id,a.modules_json
-                        FROM ernasa_training_assignments a JOIN ernasa_training_invites i
-                        ON i.token_hash=a.token_hash WHERE a.company_id IS NULL
-                        ORDER BY i.created_at DESC LIMIT 50""")
-        else:
-            c.execute("""SELECT i.recipient,i.created_at,i.expires_at,a.program_id,a.modules_json
-                        FROM ernasa_training_assignments a JOIN ernasa_training_invites i
-                        ON i.token_hash=a.token_hash WHERE a.company_id=?
-                        ORDER BY i.created_at DESC LIMIT 50""",(company_id,))
-        return {"assignments":[{"recipient":x["recipient"],"program_id":x["program_id"],
-                 "module_ids":json.loads(x["modules_json"]),
-                 "created_at":x["created_at"],"expires_at":x["expires_at"]} for x in c.fetchall()]}
+        query = """SELECT i.recipient,i.created_at,i.expires_at,
+                    a.program_id,a.modules_json,p.state_json
+                    FROM ernasa_training_assignments a
+                    JOIN ernasa_training_invites i ON i.token_hash=a.token_hash
+                    LEFT JOIN ernasa_training_v9_progress p ON p.token_hash=a.token_hash
+                    WHERE a.company_id IS NOT DISTINCT FROM ?
+                    ORDER BY i.created_at DESC LIMIT 50"""
+        c.execute(query,(company_id,))
+        assignments=[]
+        for row in c.fetchall():
+            modules=json.loads(row["modules_json"])
+            progress=json.loads(row["state_json"]) if row["state_json"] else {}
+            done=progress.get("done",{})
+            completed=sum(1 for key in modules if done.get(key) is True)
+            assignments.append({
+                "recipient":row["recipient"],"program_id":row["program_id"],
+                "module_ids":modules,"created_at":row["created_at"],
+                "expires_at":row["expires_at"],
+                "completed_lessons":completed,"total_lessons":len(modules)
+            })
+        return {"assignments":assignments}
 
 
 def assigned_modules(token):
@@ -461,15 +469,6 @@ def assigned_modules(token):
 class V9ProgressState(BaseModel):
     done: dict[str, bool] = Field(default_factory=dict)
     answers: dict[str, dict[str, int]] = Field(default_factory=dict)
-
-
-def _v9_progress_token(token):
-    digest, _ = ernasa_training._invite(get_connection(), token)
-    # Validate the program and token before reading or writing progress.
-    selected = assigned_modules(token)
-    if selected["program_id"] != "ernasa_v9":
-        raise HTTPException(404, "Bu bağlantıda V9 ilerlemesi bulunmuyor.")
-    return digest
 
 
 @router.get("/api/egitim/{token}/v9/ilerleme")
