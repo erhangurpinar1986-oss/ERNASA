@@ -208,6 +208,19 @@ def set_cookie(h, name, token, age):
     return ('Set-Cookie', f'{name}={token}; Path={h.server.public_prefix}/sales; HttpOnly; SameSite=Strict; Max-Age={age}{secure}')
 
 
+
+def sales_login_form(c, csrf, error=None):
+    """Always show the usable login form and the separate CONTROL founder entry."""
+    fields = input_field(c,'email','E-posta','email')+input_field(c,'password','Parola','password')
+    notice = ('<p>Bu giriş yalnızca CONTROL tarafından etkinleştirilmiş '
+              'satış temsilcisi hesapları içindir.</p>'
+              '<p><strong>ERNASA kurucusu veya yöneticisi misiniz?</strong> '
+              '<a href="/giris">CONTROL yönetim girişini açın</a>.</p>')
+    alert = f'<p class="sales-login-error" role="alert">{c.e(str(error))}</p>' if error else ''
+    return alert + notice + form(c,'/sales/login',csrf,'login',fields,'Temsilci girişi')
+
+
+
 def render(c, h, title, content, identity=None, status=200, headers=(), tab='overview'):
     prefix = h.server.public_prefix
     if identity:
@@ -363,13 +376,18 @@ def handle(h, path, post):
                     token = login(c,h,db,data)
                     db.commit()
                     h.reply(303,headers=(('Location',h.server.public_prefix+'/sales'),set_cookie(h,'sales_session',token,c.TTL)))
+                elif identity and identity[0].founder:
+                    h.reply(303,headers=(('Location',h.server.public_prefix+'/satis'),))
                 else:
                     token = secrets.token_urlsafe(32)
-                    fields = input_field(c,'email','E-posta','email')+input_field(c,'password','Parola','password')
-                    render(c,h,'Satış temsilcisi girişi',form(c,'/sales/login',token,'login',fields,'Giriş yap')+'<p>Hesabınız CONTROL tarafından etkinleştirilmelidir. Akademi erişimi satış yetkisi sağlamaz.</p>',headers=(set_cookie(h,'sales_login_csrf',token,c.LOGIN_CSRF_TTL),))
+                    render(c,h,'Satış temsilcisi girişi',sales_login_form(c,token),
+                           headers=(set_cookie(h,'sales_login_csrf',token,c.LOGIN_CSRF_TTL),))
                 return True
             if not identity:
-                if api or post or path == '/satis':
+                if path == '/satis' and not post:
+                    h.reply(303,headers=(('Location',h.server.public_prefix+'/giris'),))
+                    return True
+                if api or post:
                     sales.fail('Oturum açmanız gerekiyor.',401)
                 h.reply(303,headers=(('Location',h.server.public_prefix+'/sales/login'),))
                 return True
@@ -430,6 +448,11 @@ def handle(h, path, post):
     except (sales.Invalid,c.Problem) as error:
         if api:
             h.reply(error.status,json.dumps({'detail':str(error)}).encode(),'application/json')
+        elif path == '/sales/login' and post:
+            # Reissue a fresh CSRF pair; a rejected login must never strand the user.
+            token = secrets.token_urlsafe(32)
+            render(c,h,'Satış temsilcisi girişi',sales_login_form(c,token,error),
+                   status=error.status,headers=(set_cookie(h,'sales_login_csrf',token,c.LOGIN_CSRF_TTL),))
         else:
             render(c,h,'İşlem tamamlanamadı',f'<p role="alert">{c.e(str(error))}</p><p><a href="/sales">Satış paneline dön</a></p>',identity,status=error.status)
     except (ValueError,TypeError,UnicodeError):
