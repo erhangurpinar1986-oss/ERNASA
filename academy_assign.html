@@ -208,7 +208,7 @@ async function init(){try{
  $('program').onchange=preset;preset();$('create').disabled=false;loadAssignments();loadReports();loadMedia();
  }catch(e){$('status').textContent='Eğitim kataloğu yüklenemedi: '+e.message;}}
  $('analyze').onclick=analyze;$('fromSystem').onclick=readSavedReport;$('refreshReports').onclick=loadReports;$('manual').onclick=()=>{$('reportStatus').textContent='Rapor olmadan seçim yapabilirsiniz.';$('suggestions').hidden=true;};
- $('defaults').onclick=preset;$('all').onclick=()=>selectModules(catalog.modules.map(m=>m.id));
+ $('defaults').onclick=preset;$('all').onclick=()=>selectModules(currentProgram()?.default_modules||[]);
  $('sendExisting').onclick=async()=>{
  const raw=$('existingLink').value.trim();let u;
  try{u=new URL(raw);}catch(e){$('existingStatus').textContent='Geçerli eğitim bağlantısını yapıştırın.';return;}
