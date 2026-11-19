@@ -158,6 +158,11 @@ def initialize_schema():
             if "video_allowed" not in {row["name"] for row in cur.fetchall()}:
                 cur.execute("ALTER TABLE ernasa_training_assignments ADD COLUMN video_allowed INTEGER NOT NULL DEFAULT 0")
         cur.execute("CREATE INDEX IF NOT EXISTS ernasa_training_assignments_tenant ON ernasa_training_assignments(company_id,created_at)")
+        cur.execute("""CREATE TABLE IF NOT EXISTS ernasa_training_v9_progress (
+            token_hash TEXT PRIMARY KEY REFERENCES ernasa_training_invites(token_hash),
+            state_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )""")
         db.commit()
 
 
@@ -451,6 +456,64 @@ def assigned_modules(token):
         return {"program_id":row["program_id"],
                 "module_ids":json.loads(row["modules_json"]),
                 "video_allowed":bool(row["video_allowed"])}
+
+
+class V9ProgressState(BaseModel):
+    done: dict[str, bool] = Field(default_factory=dict)
+    answers: dict[str, dict[str, int]] = Field(default_factory=dict)
+
+
+def _v9_progress_token(token):
+    digest, _ = ernasa_training._invite(get_connection(), token)
+    # Validate the program and token before reading or writing progress.
+    selected = assigned_modules(token)
+    if selected["program_id"] != "ernasa_v9":
+        raise HTTPException(404, "Bu bağlantıda V9 ilerlemesi bulunmuyor.")
+    return digest
+
+
+@router.get("/api/egitim/{token}/v9/ilerleme")
+def v9_read_progress(token: str):
+    selected = assigned_modules(token)
+    if selected["program_id"] != "ernasa_v9":
+        raise HTTPException(404, "Bu eğitimde V9 ilerlemesi bulunmuyor.")
+    with closing(get_connection()) as db:
+        digest, _ = ernasa_training._invite(db, token)
+        row = db.cursor().execute(
+            "SELECT state_json,updated_at FROM ernasa_training_v9_progress WHERE token_hash=?",
+            (digest,)
+        ).fetchone()
+    if not row:
+        return {"done": {}, "answers": {}, "updated_at": None}
+    return {**json.loads(row["state_json"]), "updated_at": row["updated_at"]}
+
+
+@router.post("/api/egitim/{token}/v9/ilerleme")
+def v9_write_progress(token: str, state: V9ProgressState):
+    selected = assigned_modules(token)
+    if selected["program_id"] != "ernasa_v9":
+        raise HTTPException(404, "Bu eğitimde V9 ilerlemesi bulunmuyor.")
+    known = set(V9_MODULE_TITLES)
+    if len(state.done)>53 or any(key not in known for key in state.done):
+        raise HTTPException(422, "Ders ilerleme verisi geçersiz.")
+    if len(state.answers)>53 or any(key not in known for key in state.answers):
+        raise HTTPException(422, "Sınav verisi geçersiz.")
+    for answers in state.answers.values():
+        if len(answers)>5 or any(not str(index).isdigit() or int(index)>4 or not 0<=value<=9
+                                 for index,value in answers.items()):
+            raise HTTPException(422, "Sınav yanıtı geçersiz.")
+    payload = json.dumps(state.model_dump(),ensure_ascii=False)
+    if len(payload.encode("utf-8"))>24000:
+        raise HTTPException(413, "İlerleme kaydı çok büyük.")
+    with closing(get_connection()) as db:
+        digest, _ = ernasa_training._invite(db, token)
+        db.cursor().execute("""INSERT INTO ernasa_training_v9_progress
+            (token_hash,state_json,updated_at) VALUES (?,?,?)
+            ON CONFLICT(token_hash) DO UPDATE SET state_json=excluded.state_json,
+                updated_at=excluded.updated_at""",
+            (digest,payload,datetime.now(timezone.utc).isoformat()))
+        db.commit()
+    return {"saved":True}
 
 
 @router.get("/api/egitim/{token}/program")
