@@ -194,6 +194,17 @@ def begin(actor, application_id, document_id, cv_root, create_interview, send_in
         app=ats.application(c,actor,application_id)
         if app["closure"]:
             raise HTTPException(409,"Kapatılmış başvuru için işlem başlatılamaz.")
+        # Never infer a role from the CV. Trust the exact ATS position in this tenant.
+        position_id=app.get("position_id")
+        if not position_id:
+            raise HTTPException(409,"Pozisyon belirlenmeden mülakat daveti gönderilemez.")
+        c.execute("SELECT name,open FROM company_positions WHERE id=? AND company_id=?",
+                  (position_id,actor.company_id))
+        position=c.fetchone()
+        if not position or not position["open"]:
+            raise HTTPException(409,"Başvuru için açık pozisyon bulunamadı.")
+        if not app.get("email"):
+            raise HTTPException(409,"Mülakat daveti için aday e-postası gerekli.")
         c.execute("SELECT id FROM selin_cases WHERE company_id=? AND application_id=?",
                   (actor.company_id,application_id))
         existing=c.fetchone()
@@ -204,7 +215,8 @@ def begin(actor, application_id, document_id, cv_root, create_interview, send_in
     cv_text=ats_matching.source_text(cv_root,actor,application_id,document_id)
     if not cv_text.strip():
         raise HTTPException(422,"CV okunamadı; manuel doğrulama gerekiyor.")
-    summary={"match_score":match.get("match_score"),
+    summary={"position_id":position_id,"position":position["name"],
+             "match_score":match.get("match_score"),
              "evidence_coverage":match.get("evidence_coverage"),
              "human_review_required":True,
              "notes":match.get("reason",""),
