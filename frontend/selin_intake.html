@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ERNASA HR | SELİN Başvuru Kuyruğu</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef3f9;color:#152b49;font:16px system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #d4dfed;padding:20px max(20px,calc((100vw - 1180px)/2))}
+header strong{font-size:22px}header a{color:#123e82}main{max-width:1180px;margin:26px auto;padding:0 18px}
+h1{font-size:26px;margin:0 0 8px}p{line-height:1.5}small,.muted{color:#52657f}
+nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:20px 0}
+button{background:#183e76;color:white;border:0;border-radius:8px;padding:10px 15px;font:inherit;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}button.secondary{background:#e9edf4;color:#19324d}
+.panel{background:#fff;border:1px solid #d5e0ed;border-radius:12px;padding:18px;margin:14px 0;box-shadow:0 2px 8px #1b36570a}
+.queue{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.queue article{min-width:0;margin:0}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:15px}
+dd{margin:0;overflow-wrap:anywhere}dt{font-size:13px;color:#52657f;margin-top:8px}
+.status{font-weight:650}a{color:#174b8a}a:focus,button:focus{outline:2px solid #1263b7;outline-offset:3px}
+</style></head><body>
+<header><strong>ERNASA HR · SELİN</strong><a href="/ik-v5">İK Paneline Dön</a></header>
+<main>
+<h1>Yeni Başvurular ve SELİN Kuyruğu</h1>
+<p class="muted">Paylaşılan ilan bağlantılarından gelen CV'ler burada görünür. SELİN'i başlatmak için yetkili yönetici incelemesi gerekir. İşe alım veya otomatik ret kararı verilmez.</p>
+<nav><strong id="count">Başvurular yükleniyor...</strong><button id="refresh" type="button">Yenile</button></nav>
+<p id="notice" role="status" aria-live="polite"></p><section id="queue" class="queue" aria-label="SELİN başvuru kuyruğu"></section>
+</main>
+<script>
+const labels={pending_review:"Yönetici incelemesi bekliyor",processing:"İşleniyor",assigned:"SELİN dosyası oluşturuldu",
+needs_attention:"Manuel kontrol gerekli",skipped:"SELİN otomasyonu atlandı"};
+const queue=document.getElementById("queue"), notice=document.getElementById("notice"), count=document.getElementById("count");
+const refresh=document.getElementById("refresh");
+async function readJSON(url,options){
+ const res=await fetch(url,{credentials:"same-origin",cache:"no-store",...options});
+ let data={};try{data=await res.json()}catch{}
+ if(!res.ok)throw Error(data.detail||"İşlem gerçekleştirilemedi ("+res.status+").");
+ return data;
+}
+function field(dl,label,value){
+ const dt=document.createElement("dt"),dd=document.createElement("dd");
+ dt.textContent=label;dd.textContent=value||"—";dl.append(dt,dd);
+}
+async function decision(id,action,button){
+ if(action==="start"&&!confirm("Bu aday için SELİN mülakat işlemleri başlatılsın mı? Otomatik gönderimler etkinse e-posta iletilebilir."))return;
+ button.disabled=true;notice.textContent="İşlem uygulanıyor...";
+ try{
+  await readJSON("/api/ik/selin/intake/"+encodeURIComponent(id)+"/decision",{
+   method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})
+  });
+  notice.textContent=action==="start"?"SELİN dosyası işleme alındı.":"Başvuru ATS'de korundu; otomasyon atlandı.";
+ }catch(err){notice.textContent=err.message}finally{await load()}
+}
+async function load(){
+ refresh.disabled=true;queue.replaceChildren();count.textContent="Başvurular yükleniyor...";
+ try{
+  const data=await readJSON("/api/ik/selin/intake"),rows=data.applications||[];
+  count.textContent=rows.length+" kayıt (son 200)";
+  if(!rows.length){const p=document.createElement("p");p.textContent="Henüz SELİN kuyruğuna alınmış CV başvurusu yok.";queue.append(p)}
+  for(const row of rows){
+   const article=document.createElement("article");article.className="panel";
+   const h=document.createElement("h2");h.textContent=row.name||"Aday";article.append(h);
+   const dl=document.createElement("dl");
+   field(dl,"Pozisyon",row.position);field(dl,"İlan",row.job_title);
+   field(dl,"Kaynak",row.source);field(dl,"E-posta",row.email);
+   field(dl,"Alınma zamanı",row.received_at);field(dl,"Durum",labels[row.status]||row.status);
+   if(row.error_code)field(dl,"Kontrol kodu",row.error_code);
+   article.append(dl);
+   if(row.status==="pending_review"){
+    const actions=document.createElement("div");actions.className="actions";
+    const start=document.createElement("button");start.type="button";start.textContent="SELİN ile İşleme Al";
+    start.addEventListener("click",()=>decision(row.application_id,"start",start));
+    const skip=document.createElement("button");skip.type="button";skip.className="secondary";skip.textContent="Otomasyonu Atla";
+    skip.addEventListener("click",()=>decision(row.application_id,"skip",skip));actions.append(start,skip);article.append(actions);
+   }
+   if(row.case_id){
+    const link=document.createElement("a");link.href="/api/ik/selin/cases/"+encodeURIComponent(row.case_id);
+    link.textContent="Aday dosyasını aç (JSON)";link.target="_blank";link.rel="noopener";article.append(link);
+   }
+   queue.append(article);
+  }
+ }catch(err){count.textContent="Yüklenemedi";notice.textContent=err.message}
+ finally{refresh.disabled=false}
+}
+refresh.addEventListener("click",load);load();
+</script>
+</body></html>
