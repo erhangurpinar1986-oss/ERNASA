@@ -88,9 +88,10 @@ def decide_intake(actor, application_id, action, root, create_interview, send_in
             raise HTTPException(404,"SELİN başvuru kuyruğunda kayıt bulunamadı.")
         if row["status"]!="pending_review":
             raise HTTPException(409,"Başvuru daha önce işleme alınmış; yeniden başlatılmaz.")
-        if action=="start" and not hr_flow_contacts.may_create_interview_link(actor.company_id,application_id):
-            # Never mint an invite before candidate appointment confirmation.
-            raise HTTPException(409,"Adayın görüşme zamanı teyit edilmeden mülakat başlatılamaz.")
+        if action=="start":
+            # Same approval+fresh-evidence+candidate-time gate as direct SELIN.
+            hr_flow_contacts.require_interview_ready(
+                actor.company_id,application_id,row["document_id"])
         next_status="processing" if action=="start" else "skipped"
         c.execute("""UPDATE selin_intake_queue
             SET status=?,reviewed_by=?,reviewed_at=?,error_code=NULL
