@@ -1,6 +1,7 @@
 """Durable AI assessment jobs for completed company interviews."""
 import asyncio
 import logging
+import re
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -73,6 +74,27 @@ def claim():
         return (token,tenant,claim_id) if cursor.rowcount else None
 
 
+def insufficient_answer_evidence(answers):
+    """Fail closed on unmistakably unusable transcripts; never assign invented scores.
+
+    This is a conservative preflight, not a semantic assessment or a hiring decision.
+    Short legitimate answers can be flagged for human review, never auto-rejected.
+    """
+    texts = [str(row['answer'] or '').strip() for row in answers.values()]
+    words = [re.findall(r"[^\\W_]+", value, flags=re.UNICODE) for value in texts]
+    total_words = sum(len(items) for items in words)
+    nonempty = sum(bool(value) for value in texts)
+    long_unbroken = sum(
+        bool(re.search(r"[^\\W_]{24,}", value, flags=re.UNICODE))
+        for value in texts
+    )
+    if nonempty < 5 or total_words < 20:
+        return True
+    if long_unbroken >= 5:
+        return True
+    return False
+
+
 def evaluate(token, tenant, generate):
     with closing(get_connection()) as connection:
         cursor = connection.cursor()
@@ -88,6 +110,8 @@ def evaluate(token, tenant, generate):
             answers.setdefault(row['question_number'],row)
     if len(answers) != 10:
         raise ValueError('Ten saved answers are required')
+    if insufficient_answer_evidence(answers):
+        raise ValueError('Insufficient interview answer evidence; manual review required')
     transcript = '\n\n'.join(f"Soru {n}: {row['question']}\nCevap: {row['answer']}" for n,row in answers.items())
     result = generate(cv_text=relevant_text(interview['cv_text'] or ''), position=interview['position'] or '',
                       interview_answers=relevant_text(transcript)).strip()
