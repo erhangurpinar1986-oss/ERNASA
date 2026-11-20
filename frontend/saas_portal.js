@@ -411,6 +411,8 @@ if (companyPortalPage) {
         const ai = metadata.products.includes("ai");
         const manager = ["supervisor","hr_manager"].includes(metadata.role);
         window.ikSaasAccess = {ats, ai, manager, report: ai && manager};
+        const selinQueue=byId("selinIntakeMenu");
+        if (selinQueue) selinQueue.style.display=ats && ai && manager ? "" : "none";
         const candidates = byId("portalCandidatesLink");
         const home = byId("portalHomeLink");
         const links = {
