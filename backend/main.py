@@ -14,6 +14,7 @@ import ik_cv_invites
 from services import invite_email
 import interview_assessments
 import selin_workflow
+import hr_flow_evidence
 import ats_public_cv
 import ats_workflow
 import ats_upload_queue
@@ -1354,6 +1355,13 @@ def selin_cases(actor: portal_access.Actor = Depends(require_combined)):
 def selin_case(case_id: str,actor: portal_access.Actor = Depends(require_combined)):
     require_manager(actor)
     return selin_workflow.get_case(actor.company_id,case_id)
+
+
+@app.get("/api/ik/selin/cases/{case_id}/evidence")
+def hr_flow_case_evidence(case_id: str,
+                          actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return hr_flow_evidence.case_evidence(actor.company_id,case_id)
 
 
 @app.get("/api/ik/selin/cases/{case_id}/report.pdf")
