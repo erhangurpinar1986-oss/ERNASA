@@ -676,7 +676,8 @@ def public_ats_company(request: Request):
 def get_public_ats_job(job_id: str, profile: dict = Depends(public_ats_company)):
     with closing(get_connection()) as connection:
         return {**ats.public_job(connection.cursor(), profile['company_id'], job_id),
-                "company_name": profile['name']}
+                "company_name": profile['name'],
+                "cv_upload_enabled": ats_public_cv.enabled()}
 
 
 @app.get("/basvuru/{job_id}")
