@@ -584,7 +584,10 @@ def save_ats_cv(selection: str = Form(..., max_length=4096), cv: UploadFile = Fi
         raise HTTPException(422, 'Önizleme alanlarını kontrol edin.') from error
     try:
         return ats_cv_import.save(UPLOAD_DIRECTORY, actor, fields, cv.filename or 'cv',
-                                  cv.file.read(ats.MAX_DOCUMENT + 1))
+                                  cv.file.read(ats.MAX_DOCUMENT + 1),
+                                  on_saved=lambda approved_actor,app_id,doc_id: selin_workflow.auto_start(
+                                      approved_actor,app_id,doc_id,UPLOAD_DIRECTORY,
+                                      save_interview_link,send_interview_invitation_email))
     except HTTPException as error:
         if error.status_code == 409:
             return {'status': 'skipped', 'message': error.detail}
@@ -1293,6 +1296,23 @@ def selin_start(application_id: str,body: SelinStart,
     require_manager(actor)
     return selin_workflow.begin(actor,application_id,body.document_id,UPLOAD_DIRECTORY,
                                 save_interview_link,send_interview_invitation_email)
+
+
+class SelinAutomationOption(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/ik/selin/automation")
+def selin_automation_get(actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return selin_workflow.automation_settings(actor)
+
+
+@app.put("/api/ik/selin/automation")
+def selin_automation_put(body: SelinAutomationOption,
+                         actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return selin_workflow.configure_automation(actor,body.enabled)
 
 
 @app.get("/api/ik/selin/cases")
