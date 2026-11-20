@@ -1315,6 +1315,25 @@ def selin_automation_put(body: SelinAutomationOption,
     return selin_workflow.configure_automation(actor,body.enabled)
 
 
+class SelinIntakeDecision(BaseModel):
+    action: str = Field(pattern="^(start|skip)$")
+
+
+@app.get("/api/ik/selin/intake")
+def selin_intake_list(actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return {"applications":ats_public_cv.list_intake(actor.company_id)}
+
+
+@app.post("/api/ik/selin/intake/{application_id}/decision")
+def selin_intake_decide(application_id: str,body: SelinIntakeDecision,
+                        actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return ats_public_cv.decide_intake(actor,application_id,body.action,
+                                       UPLOAD_DIRECTORY,save_interview_link,
+                                       send_interview_invitation_email)
+
+
 @app.get("/api/ik/selin/cases")
 def selin_cases(actor: portal_access.Actor = Depends(require_combined)):
     require_manager(actor)
