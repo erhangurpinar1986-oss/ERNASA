@@ -188,3 +188,39 @@ def test_selin_intake_failed_processing_never_automatically_retries(intake,monke
     with pytest.raises(HTTPException) as e:
         ats_public_cv.decide_intake(manager,result["application_id"],"start",None,None,None)
     assert e.value.status_code==409 and len(calls)==1
+
+
+def test_hr_flow_evidence_only_marks_durable_records_verified(intake):
+    import hr_flow_evidence
+    import selin_workflow
+    from uuid import uuid4
+    manager,position,job,pdf,applicant=intake
+    selin_workflow.initialize_schema()
+    entry=ats_public_cv.submit(manager.company_id,job,applicant,
+                               "cv.pdf",pdf,"linkedin","203.0.113.100")
+    case_id=uuid4().hex
+    with closing(database.get_connection()) as db:
+        db.execute("""INSERT INTO selin_cases VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   (case_id,manager.company_id,entry["application_id"],
+                    entry["document_id"],21,14,None,None,"created","{}",None,ats.now(),ats.now()))
+        db.commit()
+    proof=hr_flow_evidence.case_evidence(manager.company_id,case_id)
+    steps={row["code"]:row for row in proof["steps"]}
+    assert proof["product"]=="ERNASA HR FLOW"
+    assert steps["application"]["state"]=="verified"
+    assert steps["cv"]["state"]=="verified"
+    assert steps["approval"]["state"]=="not_recorded"
+    assert steps["interview"]["state"]=="not_recorded"
+    assert steps["invite_email"]["state"]=="unverified"
+    assert steps["pdf"]["state"]=="unverified"
+    assert steps["training_email"]["state"]=="not_recorded"
+    assert all("content_base64" not in row for row in proof["steps"])
+    with pytest.raises(HTTPException) as error:
+        hr_flow_evidence.case_evidence(9999,case_id)
+    assert error.value.status_code==404
+    with closing(database.get_connection()) as db:
+        db.execute("UPDATE ats_document_blobs SET digest=? WHERE document_id=?",
+                   ("0"*64,entry["document_id"]))
+        db.commit()
+    tampered=hr_flow_evidence.case_evidence(manager.company_id,case_id)
+    assert next(row for row in tampered["steps"] if row["code"]=="cv")["state"]=="unverified"
