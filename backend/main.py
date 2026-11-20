@@ -15,6 +15,7 @@ from services import invite_email
 import interview_assessments
 import selin_workflow
 import hr_flow_evidence
+import hr_flow_contacts
 import ats_public_cv
 import ats_workflow
 import ats_upload_queue
@@ -123,6 +124,7 @@ async def lifespan(_app):
     academy_video.initialize_schema()
     selin_workflow.initialize_schema()
     ats_public_cv.initialize_schema()
+    hr_flow_contacts.initialize_schema()
     # Explicit, one-time ERNASA education demo cleanup. Never enabled by default.
     if os.getenv("ERNASA_TRAINING_DEMO_CLEANUP") == "keep-merve-20261120":
         import training_demo_cleanup_20261120
@@ -1328,6 +1330,15 @@ def selin_automation_put(body: SelinAutomationOption,
 
 class SelinIntakeDecision(BaseModel):
     action: str = Field(pattern="^(start|skip)$")
+
+
+@app.get("/api/ik/selin/intake/{application_id}/contact-status")
+def flow_application_contact_status(application_id: str,
+                                    actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    with closing(get_connection()) as db:
+        ats.application(db.cursor(),actor,application_id)
+    return hr_flow_contacts.contact_status(actor.company_id,application_id)
 
 
 @app.get("/api/ik/selin/intake")
