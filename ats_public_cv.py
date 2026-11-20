@@ -80,9 +80,6 @@ def decide_intake(actor, application_id, action, root, create_interview, send_in
         raise HTTPException(403,"ATS ve AI İK yetkileri gerekiyor.")
     if action not in ("start","skip"):
         raise HTTPException(422,"Geçersiz işlem.")
-    if action=="start" and not hr_flow_contacts.may_create_interview_link(actor.company_id,application_id):
-        # A public CV alone never authorizes an unscheduled interview invitation.
-        raise HTTPException(409,"Adayın görüşme zamanı teyit edilmeden mülakat başlatılamaz.")
     with write(actor.company_id) as c:
         c.execute("""SELECT document_id,status FROM selin_intake_queue
             WHERE company_id=? AND application_id=?""",(actor.company_id,application_id))
@@ -91,6 +88,9 @@ def decide_intake(actor, application_id, action, root, create_interview, send_in
             raise HTTPException(404,"SELİN başvuru kuyruğunda kayıt bulunamadı.")
         if row["status"]!="pending_review":
             raise HTTPException(409,"Başvuru daha önce işleme alınmış; yeniden başlatılmaz.")
+        if action=="start" and not hr_flow_contacts.may_create_interview_link(actor.company_id,application_id):
+            # Never mint an invite before candidate appointment confirmation.
+            raise HTTPException(409,"Adayın görüşme zamanı teyit edilmeden mülakat başlatılamaz.")
         next_status="processing" if action=="start" else "skipped"
         c.execute("""UPDATE selin_intake_queue
             SET status=?,reviewed_by=?,reviewed_at=?,error_code=NULL
