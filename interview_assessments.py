@@ -74,6 +74,29 @@ def claim():
         return (token,tenant,claim_id) if cursor.rowcount else None
 
 
+INSUFFICIENT_EVIDENCE_REPORT = """MÜLAKAT SONUCU: DEĞERLENDİRİLEMEDİ — YETERLİ MÜLAKAT KANITI YOK
+
+Genel Pozisyon Uyumu: Değerlendirilemedi
+Mesleki Deneyim Uyumu: Değerlendirilemedi
+Mesleki Bilgi / Uygulama: Değerlendirilemedi
+Problem Çözme: Değerlendirilemedi
+İletişim: Değerlendirilemedi
+Takım Çalışması: Değerlendirilemedi
+
+GÜÇLÜ YÖNLER:
+Mülakat cevaplarından doğrulanmış güçlü yön tespit edilemedi.
+
+GELİŞTİRİLMESİ GEREKEN ALANLAR:
+Yeterli kanıt bulunmadığı için yetkinlik eksikliği çıkarımı yapılamaz.
+
+DİKKAT EDİLMESİ GEREKEN NOKTALAR:
+Mülakat cevapları anlamlı bir değerlendirmeyi desteklemiyor. CV beyanları mülakat kanıtı olarak kullanılmadı.
+
+İK DEĞERLENDİRME ÖZETİ:
+Otomatik kabul veya ret kararı verilmedi. İK incelemesi ve gerekirse yeniden mülakat önerilir.
+"""
+
+
 def insufficient_answer_evidence(answers):
     """Fail closed on unmistakably unusable transcripts; never assign invented scores.
 
@@ -111,7 +134,7 @@ def evaluate(token, tenant, generate):
     if len(answers) != 10:
         raise ValueError('Ten saved answers are required')
     if insufficient_answer_evidence(answers):
-        raise ValueError('Insufficient interview answer evidence; manual review required')
+        return INSUFFICIENT_EVIDENCE_REPORT
     transcript = '\n\n'.join(f"Soru {n}: {row['question']}\nCevap: {row['answer']}" for n,row in answers.items())
     result = generate(cv_text=relevant_text(interview['cv_text'] or ''), position=interview['position'] or '',
                       interview_answers=relevant_text(transcript)).strip()
