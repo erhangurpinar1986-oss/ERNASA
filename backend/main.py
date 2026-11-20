@@ -16,6 +16,7 @@ import interview_assessments
 import selin_workflow
 import hr_flow_evidence
 import hr_flow_contacts
+import hr_flow_screening
 import ats_public_cv
 import ats_workflow
 import ats_upload_queue
@@ -125,6 +126,7 @@ async def lifespan(_app):
     selin_workflow.initialize_schema()
     ats_public_cv.initialize_schema()
     hr_flow_contacts.initialize_schema()
+    hr_flow_screening.initialize_schema()
     # Explicit, one-time ERNASA education demo cleanup. Never enabled by default.
     if os.getenv("ERNASA_TRAINING_DEMO_CLEANUP") == "keep-merve-20261120":
         import training_demo_cleanup_20261120
@@ -1330,6 +1332,34 @@ def selin_automation_put(body: SelinAutomationOption,
 
 class SelinIntakeDecision(BaseModel):
     action: str = Field(pattern="^(start|skip)$")
+
+
+# FLOW is a job-specific, evidence-grounded ATS pre-screening workflow.
+# These operations do not create interviews, reject applicants, or send messages.
+class FlowPermissionDecision(BaseModel):
+    decision: str = Field(pattern="^(approved|declined)$")
+
+
+class FlowPermissionRequest(BaseModel):
+    document_id: str = Field(min_length=1,max_length=64)
+
+
+@app.get("/api/ik/flow/positions/{position_id}/screen")
+def flow_screen_position(position_id: str,offset: int = 0,
+                         actor: portal_access.Actor = Depends(require_ats)):
+    return hr_flow_screening.screen_position(actor,position_id,UPLOAD_DIRECTORY,offset=offset)
+
+
+@app.post("/api/ik/flow/applications/{application_id}/permission")
+def flow_request_interview_permission(application_id: str,body: FlowPermissionRequest,
+                                      actor: portal_access.Actor = Depends(require_ats)):
+    return hr_flow_screening.request_permission(actor,application_id,body.document_id)
+
+
+@app.post("/api/ik/flow/permissions/{request_id}/decision")
+def flow_decide_interview_permission(request_id: str,body: FlowPermissionDecision,
+                                     actor: portal_access.Actor = Depends(require_ats_manager)):
+    return hr_flow_screening.decide_permission(actor,request_id,body.decision)
 
 
 @app.get("/api/ik/selin/intake/{application_id}/contact-status")
