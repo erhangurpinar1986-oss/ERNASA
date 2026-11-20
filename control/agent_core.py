@@ -6,6 +6,7 @@ recorded decision, never a substitute for separate authenticated execution.
 """
 import sqlite3
 import uuid
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -46,8 +47,16 @@ class AgentStore:
         db.execute("PRAGMA foreign_keys=ON")
         return db
 
+    @contextmanager
+    def transaction(self, write=False):
+        with closing(self.connect()) as db:
+            with db:
+                if write:
+                    db.execute("BEGIN IMMEDIATE")
+                yield db
+
     def initialize(self):
-        with self.connect() as db:
+        with self.transaction() as db:
             db.executescript("""
             CREATE TABLE IF NOT EXISTS agent_tasks (
                 id TEXT PRIMARY KEY,
@@ -86,10 +95,10 @@ class AgentStore:
         request = _text(request, "Görev")
         task = uuid.uuid4().hex
         instant = _stamp()
-        with self.connect() as db:
+        with self.transaction(write=True) as db:
             db.execute("INSERT INTO agent_tasks VALUES(?,?,?,?,?,?,?,?,?)",
                        (task, agent, kind, request, None, "queued", None, instant, instant))
-            self._event(db, task, "founder", "created", request)
+            self._event(db, task, "founder", "created", "Kurucu yeni görev oluşturdu")
         return task
 
     def _load(self, db, task):
@@ -102,7 +111,7 @@ class AgentStore:
 
     def prepare(self, task, agent, draft):
         draft = _text(draft, "Taslak")
-        with self.connect() as db:
+        with self.transaction(write=True) as db:
             row = self._load(db, task)
             if row["agent"] != agent or row["status"] not in ("queued", "draft"):
                 raise AgentError("Görev bu ajan tarafından düzenlenemez")
@@ -112,7 +121,7 @@ class AgentStore:
         return self.get(task)
 
     def submit(self, task, agent):
-        with self.connect() as db:
+        with self.transaction(write=True) as db:
             row = self._load(db, task)
             if row["agent"] != agent or row["status"] != "draft" or not row["draft"]:
                 raise AgentError("Onaya sunulacak taslak bulunamadı")
@@ -128,7 +137,7 @@ class AgentStore:
         if is_founder is not True or type(approved) is not bool:
             raise AgentError("Kurucu oturumu ve açık karar gerekli")
         reason = _text(reason, "Gerekçe", 1000)
-        with self.connect() as db:
+        with self.transaction(write=True) as db:
             row = self._load(db, task)
             if row["status"] != "awaiting_approval":
                 raise AgentError("Bu görev karar beklemiyor")
@@ -139,13 +148,13 @@ class AgentStore:
         return self.get(task)
 
     def get(self, task):
-        with self.connect() as db:
+        with self.transaction() as db:
             return self._load(db, task)
 
     def queue(self, status=None):
         if status is not None and status not in STATES:
             raise AgentError("Geçersiz durum")
-        with self.connect() as db:
+        with self.transaction() as db:
             sql = "SELECT * FROM agent_tasks"
             args = ()
             if status is not None:
@@ -155,7 +164,7 @@ class AgentStore:
             return [dict(row) for row in db.execute(sql, args)]
 
     def history(self, task):
-        with self.connect() as db:
+        with self.transaction() as db:
             self._load(db, task)
             return [dict(row) for row in db.execute(
                 "SELECT actor,event,note,at FROM agent_events WHERE task_id=? ORDER BY at,id", (task,))]
