@@ -170,9 +170,13 @@ def list_cases(tenant):
         c=db.cursor()
         c.execute("""SELECT s.id,s.application_id,s.document_id,s.status,s.created_at,s.updated_at,
             s.error_code,s.interview_token,s.training_token_hash,
+            c.name AS candidate_name,p.name AS position_name,
             CASE WHEN r.case_id IS NULL THEN 0 ELSE 1 END AS report_available
-            FROM selin_cases s LEFT JOIN selin_report_archives r
-                ON r.case_id=s.id AND r.company_id=s.company_id
+            FROM selin_cases s
+            LEFT JOIN ats_applications a ON a.id=s.application_id AND a.company_id=s.company_id
+            LEFT JOIN ats_candidates c ON c.id=a.candidate_id AND c.company_id=s.company_id
+            LEFT JOIN company_positions p ON p.id=a.position_id AND p.company_id=s.company_id
+            LEFT JOIN selin_report_archives r ON r.case_id=s.id AND r.company_id=s.company_id
             WHERE s.company_id=? ORDER BY s.created_at DESC LIMIT 100""",(tenant,))
         return [dict(row) for row in c.fetchall()]
 
