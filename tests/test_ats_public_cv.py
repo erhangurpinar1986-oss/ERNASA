@@ -272,3 +272,94 @@ def test_flow_contact_channels_are_prepared_but_no_delivery_claims(intake):
         db.commit()
     assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id) is True
     assert hr_flow_contacts.may_create_interview_link(9999,app_id) is False
+
+
+def test_flow_position_screening_and_permission_full_human_gate(intake,tmp_path):
+    import json
+    import hr_flow_screening
+    manager,position,job,pdf,applicant=intake
+    hr_flow_screening.initialize_schema()
+    entry=ats_public_cv.submit(manager.company_id,job,applicant,
+                               "cv.pdf",pdf,"direct","203.0.113.51")
+    first=hr_flow_screening.screen_position(manager,position,tmp_path)
+    assert first["total"]==1
+    item=first["candidates"][0]
+    assert item["candidate"]=="Test Basvuran"
+    assert item["match_score"] is None
+    assert item["analysis_state"]=="criteria_missing"
+    with pytest.raises(HTTPException) as exc:
+        hr_flow_screening.request_permission(manager,entry["application_id"],entry["document_id"])
+    assert exc.value.status_code==409
+    with closing(database.get_connection()) as db:
+        c=db.cursor()
+        c.execute("SELECT fields FROM ats_position_profiles WHERE position_id=?",(position,))
+        fields=json.loads(c.fetchone()["fields"])
+        fields["matching_criteria"]="Yetkinlik | WMS deneyimi | 80 | wms"
+        c.execute("UPDATE ats_position_profiles SET fields=? WHERE position_id=?",
+                  (json.dumps(fields),position))
+        db.commit()
+    screened=hr_flow_screening.screen_position(manager,position,tmp_path)
+    row=screened["candidates"][0]
+    assert row["analysis_state"]=="analyzed"
+    assert row["match_score"] is not None
+    assert row["coverage"] is not None
+    assert row["document_id"]==entry["document_id"]
+    request=hr_flow_screening.request_permission(manager,entry["application_id"],entry["document_id"])
+    assert request["status"]=="pending"
+    repeated=hr_flow_screening.request_permission(manager,entry["application_id"],entry["document_id"])
+    assert repeated["id"]==request["id"]
+    with closing(database.get_connection()) as db:
+        assert db.execute("SELECT COUNT(*) FROM interview_links").fetchone()[0]==0
+        assert db.execute("SELECT COUNT(*) FROM ik_invitation_email_sends").fetchone()[0]==0
+    staff=SimpleNamespace(company_id=manager.company_id,user_id=44,
+                          role="hr_staff",products=("ats",))
+    with pytest.raises(HTTPException) as exc:
+        hr_flow_screening.decide_permission(staff,request["id"],"approved")
+    assert exc.value.status_code==403
+    stranger=SimpleNamespace(company_id=3333,user_id=10,
+                             role="hr_manager",products=("ats",))
+    with pytest.raises(HTTPException) as exc:
+        hr_flow_screening.decide_permission(stranger,request["id"],"approved")
+    assert exc.value.status_code==404
+    outcome=hr_flow_screening.decide_permission(manager,request["id"],"approved")
+    assert outcome["status"]=="approved"
+    with pytest.raises(HTTPException) as exc:
+        hr_flow_screening.decide_permission(manager,request["id"],"approved")
+    assert exc.value.status_code==409
+    assert hr_flow_screening.screen_position(manager,position,tmp_path)["candidates"][0]["permission"]["status"]=="approved"
+    with closing(database.get_connection()) as db:
+        assert db.execute("SELECT COUNT(*) FROM interview_links").fetchone()[0]==0
+
+
+def test_flow_screening_honors_staff_visibility_and_stale_criteria(intake,tmp_path):
+    import json
+    import hr_flow_screening
+    manager,position,job,pdf,applicant=intake
+    hr_flow_screening.initialize_schema()
+    entry=ats_public_cv.submit(manager.company_id,job,applicant,
+                               "cv.pdf",pdf,"direct","203.0.113.52")
+    with closing(database.get_connection()) as db:
+        c=db.cursor()
+        fields=json.loads(c.execute("SELECT fields FROM ats_position_profiles WHERE position_id=?",
+                                    (position,)).fetchone()["fields"])
+        fields["matching_criteria"]="Yetkinlik | Depo deneyimi | 70 | depo"
+        c.execute("UPDATE ats_position_profiles SET fields=? WHERE position_id=?",
+                  (json.dumps(fields),position))
+        db.commit()
+    staff=SimpleNamespace(company_id=manager.company_id,user_id=44,
+                          role="hr_staff",products=("ats",))
+    assert hr_flow_screening.screen_position(staff,position,tmp_path)["total"]==0
+    with pytest.raises(HTTPException) as exc:
+        hr_flow_screening.request_permission(staff,entry["application_id"],entry["document_id"])
+    assert exc.value.status_code==404
+    result=hr_flow_screening.screen_position(manager,position,tmp_path)
+    assert result["candidates"][0]["analysis_state"]=="analyzed"
+    with closing(database.get_connection()) as db:
+        c=db.cursor()
+        fields["matching_criteria"]="Yetkinlik | CRM deneyimi | 70 | crm"
+        c.execute("UPDATE ats_position_profiles SET fields=? WHERE position_id=?",
+                  (json.dumps(fields),position))
+        db.commit()
+    with pytest.raises(HTTPException) as exc:
+        hr_flow_screening.request_permission(manager,entry["application_id"],entry["document_id"])
+    assert exc.value.status_code==409
