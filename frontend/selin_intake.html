@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ERNASA HR | SELİN Başvuru Kuyruğu</title>
+<title>ERNASA HR | ERNASA HR FLOW Başvuru Kuyruğu</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#eef3f9;color:#152b49;font:16px system-ui,sans-serif}
 header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #d4dfed;padding:20px max(20px,calc((100vw - 1180px)/2))}
@@ -15,16 +15,16 @@ button:disabled{opacity:.5;cursor:default}button.secondary{background:#e9edf4;co
 dd{margin:0;overflow-wrap:anywhere}dt{font-size:13px;color:#52657f;margin-top:8px}
 .status{font-weight:650}a{color:#174b8a}a:focus,button:focus{outline:2px solid #1263b7;outline-offset:3px}
 </style></head><body>
-<header><strong>ERNASA HR · SELİN</strong><a href="/ik-v5">İK Paneline Dön</a></header>
+<header><strong>ERNASA HR · ERNASA HR FLOW</strong><a href="/ik-v5">İK Paneline Dön</a></header>
 <main>
-<h1>Yeni Başvurular ve SELİN Kuyruğu</h1>
-<p class="muted">Paylaşılan ilan bağlantılarından gelen CV'ler burada görünür. SELİN'i başlatmak için yetkili yönetici incelemesi gerekir. İşe alım veya otomatik ret kararı verilmez.</p>
+<h1>Yeni Başvurular ve ERNASA HR FLOW Kuyruğu</h1>
+<p class="muted">Paylaşılan ilan bağlantılarından gelen CV'ler burada görünür. ERNASA HR FLOW'i başlatmak için yetkili yönetici incelemesi gerekir. İşe alım veya otomatik ret kararı verilmez.</p>
 <nav><strong id="count">Başvurular yükleniyor...</strong><button id="refresh" type="button">Yenile</button></nav>
-<p id="notice" role="status" aria-live="polite"></p><section id="queue" class="queue" aria-label="SELİN başvuru kuyruğu"></section>
+<p id="notice" role="status" aria-live="polite"></p><section id="queue" class="queue" aria-label="ERNASA HR FLOW başvuru kuyruğu"></section>
 </main>
 <script>
-const labels={pending_review:"Yönetici incelemesi bekliyor",processing:"İşleniyor",assigned:"SELİN dosyası oluşturuldu",
-needs_attention:"Manuel kontrol gerekli",skipped:"SELİN otomasyonu atlandı"};
+const labels={pending_review:"Yönetici incelemesi bekliyor",processing:"İşleniyor",assigned:"ERNASA HR FLOW dosyası oluşturuldu",
+needs_attention:"Manuel kontrol gerekli",skipped:"ERNASA HR FLOW otomasyonu atlandı"};
 const queue=document.getElementById("queue"), notice=document.getElementById("notice"), count=document.getElementById("count");
 const refresh=document.getElementById("refresh");
 async function readJSON(url,options){
@@ -38,13 +38,13 @@ function field(dl,label,value){
  dt.textContent=label;dd.textContent=value||"—";dl.append(dt,dd);
 }
 async function decision(id,action,button){
- if(action==="start"&&!confirm("Bu aday için SELİN mülakat işlemleri başlatılsın mı? Otomatik gönderimler etkinse e-posta iletilebilir."))return;
+ if(action==="start"&&!confirm("Bu aday için ERNASA HR FLOW mülakat işlemleri başlatılsın mı? Otomatik gönderimler etkinse e-posta iletilebilir."))return;
  button.disabled=true;notice.textContent="İşlem uygulanıyor...";
  try{
   await readJSON("/api/ik/selin/intake/"+encodeURIComponent(id)+"/decision",{
    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})
   });
-  notice.textContent=action==="start"?"SELİN dosyası işleme alındı.":"Başvuru ATS'de korundu; otomasyon atlandı.";
+  notice.textContent=action==="start"?"ERNASA HR FLOW dosyası işleme alındı.":"Başvuru ATS'de korundu; otomasyon atlandı.";
  }catch(err){notice.textContent=err.message}finally{await load()}
 }
 async function load(){
@@ -52,7 +52,7 @@ async function load(){
  try{
   const data=await readJSON("/api/ik/selin/intake"),rows=data.applications||[];
   count.textContent=rows.length+" kayıt (son 200)";
-  if(!rows.length){const p=document.createElement("p");p.textContent="Henüz SELİN kuyruğuna alınmış CV başvurusu yok.";queue.append(p)}
+  if(!rows.length){const p=document.createElement("p");p.textContent="Henüz ERNASA HR FLOW kuyruğuna alınmış CV başvurusu yok.";queue.append(p)}
   for(const row of rows){
    const article=document.createElement("article");article.className="panel";
    const h=document.createElement("h2");h.textContent=row.name||"Aday";article.append(h);
@@ -64,14 +64,59 @@ async function load(){
    article.append(dl);
    if(row.status==="pending_review"){
     const actions=document.createElement("div");actions.className="actions";
-    const start=document.createElement("button");start.type="button";start.textContent="SELİN ile İşleme Al";
+    const start=document.createElement("button");start.type="button";start.textContent="ERNASA HR FLOW ile İşleme Al";
     start.addEventListener("click",()=>decision(row.application_id,"start",start));
     const skip=document.createElement("button");skip.type="button";skip.className="secondary";skip.textContent="Otomasyonu Atla";
     skip.addEventListener("click",()=>decision(row.application_id,"skip",skip));actions.append(start,skip);article.append(actions);
    }
    if(row.case_id){
     const link=document.createElement("a");link.href="/api/ik/selin/cases/"+encodeURIComponent(row.case_id);
-    link.textContent="Aday dosyasını aç (JSON)";link.target="_blank";link.rel="noopener";article.append(link);
+    link.textContent="Teknik aday dosyasını aç";link.target="_blank";link.rel="noopener";article.append(link);
+    const evidenceButton=document.createElement("button");
+    evidenceButton.type="button";evidenceButton.className="secondary";
+    evidenceButton.textContent="Gerçek İşlem Kanıtlarını Gör";
+    const evidencePanel=document.createElement("div");evidencePanel.className="panel";
+    evidencePanel.hidden=true;evidencePanel.setAttribute("aria-live","polite");
+    evidenceButton.addEventListener("click",async()=>{
+      if(!evidencePanel.hidden){evidencePanel.hidden=true;return}
+      evidenceButton.disabled=true;evidencePanel.hidden=false;
+      evidencePanel.replaceChildren();
+      const loading=document.createElement("p");loading.textContent="Kaynak kayıtları doğrulanıyor...";
+      evidencePanel.append(loading);
+      try{
+        const evidence=await readJSON("/api/ik/selin/cases/"+
+          encodeURIComponent(row.case_id)+"/evidence");
+        evidencePanel.replaceChildren();
+        const caption=document.createElement("p");
+        caption.textContent="Kanıt kaynağı olmayan işlem tamamlandı sayılmaz. Dış servis kabulü, alıcıya teslim kanıtı değildir.";
+        evidencePanel.append(caption);
+        for(const step of evidence.steps){
+          const wrap=document.createElement("div");wrap.className="panel";
+          const title=document.createElement("strong");
+          title.textContent=step.title+" · "+({
+            verified:"Doğrulandı",provider_accepted:"Sağlayıcı kabul etti (teslim kanıtı yok)",
+            self_reported:"Öz bildirim",pending:"Bekliyor",unverified:"Kanıt doğrulanamadı",
+            failed:"Başarısız",not_recorded:"Kayıt yok"
+          }[step.state]||step.state);
+          const desc=document.createElement("p");desc.textContent=step.detail;
+          wrap.append(title,desc);
+          if(step.at||step.reference){
+            const meta=document.createElement("small");
+            meta.textContent=[step.at,step.reference?"Kanıt referansı: "+step.reference:""].filter(Boolean).join(" · ");
+            wrap.append(meta);
+          }
+          evidencePanel.append(wrap);
+        }
+        if(evidence.steps.some(x=>x.code==="pdf"&&x.state==="verified")){
+          const pdf=document.createElement("a");
+          pdf.href="/api/ik/selin/cases/"+encodeURIComponent(row.case_id)+"/report.pdf";
+          pdf.textContent="Doğrulanmış PDF'yi indir";
+          evidencePanel.append(pdf);
+        }
+      }catch(err){evidencePanel.replaceChildren();const problem=document.createElement("p");problem.textContent=err.message;evidencePanel.append(problem)}
+      finally{evidenceButton.disabled=false}
+    });
+    article.append(evidenceButton,evidencePanel);
    }
    queue.append(article);
   }
