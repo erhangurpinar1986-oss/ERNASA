@@ -407,7 +407,7 @@ if (companyPortalPage) {
             flowResults.replaceChildren(el("h3","ERNASA HR FLOW · Pozisyon ATS Analizi"),
                 el("p","Gerçek CV kayıtları değerlendirilirken otomatik ret veya davet gönderimi yapılmaz."));
             try {
-                const data=await api("flow/positions/"+encodeURIComponent(target.value)+"/screen?offset="+flowOffset);
+                const data=await api("flow/positions/"+encodeURIComponent(target.value)+"/screen?offset="+flowOffset,"POST");
                 const header=el("div","",{class:"saas-actions"});
                 header.append(el("strong",data.position+" · "+data.total+" başvuru"));
                 const records=el("div");
