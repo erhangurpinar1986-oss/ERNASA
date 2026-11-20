@@ -161,7 +161,10 @@ if (companyPortalPage) {
     }
     function publishedJobShareControls(job) {
         const actions = el("div","",{class:"saas-actions"});
-        actions.append(action("Linki Kopyala",()=>copyPublicJobLink(job.id)));
+        const applicationLink=input("public_job_url","url",publishedJobUrl(job.id),{readonly:"", "aria-label":"İlana özel başvuru bağlantısı"});
+        applicationLink.addEventListener("focus",()=>applicationLink.select());
+        actions.append(field("Başvuru bağlantısı",applicationLink),
+            action("Bağlantıyı Kopyala",()=>copyPublicJobLink(job.id)));
         actions.append(action("Bağlantıyı Paylaş",async ()=>{
             const url = publishedJobUrl(job.id);
             if (navigator.share) {
@@ -172,16 +175,16 @@ if (companyPortalPage) {
             }
         }));
         const additional = el("details","",{class:"saas-share-options"});
-        const heading = el("summary","İş arama platformları · isteğe bağlı");
-        const explanation=el("p","Platform paylaşımı yalnızca firma yetkilisi seçerse hazırlanır. Bu özellik platforma otomatik ilan göndermez; ilgili platformun kurallarına uygun şekilde yetkili kullanıcı paylaşır.");
+        const heading = el("summary","LinkedIn · Kariyer.net · Eleman.net ve diğer platformlar");
+        const explanation=el("p","Yetkili firma bağlantıyı kendi hesabında paylaşabilir. ERNASA, resmî platform anlaşması ve erişimi olmadan LinkedIn, Kariyer.net veya Eleman.net üzerinde otomatik ilan yayınlamaz.");
         const platform=select("sharing_source",[
             ["linkedin","LinkedIn"],["indeed","Indeed"],
-            ["kariyer_net","Kariyer.net"],["social","Diğer sosyal kanal"],
+            ["kariyer_net","Kariyer.net"],["eleman_net","Eleman.net"],["social","Diğer sosyal kanal"],
             ["other","Diğer kaynak"]
         ],"linkedin");
         const choice=input("platform_opt_in","checkbox","1");
         choice.checked=false;
-        const copy=action("Seçilen Platformun Linkini Kopyala",()=>copyPublicJobLink(job.id,platform.value));
+        const copy=action("Seçilen Platformun Bağlantısını Kopyala",()=>copyPublicJobLink(job.id,platform.value));
         copy.disabled=true;
         choice.addEventListener("change",()=>{copy.disabled=!choice.checked});
         additional.append(heading,explanation,
@@ -1166,7 +1169,7 @@ if (companyPortalPage) {
     // Native IK V5 dashboard for HR FLOW: observe operations, prioritize
     // manager-only decisions. Never imply an email was delivered when prepared.
     async function flow(root) {
-        root.append(el("p","Hedef: FLOW ilk mülakat dahil operasyonu yürütür. İK yalnızca ikinci görüşme, ek eğitim veya ret kararını verir. Bu otomasyonun eksik parçaları tamamlanmadan canlı gönderimler başlamaz."));
+        root.append(el("p","Hedef: FLOW ilk mülakat dahil operasyonu yürütür. İK yalnızca onay, ikinci görüşme, ek eğitim veya ret kararını verir. Bu otomasyonun eksik parçaları tamamlanmadan canlı gönderimler başlamaz."));
         const overview=el("section","",{class:"saas-panel"});
         const decisions=el("section","",{class:"saas-panel"});
         const casesArea=el("section","",{class:"saas-panel"});
@@ -1192,7 +1195,7 @@ if (companyPortalPage) {
                 "Mevcut otomasyon ayarları etkin. Aday teyidi ve güvenlik koşulları yine zorunludur.":
                 "Tam otomatik ilk mülakat henüz etkin değil. Aday saat teyidi ve e-posta doğrulaması tamamlanmalıdır."));
         decisions.append(el("h3","İK Karar Merkezi"),
-            el("p","Hedef kararlar: İkinci görüşme · Ek eğitim · Ret. İlk mülakat ve rutin aday iletişimi otomatik yürütülecek. Nihai işe alım kararı insan denetiminde kalır."));
+            el("p","Hedef kararlar: Onay · İkinci görüşme · Ek eğitim · Ret. İlk mülakat ve rutin aday iletişimi otomatik yürütülecek. Nihai işe alım kararı insan denetiminde kalır."));
         if(!pending.length&&!exceptions.length)
             decisions.append(el("p","İlk aşamada bekleyen veya teknik müdahale gerektiren kayıt yok."));
         for(const item of [...exceptions,...pending].slice(0,80)){
