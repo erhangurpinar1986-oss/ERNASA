@@ -20,6 +20,8 @@ def intake(tmp_path,monkeypatch):
     monkeypatch.setenv("ERNASA_PUBLIC_CV_RATE_SECRET","synthetic-only-secret-key-abcdef0123456789")
     database.initialize_database()
     ats_public_cv.initialize_schema()
+    import hr_flow_contacts
+    hr_flow_contacts.initialize_schema()
     manager=SimpleNamespace(company_id=1234,user_id=21,role="hr_manager",products=("ats",))
     dept=recruitment.add_department(manager,"Lojistik")
     position=recruitment.save_position(manager,recruitment.Position(
@@ -228,3 +230,30 @@ def test_hr_flow_evidence_only_marks_durable_records_verified(intake):
         db.commit()
     tampered=hr_flow_evidence.case_evidence(manager.company_id,case_id)
     assert next(row for row in tampered["steps"] if row["code"]=="cv")["state"]=="unverified"
+
+
+def test_flow_contact_channels_are_prepared_but_no_delivery_claims(intake):
+    import hr_flow_contacts
+    manager,position,job,pdf,applicant=intake
+    result=ats_public_cv.submit(manager.company_id,job,applicant,
+                                "cv.pdf",pdf,"linkedin","203.0.113.89")
+    app_id=result["application_id"]
+    status=hr_flow_contacts.contact_status(manager.company_id,app_id)
+    assert len(status["messages"])==1
+    assert status["messages"][0]["channel"]=="email"
+    assert status["messages"][0]["purpose"]=="availability_request"
+    assert status["messages"][0]["status"]=="prepared"
+    assert status["messages"][0]["provider_message_id"] is None
+    assert status["linkedin"]["status"]=="integration_required"
+    assert status["whatsapp"]["status"]=="future_opt_in"
+    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id) is False
+    assert hr_flow_contacts.contact_status(9999,app_id)["messages"]==[]
+    with closing(database.get_connection()) as db:
+        db.execute("""INSERT INTO flow_candidate_appointment
+            (application_id,company_id,proposed_at,confirmed_at,confirmed_by,
+             confirmed_on,updated_at) VALUES(?,?,?,?,?,?,?)""",
+            (app_id,manager.company_id,None,"2026-11-24T10:00:00+03:00",
+             "candidate","2026-11-20T15:00:00+03:00",ats.now()))
+        db.commit()
+    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id) is True
+    assert hr_flow_contacts.may_create_interview_link(9999,app_id) is False
