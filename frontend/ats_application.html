@@ -8,7 +8,7 @@
 </style>
 <main>
 <img src="/assets/ernasalogo.png" alt="ERNASA">
-<p id="employer"></p><h1 id="title">Başvuru</h1><p id="summary"></p>
+<p id="employer"></p><h1 id="title">Başvuru</h1><p id="summary"></p><p id="deadline" hidden></p>
 <section id="postingQualifications" hidden><h2>Aranan nitelikler</h2><p></p></section>
 <section id="postingConditions" hidden><h2>Çalışma koşulları</h2><p></p></section>
 <p id="message" role="status"></p>
@@ -42,6 +42,12 @@ fetch(route,{cache:"no-store"}).then(async response => {
     document.getElementById("employer").textContent = data.company_name;
     document.getElementById("title").textContent = data.title;
     document.getElementById("summary").textContent = data.summary;
+    if (data.closes_at) {
+        const deadline = document.getElementById("deadline");
+        deadline.textContent = "Son başvuru " + new Date(data.closes_at).toLocaleString("tr-TR",
+            {timeZone:"Europe/Istanbul"}) + " (Türkiye saati)";
+        deadline.hidden = false;
+    }
     for (const [id,value] of [["postingQualifications",data.qualifications],["postingConditions",data.work_conditions]]) {
         const section=document.getElementById(id);
         section.hidden=!value;

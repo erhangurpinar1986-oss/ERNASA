@@ -104,3 +104,54 @@ def test_position_screening_and_approval_real_chromium():
         out.mkdir(exist_ok=True)
         page.screenshot(path=str(out/"ernasa_hr_flow_chromium_ui.png"),full_page=True)
         browser.close()
+
+
+def test_cv_selection_saves_and_displays_ats_without_another_click():
+    with sync_playwright() as engine:
+        browser = engine.chromium.launch(headless=True,args=["--no-sandbox"])
+        page = browser.new_page()
+        page.set_content(FIXTURE)
+        page.evaluate("""() => {
+            window.companyPortalPage = true;
+            window.portalMetadataPromise = Promise.resolve({products:["ats"],role:"hr_manager",user_id:7});
+            window.calls = [];
+            window.portalJson = async (url,options) => {
+                const method = options.method || "GET";
+                window.calls.push({url,method});
+                if (url.endsWith("/positions")) return {positions:[{id:"p1",name:"Lojistik",open:1}]};
+                if (url.endsWith("/assignees")) return {users:[]};
+                if (url.includes("/ats/applications?")) return {total:1,applications:[
+                    {id:"a1",name:"Deniz Eren Karaca",email:"shared@example.test",
+                     position:"Lojistik",source:"CV Yükleme",stage:"new"}
+                ]};
+                if (url.endsWith("/cv-import/preview")) return {import_id:"preview",name:"Deniz Eren Karaca",
+                    email:"shared@example.test",phone:"05310000000",suggested_position_id:"p1",
+                    education:["Lojistik ön lisans"],experience:["Stok takibi"]};
+                if (url.endsWith("/cv-import/save")) {
+                    const selection = JSON.parse(options.body.get("selection"));
+                    if (selection.position_id !== "p1" || selection.name !== "Deniz Eren Karaca")
+                        throw Error("Otomatik doldurma başarısız");
+                    return {status:"saved",application_id:"a1",document_id:"d1",identity_conflict:true};
+                }
+                if (url.endsWith("/documents/d1/screening")) return {state:"analyzed",score:100,coverage:100,
+                    strengths:[{requirement:"Stok takibi",status:"Eşleşti"}],development:[]};
+                return {};
+            };
+        }""")
+        page.add_script_tag(path="frontend/ats_suite.js")
+        page.evaluate('''() => document.dispatchEvent(
+            new CustomEvent("ik-portal-screen",{detail:"suite_pool"}))''')
+        page.get_by_role("button",name="CV Yükle",exact=True).click()
+        page.locator('input[type="file"]').set_input_files({
+            "name":"deniz.pdf","mimeType":"application/pdf","buffer":b"%PDF-1.7 synthetic"})
+        expect(page.get_by_text("ATS puanı · 100")).to_be_visible()
+        expect(page.get_by_text("Lojistik ön lisans",exact=True)).to_be_visible()
+        expect(page.get_by_text("Ayrı kaydedildi",exact=False)).to_be_visible()
+        calls = page.evaluate("window.calls")
+        assert sum(call["url"].endswith("/cv-import/save") for call in calls) == 1
+        assert not any("/flow/positions/" in call["url"] for call in calls)
+        page.get_by_role("button",name="Ad Soyad",exact=True).click()
+        expect(page.locator('th[aria-sort="ascending"]')).to_be_visible()
+        page.get_by_role("button",name="Ad Soyad",exact=True).click()
+        expect(page.locator('th[aria-sort="descending"]')).to_be_visible()
+        browser.close()

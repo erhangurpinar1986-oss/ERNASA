@@ -87,7 +87,11 @@ if (companyPortalPage) {
         if (!rows.length) return el("p","Bu listede henüz kayıt yok.",{class:"v5-empty"});
         const wrap = el("div","",{class:"saas-table-wrap"});
         const grid = el("table","",{class:"saas-table"});
-        grid.createTHead().insertRow().append(...headers.map(label => el("th",label,{scope:"col"})));
+        grid.createTHead().insertRow().append(...headers.map(label => {
+            const th = el("th",label instanceof Node ? "" : label,{scope:"col"});
+            if (label instanceof Node) th.append(label);
+            return th;
+        }));
         const body = grid.createTBody();
         for (const values of rows) {
             const row = body.insertRow();
@@ -108,8 +112,8 @@ if (companyPortalPage) {
         const parts = new Intl.DateTimeFormat("sv-SE",{timeZone:zone,dateStyle:"short",timeStyle:"short"}).format(new Date(value));
         return parts.replace(" ","T");
     }
-    async function values(positionId = "", query = "", stage = "", offset = 0, assignee = "") {
-        return api("ats/applications?" + new URLSearchParams({position_id:positionId,search:query,stage,limit:"25",offset,assignee}));
+    async function values(positionId = "", query = "", stage = "", offset = 0, assignee = "", nameOrder = "", classification = "") {
+        return api("ats/applications?" + new URLSearchParams({position_id:positionId,search:query,stage,limit:"25",offset,assignee,name_order:nameOrder,classification}));
     }
     async function positions(openOnly = false) {
         const data = await api("positions");
@@ -205,10 +209,12 @@ if (companyPortalPage) {
         const version = input("notice_version","text","",{maxlength:40});
         const state = select("state",[["draft","Taslak"],["published","Yerel yayına al"],["closed","Kapat"]],"draft");
         const confirm = input("confirm_publish","checkbox","1");
+        const deadline = input("closes_at","datetime-local","");
         which.required = summary.required = policy.required = version.required = true;
         const loadJob = () => {
             const job = data.jobs.find(row => String(row.position_id) === which.value);
             title.value = job?.title || "";
+            deadline.value = dateInput(job?.closes_at,"Europe/Istanbul");
             summary.value = job?.summary || "";
             qualifications.value = job?.qualifications || "";
             conditions.value = job?.work_conditions || "";
@@ -232,9 +238,20 @@ if (companyPortalPage) {
                 menu.dataset.filterPosition = row.position_id;
                 menu.click();
             }));
-            if (row.state === "published") actions.append(publishedJobShareControls(row));
-            return [row.title,({draft:"Taslak",published:"Yayında",closed:"Kapalı"})[row.state],
-                row.state === "published" ? link("İlana özel başvuru sayfasını aç","/basvuru/" + row.id) : "—",actions];
+            const active = row.state === "published" &&
+                choices.some(([id])=>String(id)===String(row.position_id)) &&
+                (!row.closes_at || Date.parse(row.closes_at) > Date.now());
+            if (active) {
+                const share = publishedJobShareControls(row);
+                share.hidden = true;
+                actions.append(action("Bağlantı Oluştur",()=>{
+                    share.hidden = false;
+                    share.querySelector("input")?.focus();
+                }),share);
+            }
+            return [row.title,row.state === "published" && !active ? "Başvuru kapalı" :
+                ({draft:"Taslak",published:"Yayında",closed:"Kapalı"})[row.state],
+                active ? link("İlana özel başvuru sayfasını aç","/basvuru/" + row.id) : "—",actions];
         })));
         if (!choices.length) {
             root.append(action("Yeni Pozisyon Oluştur",()=>{
@@ -252,26 +269,88 @@ if (companyPortalPage) {
         root.append(el("p","İlan yayımlandığında firmaya özel başvuru bağlantısı oluşur. Firma yetkilisi kendi web sitesinde ve kurumsal kanallarında paylaşabilir. İş arama platformları isteğe bağlıdır; otomatik platform yayını yapılmaz."),
             form([field("Pozisyon",which),field("İlan başlığı",title),field("İş tanımı",summary),
             field("Aranan nitelikler",qualifications),field("Çalışma koşulları",conditions),
-            field("Aday aydınlatma metni",policy),field("Metin sürümü",version),field("Durum",state),
+            field("Aday aydınlatma metni",policy),field("Metin sürümü",version),field("Son başvuru (Türkiye saati)",deadline),field("Durum",state),
             field("Yerel yayını onaylıyorum",confirm)],"İlanı kaydet",async data => {
+            if (data.state === "published" && !data.closes_at)
+                throw new Error("Yayın için son başvuru tarihini girin.");
             await api("ats/jobs","POST",{...data,confirm_publish:data.confirm_publish==="1"});
             await open("jobs");
             notice("İlan kaydedildi.");
         }),previewButton,preview);
     }
 
-    function cvImport(root, choices, openPositions, contextPosition, refresh, manualApplication) {
+    const atsGroups = {suitable:"Pozisyona Uygun",development:"Gelişime Açık",
+                       review:"Ek Değerlendirme Gerekli"};
+
+    async function showStoredScreening(applicationId, documentId, container, wait = false, permit = false) {
+        const route = appRoute(applicationId)+"/documents/"+encodeURIComponent(documentId)+"/screening";
+        for (let attempt = 0; attempt < (wait ? 45 : 1) && container.isConnected; attempt++) {
+            try {
+                const result = await api(route);
+                container.replaceChildren(el("p", result.state === "pending"
+                    ? "ATS değerlendirmesi sırada."
+                    : "ATS puanı · " + (result.score ?? "Kanıtlı puan yok") +
+                      (result.coverage == null ? "" : " · Kanıt kapsamı %" + result.coverage)));
+                if (result.state !== "pending" && result.classification)
+                    container.append(el("p",atsGroups[result.classification]));
+                if (result.reason) container.append(el("p",result.reason));
+                for (const [label,criteria] of [["Güçlü yönler",result.strengths],["Gelişim ve doğrulama alanları",result.development]]) {
+                    if (!criteria?.length) continue;
+                    const list = el("ul");
+                    for (const item of criteria) list.append(el("li",item.requirement+" · "+item.status+
+                        (item.evidence ? " · "+item.evidence : "")));
+                    container.append(el("strong",label),list);
+                }
+                if (permit && ["analyzed","criteria_missing","review_required"].includes(result.state)) {
+                    const permission = result.permission;
+                    if (!permission) {
+                        container.append(action("Mülakat İçin İzin İste",async button=>{
+                            button.disabled = true;
+                            try {
+                                await api("flow/applications/"+encodeURIComponent(applicationId)+"/permission",
+                                    "POST",{document_id:documentId});
+                                await showStoredScreening(applicationId,documentId,container,false,true);
+                            } catch(error) {notice(error.message,true);button.disabled=false;}
+                        }));
+                    } else {
+                        container.append(el("p",({pending:"Mülakat izni bekliyor",approved:"Mülakat izni onaylandı",
+                            declined:"Mülakat izin talebi reddedildi"})[permission.status]));
+                        if (manager() && permission.status === "pending") {
+                            for (const [decision,label] of [["approved","İzni Onayla"],["declined","İzni Reddet"]]) {
+                                container.append(action(label,async button=>{
+                                    button.disabled = true;
+                                    try {
+                                        await api("flow/permissions/"+encodeURIComponent(permission.id)+"/decision",
+                                            "POST",{decision});
+                                        await showStoredScreening(applicationId,documentId,container,false,true);
+                                    } catch(error) {notice(error.message,true);button.disabled=false;}
+                                }));
+                            }
+                        }
+                    }
+                }
+                if (result.state !== "pending" || !wait) return;
+            } catch (error) {
+                container.replaceChildren(el("p",error.message));
+                return;
+            }
+            await new Promise(resolve=>setTimeout(resolve,2000));
+        }
+    }
+
+    function cvImport(root, choices, openPositions, contextPosition, refresh, manualApplication, openApplication) {
         const limit = 20, maxBytes = 10 * 1024 * 1024;
         const fileInput = input("cv","file","",{accept:".pdf,.docx",multiple:"",required:""});
         const preview = el("div");
         const progress = el("p","",{role:"status"});
         const positionChoices = [["","Pozisyon seçin"],...openPositions];
         const selectionLabels = {name:"Ad soyad",email:"E-posta",phone:"Telefon",position_id:"Pozisyon"};
-        root.append(el("h3","CV Yükle"),form([
-            field("PDF veya DOCX (en fazla 20, dosya başına 10 MB)",fileInput)
-        ],"Önizle",async () => {
+        root.append(el("h3","CV Yükle"),
+            field("PDF veya DOCX (en fazla 20, dosya başına 10 MB)",fileInput),progress,preview);
+        fileInput.addEventListener("change", async () => {
             const files = [...fileInput.files];
-            if (files.length > limit) throw new Error("Bir seferde en fazla 20 dosya seçin.");
+            if (!files.length) return;
+            if (files.length > limit) {progress.textContent = "Bir seferde en fazla 20 dosya seçin."; return;}
             fileInput.disabled = true;
             preview.replaceChildren();
             const rows = [];
@@ -289,14 +368,14 @@ if (companyPortalPage) {
                     }
                 }
                 progress.textContent = "";
-                renderPreview(rows);
+                await renderPreview(rows);
             } finally { fileInput.disabled = false; }
-        }),progress,preview);
+        });
 
-        function renderPreview(rows) {
+        async function renderPreview(rows) {
             const panel = el("fieldset","",{class:"ats-cv-preview","aria-label":"CV önizlemesi"});
             const summary = el("p","",{role:"status"});
-            const save = action("Seçilenleri kaydet",saveRows);
+            const save = action("Seçilenleri kaydet",()=>saveRows());
             const ready = rows.filter(row => row.data);
             const contextName = choices.find(([id]) => String(id) === contextPosition)?.[1];
             const bulk = select("bulk_position",positionChoices);
@@ -308,7 +387,7 @@ if (companyPortalPage) {
                     .map(([key]) => selectionLabels[key]);
                 row.status.textContent = missing.length ? "Eksik · " + missing.join(", ") : "Kayda hazır";
             };
-            const grid = table(["Seç","Belge","Ad soyad","E-posta","Telefon","Pozisyon","Durum"],
+            const grid = table(["Seç","Belge","Ad soyad","E-posta","Telefon","Pozisyon","Eğitim","Deneyim","Durum"],
                 rows.map(row => {
                     row.status = el("span");
                     if (!row.data) {
@@ -317,7 +396,7 @@ if (companyPortalPage) {
                             row.status.append(el("p","Manuel başvuruyu oluşturup CV’yi aday detayından ekleyebilirsiniz."),
                                 action("Manuel başvuru oluştur",manualApplication));
                         }
-                        return ["",row.file.name,"","","","",row.status];
+                        return ["",row.file.name,"","","","","","",row.status];
                     }
                     row.checked = input("selected","checkbox","1",{"aria-label":row.file.name + " belgesini seç"});
                     row.checked.checked = true;
@@ -327,7 +406,7 @@ if (companyPortalPage) {
                         name:input("name","text",row.data.name,{maxlength:160}),
                         email:input("email","email",row.data.email,{maxlength:254}),
                         phone:input("phone","tel",row.data.phone,{maxlength:50}),
-                        position_id:select("position_id",scopedChoices,contextPosition)
+                        position_id:select("position_id",scopedChoices,contextPosition || row.data.suggested_position_id || "")
                     };
                     row.fields.position_id.disabled = Boolean(contextPosition);
                     for (const [key,control] of Object.entries(row.fields)) {
@@ -335,7 +414,9 @@ if (companyPortalPage) {
                         control.addEventListener("input",() => checkFields(row));
                     }
                     checkFields(row);
-                    return [row.checked,row.file.name,...Object.values(row.fields),row.status];
+                    return [row.checked,row.file.name,...Object.values(row.fields),
+                        row.data.education?.join(" · ") || "CV’de bulunamadı",
+                        row.data.experience?.join(" · ") || "CV’de bulunamadı",row.status];
                 }));
             if (ready.length && !contextPosition) {
                 panel.append(field("Tüm CV’ler için pozisyon",bulk));
@@ -350,9 +431,11 @@ if (companyPortalPage) {
             panel.append(grid,save);
             preview.replaceChildren(panel,summary);
             refreshSave();
+            await saveRows(true);
 
-            async function saveRows() {
-                const selected = ready.filter(row => row.checked.checked && !row.done);
+            async function saveRows(automatic = false) {
+                const selected = ready.filter(row => row.checked.checked && !row.done &&
+                    (!automatic || (row.fields.name.value.trim() && row.fields.position_id.value)));
                 panel.disabled = fileInput.disabled = true;
                 try {
                     for (const [index,row] of selected.entries()) {
@@ -366,7 +449,16 @@ if (companyPortalPage) {
                             body.append("selection",JSON.stringify({...selection,import_id:row.data.import_id}));
                             const result = await api("ats/cv-import/save","POST",body);
                             row.outcome = result.status;
-                            row.status.textContent = result.status === "saved" ? "Kaydedildi · ATS değerlendirme kuyruğuna alındı" : "Atlandı · " + result.message;
+                            row.status.textContent = result.status === "saved"
+                                ? (result.identity_conflict ? "Ayrı kaydedildi · ortak e-posta İK doğrulaması bekliyor"
+                                    : result.existing_application ? "Mevcut başvuru kullanıldı" : "Kaydedildi")
+                                : "İK incelemesi · " + result.message;
+                            if (result.status === "saved" && result.application_id && result.document_id) {
+                                const screen = el("div");
+                                row.status.append(action("Aday dosyasını aç",()=>openApplication(result.application_id)),screen);
+                                void showStoredScreening(result.application_id,result.document_id,screen,true);
+                                if (result.existing_application && selected.length === 1) await openApplication(result.application_id);
+                            }
                             row.done = true;
                             row.checked.checked = false;
                             row.checked.disabled = true;
@@ -401,6 +493,7 @@ if (companyPortalPage) {
         delete poolMenu.dataset.filterPosition;
         const stage = select("stage",[["","Tüm aşamalar"],...Object.entries(stageLabels)]);
         const people = manager() ? (await api("assignees")).users : [{id:metadata.user_id,name:metadata.user_name}];
+        const classification = select("classification",[["","Tüm ATS grupları"],...Object.entries(atsGroups)]);
         const assignee = select("assignee",[["","Tüm İK sorumluları"],["unassigned","Atanmamış"],...people.map(user=>[user.id,user.name])]);
         const flowResults = el("section","",{class:"saas-panel",tabindex:"-1",hidden:""});
         let flowOffset=0;
@@ -491,27 +584,39 @@ if (companyPortalPage) {
             await showApplication(details,id,draw);
             details.focus();
         };
-        let offset = 0, request = 0, visible = [];
+        let offset = 0, request = 0, visible = [], nameOrder = "";
         const draw = async () => {
             const current = ++request;
             try {
-                const data = await values(target.value,search.value,stage.value,offset,assignee.value);
+                const data = await values(target.value,search.value,stage.value,offset,assignee.value,nameOrder,classification.value);
                 if (current !== request) return;
                 visible = data.applications;
                 results.replaceChildren(el("h3","Başvurular"),el("p",data.total + " başvuru"),data.total === 0
-                    ? el("p","Henüz aday bulunmuyor.",{class:"v5-empty"}) : table(["Ad soyad","Pozisyon","Kaynak","Aşama","İşlem"],
-                    data.applications.map(row => [row.name,row.position,row.source,closureLabels[row.closure] || stageLabels[row.stage],
+                    ? el("p","Henüz aday bulunmuyor.",{class:"v5-empty"}) : table([action("Ad Soyad",()=>{nameOrder=nameOrder==="asc"?"desc":"asc";offset=0;draw();}),
+                        "E-posta","Pozisyon","Kaynak","Aşama","ATS grubu","İşlem"],
+                    data.applications.map(row => [row.name,row.identity_conflict_email
+                        ? row.identity_conflict_email+" · İK doğrulaması gerekli" : row.email,row.position,row.source,closureLabels[row.closure] || stageLabels[row.stage],
+                        (atsGroups[row.ats_classification] || "—") + (row.ats_score == null ? "" : " · " + row.ats_score),
                         action("Dosyayı aç",async () => {
                             chosenApplication = row.id;
                             await revealDetails(row.id);
                         })])));
+                const nameHeader = results.querySelector("th");
+                if (nameHeader) nameHeader.setAttribute("aria-sort", nameOrder === "asc" ? "ascending" :
+                    nameOrder === "desc" ? "descending" : "none");
                 if (offset > 0) results.append(action("Önceki",() => {offset -= 25;draw();}));
                 if (offset + 25 < data.total) results.append(action("Sonraki",() => {offset += 25;draw();}));
             } catch (error) { notice(error.message); }
         };
+        classification.addEventListener("change",()=>{offset=0;draw();});
+        let searchTimer;
+        search.addEventListener("input",()=>{
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(()=>{if(root.isConnected){offset=0;draw();}},250);
+        });
         const openPositions = await positions(true);
         const cvInput = cvImport(importer,choices,openPositions,contextPosition,
-            async () => {offset=0;await draw();},openPositions.length ? reveal : null);
+            async () => {offset=0;await draw();},openPositions.length ? reveal : null,revealDetails);
         const actions = el("div","",{class:"saas-actions"});
         if (openPositions.length) actions.append(action("Yeni Aday Ekle",reveal));
         actions.append(action("CV'leri Getir ve ATS Analizi Yap",async button=>{
@@ -524,7 +629,7 @@ if (companyPortalPage) {
             cvInput.focus();
         }));
         root.append(actions,form([field("Ad veya e-posta",search),field("Pozisyon",target),field("Aşama",stage),
-                                  field("İK sorumlusu",assignee)],
+                                  field("İK sorumlusu",assignee),field("ATS grubu",classification)],
                          "Filtrele",() => {offset=0;return draw();}),flowResults,importer,results,editor,details);
         if (openPositions.length) editor.append(el("h3","Manuel başvuru"),form([
             field("Ad soyad",input("name","text","",{required:"",maxlength:160})),
@@ -552,6 +657,15 @@ if (companyPortalPage) {
             root.append(el("h3",row.name+" · "+row.position),el("p",(row.email || "—")+" · "+(row.phone || "—")),
                         el("p",stageLabels[row.stage]+" · "+(row.tags || "Etiket yok")));
             if (manager()) {
+                if (row.identity_conflict_email || !row.email) {
+                    root.append(el("p",row.identity_conflict_email ? "Paylaşılan e-posta · "+row.identity_conflict_email+
+                        ". Adayın kendi adresini doğrulayın." : "Adayın e-posta adresi eksik.",{class:"saas-warning"}),
+                        form([field("Doğrulanmış e-posta",input("email","email","",{required:"",maxlength:254}))],
+                            "E-postayı doğrula",async fields => {
+                                await api(appRoute(id)+"/verified-email","PATCH",fields);
+                                await Promise.all([reload(),onNameChanged()]);
+                            }));
+                }
                 const name = input("name","text",row.name,{required:"",maxlength:160});
                 const editName = form([field("Ad soyad",name)],"Kaydet",async fields => {
                     await api(appRoute(id)+"/candidate-name","PATCH",fields);
@@ -589,6 +703,15 @@ if (companyPortalPage) {
             const lastUploaded = docs => [...docs].sort((a,b) =>
                 (Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0)).at(-1);
             const selectedCv = lastUploaded(cvNamed.length ? cvNamed : cvDocuments);
+            const latestCv = lastUploaded(cvDocuments);
+            if (latestCv) {
+                const stored = el("section","",{class:"saas-panel"});
+                const summary = el("div");
+                stored.append(el("h4","Otomatik ATS değerlendirmesi"),summary);
+                root.append(stored);
+                void showStoredScreening(id,latestCv.id,summary,true,!row.closure);
+            }
+
 
             async function analyzeCvMatch(doc, anchor, button, suppliedText = null) {
                 button.disabled = true;

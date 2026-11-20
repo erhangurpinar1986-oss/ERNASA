@@ -110,7 +110,8 @@ def invitation_message(candidate, url):
     appointment = ""
     if scheduled:
         local = datetime.fromisoformat(scheduled).astimezone(__import__("zoneinfo").ZoneInfo("Europe/Istanbul"))
-        appointment = f"Görüşme: {local:%d.%m.%Y %H:%M} (Türkiye saati).\n\n"
+        appointment = (f"Görüşme başlangıcı: {local:%d.%m.%Y %H:%M} (Türkiye saati).\n"
+                       "Mülakatı planlanan başlangıçtan itibaren 8 saat içinde başlatabilirsiniz.\n\n")
     body = (
         f"Merhaba {name},\n\n"
         f"{company} bünyesindeki {position} pozisyonu için mülakat bağlantınız:\n{url}\n\n"
@@ -186,7 +187,7 @@ def send_availability(candidate, url, *, idempotency_key):
     address = validate_recipient(candidate["email"])
     subject = "ERNASA · Mülakat için uygun gün ve saat"
     body = ("Merhaba,\n\nBaşvurunuz için bir görüşme saati seçmenizi rica ediyoruz.\n"
-            f"{url}\n\nBağlantı size özeldir ve 7 gün geçerlidir.\nERNASA")
+            f"{url}\n\nBu saat seçme bağlantısı size özeldir ve 7 gün geçerlidir. Mülakat bağlantısı saat seçiminizden sonra ayrı bir e-postayla gönderilir.\nERNASA")
     return _send_text(address, subject, body, idempotency_key)
 
 

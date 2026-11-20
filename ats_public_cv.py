@@ -166,7 +166,7 @@ def submit(tenant, job_id, fields, filename, content, source, client_ip):
             raise HTTPException(400,"Güncel aday aydınlatma metnini okuyup onaylayın.")
         applicant=ats.record_application(
             c,tenant,job["position_id"],fields,None,
-            "İlan / "+source,job_id=job_id
+            "İlan / "+source,job_id=job_id,review_identity_conflict=True
         )
         app_id=applicant["id"]
         doc_id=ats.uid()

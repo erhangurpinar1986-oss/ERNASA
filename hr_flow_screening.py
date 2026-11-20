@@ -30,14 +30,6 @@ def now():
 def initialize_schema():
     with closing(get_connection()) as db:
         c=db.cursor()
-        c.execute("""CREATE TABLE IF NOT EXISTS flow_screening_results (
-            company_id BIGINT NOT NULL, application_id TEXT NOT NULL,
-            position_id TEXT NOT NULL, document_id TEXT NOT NULL,
-            cv_digest TEXT NOT NULL, criteria_digest TEXT NOT NULL,
-            analysis_state TEXT NOT NULL, match_score REAL, coverage REAL,
-            details_json TEXT NOT NULL, analyzed_at TEXT NOT NULL,
-            PRIMARY KEY(company_id,application_id,document_id)
-        )""")
         c.execute("""CREATE TABLE IF NOT EXISTS flow_interview_permissions (
             id TEXT PRIMARY KEY, company_id BIGINT NOT NULL,
             application_id TEXT NOT NULL, document_id TEXT NOT NULL,
@@ -83,7 +75,7 @@ def _result_row(c,tenant,application_id,document_id):
     return dict(row) if row else None
 
 
-def _permission(c,tenant,application_id):
+def interview_permission(c,tenant,application_id):
     c.execute("""SELECT p.id,p.status,p.requested_at,p.decided_at,b.status AS booking_status,
             s.starts_at AS booked_at
         FROM flow_interview_permissions p
@@ -219,7 +211,7 @@ def screen_position(actor,position_id,cv_root,limit=20,offset=0):
             doc=c.fetchone()
             doc=dict(doc) if doc else None
             existing=_result_row(c,actor.company_id,app_id,doc["id"]) if doc else None
-            permission=_permission(c,actor.company_id,app_id)
+            permission=interview_permission(c,actor.company_id,app_id)
         record={"application_id":app_id,"candidate":applicant["name"],
                 "position":position,"source":applicant["source"],
                 "has_cv":bool(doc),"permission":permission,
@@ -280,7 +272,7 @@ def request_permission(actor,application_id,document_id):
         _,_,current_criteria=_job_criteria(c,actor.company_id,app["position_id"],actor)
         if current_criteria!=row["criteria_digest"]:
             raise HTTPException(409,"Pozisyon kriterleri değişmiş; ATS analizini yenileyin.")
-        previous=_permission(c,actor.company_id,application_id)
+        previous=interview_permission(c,actor.company_id,application_id)
         if previous:
             return previous
         request_id=uuid4().hex
