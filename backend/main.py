@@ -1059,6 +1059,16 @@ def open_hr_panel_v5(request: Request):
         )
 
     return FileResponse(FRONTEND_DIR / "ernasa_v5_ik.html")
+@app.get("/ik/selin")
+def open_selin_queue(request: Request):
+    if not has_hr_panel_session(request):
+        return RedirectResponse(url="/ik-giris",status_code=302)
+    actor=require_combined(require_ik_session(request))
+    require_manager(actor)
+    return FileResponse(FRONTEND_DIR / "selin_intake.html",
+                        headers={"Cache-Control":"private, no-store"})
+
+
 @app.get("/aday-takip")
 def open_candidate_tracking(request: Request):
     if not has_hr_panel_session(request):
