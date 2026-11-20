@@ -17,7 +17,7 @@ import hr_flow_contacts
 from database import get_connection
 from recruitment import write
 
-SOURCES = frozenset({"direct","linkedin","indeed","kariyer_net","social","other"})
+SOURCES = frozenset({"direct","linkedin","indeed","kariyer_net","eleman_net","social","other"})
 MAX_PER_VISITOR_HOUR = 8
 MAX_PER_TENANT_HOUR = 250
 

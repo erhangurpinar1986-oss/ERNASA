@@ -68,6 +68,18 @@ def test_public_cv_attaches_to_exact_published_position_and_persists_source(inta
         assert b64decode(blob["content_base64"])==pdf
 
 
+def test_eleman_net_source_preserved_for_published_job(intake):
+    """Channel is attributed without claiming publication on third-party sites."""
+    manager,position,job,pdf,applicant=intake
+    result=ats_public_cv.submit(manager.company_id,job,applicant,
+                                "cv.pdf",pdf,"eleman_net","203.0.113.30")
+    with closing(database.get_connection()) as db:
+        row=db.execute(
+            "SELECT source FROM ats_application_sources WHERE application_id=?",
+            (result["application_id"],)).fetchone()
+    assert row["source"]=="eleman_net"
+
+
 def test_invalid_consent_source_document_and_duplicate_are_rejected(intake):
     manager,position,job,pdf,applicant=intake
     for source in ("http://evil.example","", "LinkedIn.com"):
