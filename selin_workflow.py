@@ -62,12 +62,82 @@ def initialize_schema():
             company_id BIGINT NOT NULL, interview_token TEXT NOT NULL,
             digest TEXT NOT NULL, pdf_base64 TEXT NOT NULL, archived_at TEXT NOT NULL
         )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS selin_automation_settings (
+            company_id BIGINT PRIMARY KEY,
+            enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+            configured_by BIGINT NOT NULL,
+            updated_at TEXT NOT NULL
+        )""")
         c.execute("""CREATE TABLE IF NOT EXISTS selin_events (
             id TEXT PRIMARY KEY, company_id BIGINT NOT NULL,
             case_id TEXT NOT NULL REFERENCES selin_cases(id) ON DELETE CASCADE,
             event TEXT NOT NULL, created_at TEXT NOT NULL
         )""")
         db.commit()
+
+
+def auto_enabled(actor):
+    """Opt-in gate: environment plus per-company manager authorization."""
+    if not actor.company_id or actor.role not in recruitment.MANAGERS:
+        return False
+    if not {"ats", "ai"}.issubset(set(actor.products)):
+        return False
+    if os.getenv("ERNASA_SELIN_AUTOSTART_ENABLED") != "1":
+        return False
+    if os.getenv("ERNASA_SELIN_SEND_ENABLED") != "1":
+        return False
+    with closing(get_connection()) as db:
+        row=db.cursor().execute(
+            "SELECT enabled FROM selin_automation_settings WHERE company_id=?",
+            (actor.company_id,)).fetchone()
+    return bool(row and row["enabled"])
+
+
+def automation_settings(actor):
+    if actor.company_id is None or actor.role not in recruitment.MANAGERS:
+        raise HTTPException(403, "İK yöneticisi yetkisi gerekli.")
+    with closing(get_connection()) as db:
+        row=db.cursor().execute(
+            "SELECT enabled,configured_by,updated_at FROM selin_automation_settings WHERE company_id=?",
+            (actor.company_id,)).fetchone()
+    return {"enabled":bool(row and row["enabled"]),
+            "ready":os.getenv("ERNASA_SELIN_AUTOSTART_ENABLED")=="1"
+                    and os.getenv("ERNASA_SELIN_SEND_ENABLED")=="1"
+                    and os.getenv("ERNASA_SELIN_WORKER_ENABLED")=="1",
+            "last_updated":row["updated_at"] if row else None}
+
+
+def configure_automation(actor, enabled):
+    if actor.company_id is None or actor.role not in recruitment.MANAGERS:
+        raise HTTPException(403, "İK yöneticisi yetkisi gerekli.")
+    if not {"ats","ai"}.issubset(set(actor.products)):
+        raise HTTPException(403, "ATS ve AI İK gerekir.")
+    if type(enabled) is not bool:
+        raise HTTPException(422, "Açık etkinleştirme kararı gerekli.")
+    with closing(get_connection()) as db:
+        c=db.cursor()
+        c.execute("""INSERT INTO selin_automation_settings
+            (company_id,enabled,configured_by,updated_at) VALUES(?,?,?,?)
+            ON CONFLICT(company_id) DO UPDATE SET enabled=excluded.enabled,
+                configured_by=excluded.configured_by,updated_at=excluded.updated_at""",
+            (actor.company_id,int(enabled),actor.user_id,stamp()))
+        db.commit()
+    return automation_settings(actor)
+
+
+def auto_start(actor, app_id, document_id, cv_root, create_interview, send_interview):
+    """Best-effort hook called ONLY after a successful, committed CV upload.
+
+    CV upload is never rolled back because an unrelated automation step fails.
+    A failed case is visible in the SELİN 'needs_attention' queue.
+    """
+    if not auto_enabled(actor):
+        return None
+    try:
+        return begin(actor,app_id,document_id,cv_root,create_interview,send_interview)
+    except Exception as error:
+        LOG.warning("SELİN auto-start paused: %s",type(error).__name__)
+        return None
 
 
 def _event(c, case_id, tenant, action):
