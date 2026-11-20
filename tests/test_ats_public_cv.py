@@ -21,7 +21,9 @@ def intake(tmp_path,monkeypatch):
     database.initialize_database()
     ats_public_cv.initialize_schema()
     manager=SimpleNamespace(company_id=1234,user_id=21,role="hr_manager",products=("ats",))
-    position=recruitment.save_position(manager,recruitment.Position(name="Depo Personeli"))
+    dept=recruitment.add_department(manager,"Lojistik")
+    position=recruitment.save_position(manager,recruitment.Position(
+        name="Depo Personeli",department_id=dept["id"]))
     job=ats.save_job(manager,ats.Job(
         position_id=position["id"],title="Depo Personeli",
         summary="Lojistik depo",state="published",confirm_publish=True,
