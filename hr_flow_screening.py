@@ -186,8 +186,19 @@ def request_permission(actor,application_id,document_id):
             raise HTTPException(404,"Bu adaya ait CV bulunamadı.")
         # A successful or pending screening record is required before request.
         row=_result_row(c,actor.company_id,application_id,document_id)
-        if not row:
-            raise HTTPException(409,"Önce pozisyon için ATS analizini çalıştırın.")
+        if not row or row["analysis_state"]!="analyzed" or row["match_score"] is None:
+            raise HTTPException(409,"Pozisyona ait doğrulanabilir ATS analizi olmadan izin talebi açılamaz.")
+        if row["position_id"]!=app["position_id"]:
+            raise HTTPException(409,"Analiz farklı pozisyona ait; yeniden değerlendirin.")
+        c.execute("""SELECT digest FROM ats_document_digests
+            WHERE company_id=? AND application_id=? AND document_id=?""",
+            (actor.company_id,application_id,document_id))
+        digest=c.fetchone()
+        if not digest or digest["digest"]!=row["cv_digest"]:
+            raise HTTPException(409,"CV değişmiş; ATS analizini yenileyin.")
+        _,_,current_criteria=_job_criteria(c,actor.company_id,app["position_id"])
+        if current_criteria!=row["criteria_digest"]:
+            raise HTTPException(409,"Pozisyon kriterleri değişmiş; ATS analizini yenileyin.")
         previous=_permission(c,actor.company_id,application_id)
         if previous:
             return previous
