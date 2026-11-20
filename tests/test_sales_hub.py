@@ -511,3 +511,53 @@ def test_no_approved_proposal_or_classification_no_collection(store):
     with pytest.raises(sales.Invalid):
         collect(db,p)
     assert db.execute('SELECT count(*) FROM sales_collections').fetchone()[0] == 0
+
+
+def test_company_sales_contact_can_start_founder_only_provisioning(store,web):
+    """The company contact does not confer login; founder explicitly provisions it."""
+    db,_ = store
+    from control import firma
+    assert 'Satış Temsilcisi' in firma.CONTACTS
+    with db:
+        db.execute(
+            "INSERT INTO company_contacts(company_id,primary_contact,name,title,department,phone,email,kind) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (1,0,'Örnek Temsilci','B2B Satış','Satış','','temsilci@example.test','Satış Temsilcisi'),
+        )
+        contact_id = db.execute("SELECT id FROM company_contacts WHERE email=?",('temsilci@example.test',)).fetchone()[0]
+    route = f'/firmalar?detay=1&sekme=yetkililer'
+    status,_,page = http(web,route,cookie='control_session=founder-cookie')
+    assert status == 200
+    assert 'Satış hesabı aç'.encode() in page
+    url = f'/satis?tab=accounts&company_id=1&contact_id={contact_id}'
+    status,_,form_page = http(web,url,cookie='control_session=founder-cookie')
+    assert status == 200
+    assert 'value="Örnek Temsilci"'.encode() in form_page
+    assert b'value="temsilci@example.test"' in form_page
+    assert b'<option value="1" selected>' in form_page
+    assert db.execute("SELECT count(*) FROM sales_accounts WHERE email=?",('temsilci@example.test',)).fetchone()[0] == 0
+    assert http(web,url)[0] == 303
+
+    created = execute(db,F,'account_create',company_id=1,name='Örnek Temsilci',
+                      email='temsilci@example.test',password=PASSWORD)
+    assert created['active'] is False
+    status,_,changed = http(web,route,cookie='control_session=founder-cookie')
+    assert status == 200
+    assert 'Satış hesabı mevcut'.encode() in changed
+    assert 'Satış hesabı aç'.encode() not in changed
+
+
+def test_sales_prefill_cannot_cross_company_or_contact_type(store,web):
+    db,_ = store
+    with db:
+        db.execute(
+            "INSERT INTO company_contacts(company_id,primary_contact,name,title,department,phone,email,kind) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (2,0,'İkinci Firma Kişisi','İK','İnsan Kaynakları','','person@example.test','İK'),
+        )
+        contact_id = db.execute("SELECT id FROM company_contacts WHERE email=?",('person@example.test',)).fetchone()[0]
+    for company_id in (1,2):
+        status,_,page = http(web,f'/satis?tab=accounts&company_id={company_id}&contact_id={contact_id}',
+                             cookie='control_session=founder-cookie')
+        assert status == 200
+        assert b'value="person@example.test"' not in page
