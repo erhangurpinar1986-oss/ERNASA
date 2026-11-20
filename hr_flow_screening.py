@@ -48,7 +48,15 @@ def initialize_schema():
         db.commit()
 
 
-def _job_criteria(c,tenant,position_id):
+def _job_criteria(c,tenant,position_id,actor=None):
+    # Match the Position menu's permission model. Staff cannot discover
+    # another department's vacancy or the screening criteria attached to it.
+    if actor is not None and actor.role == "hr_staff":
+        c.execute("""SELECT 1 FROM ats_position_members
+            WHERE company_id=? AND position_id=? AND user_id=?""",
+            (tenant,position_id,actor.user_id))
+        if not c.fetchone():
+            raise HTTPException(404,"Pozisyon bulunamadı.")
     c.execute("""SELECT p.id,p.name,f.fields FROM company_positions p
         LEFT JOIN ats_position_profiles f ON f.position_id=p.id AND f.company_id=p.company_id
         WHERE p.company_id=? AND p.id=?""",(tenant,position_id))
@@ -91,7 +99,7 @@ def screen_position(actor,position_id,cv_root,limit=20,offset=0):
         raise HTTPException(422,"Geçersiz sayfalama.")
     with closing(get_connection()) as db:
         c=db.cursor()
-        position,criteria,criteria_digest=_job_criteria(c,actor.company_id,position_id)
+        position,criteria,criteria_digest=_job_criteria(c,actor.company_id,position_id,actor)
     rows=ats.list_applications(actor,position_id=position_id,limit=20,offset=offset)
     output=[]
     for applicant in rows["applications"]:
@@ -196,7 +204,7 @@ def request_permission(actor,application_id,document_id):
         digest=c.fetchone()
         if not digest or digest["digest"]!=row["cv_digest"]:
             raise HTTPException(409,"CV değişmiş; ATS analizini yenileyin.")
-        _,_,current_criteria=_job_criteria(c,actor.company_id,app["position_id"])
+        _,_,current_criteria=_job_criteria(c,actor.company_id,app["position_id"],actor)
         if current_criteria!=row["criteria_digest"]:
             raise HTTPException(409,"Pozisyon kriterleri değişmiş; ATS analizini yenileyin.")
         previous=_permission(c,actor.company_id,application_id)
