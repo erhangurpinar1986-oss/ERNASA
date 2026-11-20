@@ -194,8 +194,12 @@ def request_permission(actor,application_id,document_id):
             raise HTTPException(404,"Bu adaya ait CV bulunamadı.")
         # A successful or pending screening record is required before request.
         row=_result_row(c,actor.company_id,application_id,document_id)
-        if not row or row["analysis_state"]!="analyzed" or row["match_score"] is None:
-            raise HTTPException(409,"Pozisyona ait doğrulanabilir ATS analizi olmadan izin talebi açılamaz.")
+        if not row:
+            raise HTTPException(409,"Önce ATS ön değerlendirmesi yapılmalıdır.")
+        # Missing evidence is not a rejection. Allow human review after a
+        # recorded screening attempt, while retaining CV/criteria integrity checks.
+        if row["analysis_state"] not in ("analyzed", "review_required", "criteria_missing"):
+            raise HTTPException(409,"ATS ön değerlendirmesi henüz tamamlanmadı.")
         if row["position_id"]!=app["position_id"]:
             raise HTTPException(409,"Analiz farklı pozisyona ait; yeniden değerlendirin.")
         c.execute("""SELECT digest FROM ats_document_digests
