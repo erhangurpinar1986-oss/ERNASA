@@ -277,7 +277,7 @@ def overview(c, data):
     return '<div class="stats metrics">'+''.join(c.card(label,f'<strong>{c.e(str(value))}</strong>') for label,value in metrics)+'</div>'
 
 
-def content(c, db, identity, tab):
+def content(c, db, identity, tab, query=None):
     actor, csrf, info = identity
     data = sales.snapshot(db, actor)
     path = '/satis?tab='+tab if actor.founder else '/sales?tab='+tab
@@ -294,8 +294,30 @@ def content(c, db, identity, tab):
             out += c.card('Satış akışı','<p>Müşterinizi kaydedin, fırsat açın ve teklif taslağını CONTROL değerlendirmesine gönderin. Resmi fiyat ve indirim yalnız CONTROL onayıyla oluşur.</p><p>Tahsilat doğrulaması ve hak ediş onayı ayrı adımlardır.</p>')
         if section == 'accounts':
             companies = db.execute('SELECT id,name FROM companies ORDER BY name').fetchall()
-            fields = options('company_id','Firma',[(r['id'],r['name']) for r in companies])+inp('name','Ad soyad')+inp('email','E-posta','email')+inp('password','Başlangıç parolası (12–128 karakter)','password')
-            out += c.card('Temsilci hesabı oluştur', '<p>Hesap pasif oluşturulur. Etkinleştirme ayrı CONTROL kararıdır; Akademi tamamlanması yetki vermez.</p>'+f('account_create',fields))
+            prefill = None
+            query = query or {}
+            company_text = query.get('company_id', [''])[0]
+            contact_text = query.get('contact_id', [''])[0]
+            if re.fullmatch(r'[1-9][0-9]{0,17}', str(company_text)) and re.fullmatch(r'[1-9][0-9]{0,17}', str(contact_text)):
+                prefill = db.execute(
+                    "SELECT name,email,company_id FROM company_contacts "
+                    "WHERE id=? AND company_id=? AND kind='Satış Temsilcisi'",
+                    (int(contact_text),int(company_text)),
+                ).fetchone()
+            selected_company = str(prefill['company_id']) if prefill else ''
+            company_field = c.select(
+                'Firma', 'company_id',
+                [(str(row['id']),row['name']) for row in companies],
+                selected_company or None,
+            )
+            fields = (company_field
+                      +c.inp('Ad soyad','name',prefill['name'] if prefill else '')
+                      +c.inp('E-posta','email',prefill['email'] if prefill else '',kind='email')
+                      +inp('password','Başlangıç parolası (12–128 karakter)','password'))
+            explanation = ('<p>Firma yetkilisi kaydından bilgiler getirildi. Giriş hakkı otomatik verilmez.</p>'
+                           if prefill else '')
+            out += c.card('Temsilci hesabı oluştur',
+                explanation+'<p>Hesap pasif oluşturulur. Etkinleştirme ayrı CONTROL kararıdır; Akademi tamamlanması yetki vermez.</p>'+f('account_create',fields))
             out += c.card('Temsilciler',sales_table(c,'Henüz satış temsilcisi oluşturulmadı.',('Ad','E-posta','Firma','Durum','Yetkilendirme'),[
                 [c.e(a['name']),c.e(a['email']),str(a['company_id']),'Aktif' if a['active'] else 'Pasif',
                  f('account_active',c.hidden('id',a['id'])+c.hidden('active','0' if a['active'] else '1')+inp('reason','Yetki kararı gerekçesi'),'Pasifleştir' if a['active'] else 'Etkinleştir')]
@@ -483,7 +505,7 @@ def handle(h, path, post):
                 allowed_tabs = tuple(key for key,_ in FOUNDER_TABS) if actor.founder else ('overview','customers','opportunities','proposals','tasks','finance','resources','profile')
                 if tab not in allowed_tabs:
                     sales.fail('Ekran bulunamadı.',404)
-                render(c,h,'Satış Yönetimi' if actor.founder else 'ERNASA Sales Hub',content(c,db,identity,tab),identity,tab=tab)
+                render(c,h,'Satış Yönetimi' if actor.founder else 'ERNASA Sales Hub',content(c,db,identity,tab,query),identity,tab=tab)
             else:
                 sales.fail('Ekran bulunamadı.',404)
     except (sales.Invalid,c.Problem) as error:

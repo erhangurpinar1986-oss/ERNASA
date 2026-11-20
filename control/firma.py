@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 PRODUCT = 'ernasa-ik'
 STAGES = ('Potansiyel müşteri','Demo','Teklif','Sözleşme','Aktif','Askıda','Ayrılan müşteri')
 TYPES = ('Şahıs işletmesi','Limited şirket','Anonim şirket','Kollektif şirket','Komandit şirket','Kooperatif','Diğer')
-CONTACTS = ('Şirket yetkilisi','İK','Finans','Teknik','Ana iletişim')
+CONTACTS = ('Şirket yetkilisi','İK','Finans','Teknik','Satış Temsilcisi','Ana iletişim')
 PAYMENTS = ('Belirtilmedi','Bekliyor','Ödendi','Gecikmiş','İade edildi')
 PROFILE = {
     'brand':('İşletme / marka adı',120), 'company_type':('Şirket türü',40),

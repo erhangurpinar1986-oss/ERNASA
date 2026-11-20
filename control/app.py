@@ -915,9 +915,24 @@ def company_detail(db,actor,tenant,q):
             fields += select('Birincil iletişim','primary_contact',[('0','Hayır'),('1','Evet')],
                              str(current.get('primary_contact',0)))
         headers = tuple(label for label,_ in spec.values())+ (('Birincil',) if contact else ()) + ('İşlem',)
-        entries = ([e(r[key] or '—') for key in spec]+(['Evet' if r['primary_contact'] else 'Hayır'] if contact else [])+
-                   [f'<a href="{base}&amp;sekme={tab}&amp;kayit={r["id"]}#kayit-formu">Düzenle</a>'] for r in rows)
+        entries = [[e(r[key] or '—') for key in spec]+(['Evet' if r['primary_contact'] else 'Hayır'] if contact else [])+
+                   [f'<a href="{base}&amp;sekme={tab}&amp;kayit={r["id"]}#kayit-formu">Düzenle</a>'] for r in rows]
         title = ('Yetkiliyi düzenle' if edit else 'Yetkili ekle') if contact else ('Adresi düzenle' if edit else 'Adres ekle')
+        if contact:
+            # A company contact is informational until the founder separately grants sales login.
+            existing_sales = {
+                r['email'].lower(): r['id']
+                for r in db.execute('SELECT id,email FROM sales_accounts WHERE company_id=?',(tenant,)).fetchall()
+            }
+            for index, person in enumerate(rows):
+                if person['kind'] != 'Satış Temsilcisi':
+                    continue
+                registered = existing_sales.get(person['email'].lower()) if person['email'] else None
+                if registered:
+                    entries[index][-1] += ' · Satış hesabı mevcut'
+                else:
+                    link = f'/satis?tab=accounts&amp;company_id={tenant}&amp;contact_id={person["id"]}'
+                    entries[index][-1] += f' · <a href="{link}">Satış hesabı aç</a>'
         return (header+record_editor('/firmalar',actor,fields,title,edit,f'{base}&sekme={tab}')
                 +card('Kayıtlar',table(headers,entries)))
     if tab=='abonelikler':
