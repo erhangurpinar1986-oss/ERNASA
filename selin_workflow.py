@@ -22,6 +22,7 @@ from reportlab.platypus import Spacer
 import academy_assignments
 import ats
 import ats_matching
+import hr_flow_contacts
 import recruitment
 import recruitment_pdf
 from database import get_connection
@@ -216,6 +217,10 @@ def begin(actor, application_id, document_id, cv_root, create_interview, send_in
         existing=c.fetchone()
         if existing:
             return get_case(actor.company_id,existing["id"])
+    # This is the same prerequisite gate for the authenticated API,
+    # public intake queue, and opt-in auto-start hook. No interview link
+    # or contact message may be created by skipping manager/candidate consent.
+    hr_flow_contacts.require_interview_ready(actor.company_id,application_id,document_id)
     # Tenant-scoped source lookup: never infer a qualification or penalize missing CV evidence.
     match=ats_matching.evidence_match(cv_root,actor,application_id,document_id)
     cv_text=ats_matching.source_text(cv_root,actor,application_id,document_id)
