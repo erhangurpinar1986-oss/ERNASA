@@ -306,7 +306,7 @@ if (companyPortalPage) {
             for (const [product, plan] of Object.entries(data.plans)) {
                 const effective = window.ikSaasAccess[product] ? "Aktif" : plan.status === "Aktif" ? "Süre dışında" : plan.status;
                 const row = rows.insertRow();
-                for (const value of [product === "ats" ? "ERNASA ATS" : "ERNASA AI İK",
+                for (const value of [product === "ats" ? "ERNASA ATS" : "ERNASA HR",
                     plan.package, effective, plan.starts, plan.ends,
                     data.active_users + " / " + (plan.user_quota ?? "Sınırsız"),
                     product === "ai" ? data.monthly_interviews + " / " + (plan.operation_quota ?? "Sınırsız") : "—"]) {
@@ -315,7 +315,7 @@ if (companyPortalPage) {
                 const card = document.createElement("article");
                 card.className = "saas-usage-card";
                 const title = document.createElement("strong");
-                title.textContent = (product === "ats" ? "ERNASA ATS" : "ERNASA AI İK") + " · " + effective;
+                title.textContent = (product === "ats" ? "ERNASA ATS" : "ERNASA HR") + " · " + effective;
                 card.append(title);
                 for (const [label,used,limit] of [["Aktif kullanıcı",data.active_users,plan.user_quota],
                     ...(product === "ai" ? [["Aylık mülakat",data.monthly_interviews,plan.operation_quota]] : [])]) {
