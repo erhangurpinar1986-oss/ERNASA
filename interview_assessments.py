@@ -104,11 +104,11 @@ def insufficient_answer_evidence(answers):
     Short legitimate answers can be flagged for human review, never auto-rejected.
     """
     texts = [str(row['answer'] or '').strip() for row in answers.values()]
-    words = [re.findall(r"[^\\W_]+", value, flags=re.UNICODE) for value in texts]
+    words = [re.findall(r"[^\W_]+", value, flags=re.UNICODE) for value in texts]
     total_words = sum(len(items) for items in words)
     nonempty = sum(bool(value) for value in texts)
     long_unbroken = sum(
-        bool(re.search(r"[^\\W_]{24,}", value, flags=re.UNICODE))
+        bool(re.search(r"[^\W_]{24,}", value, flags=re.UNICODE))
         for value in texts
     )
     if nonempty < 5 or total_words < 20:
