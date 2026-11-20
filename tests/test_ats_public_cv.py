@@ -128,6 +128,16 @@ def test_unpublished_job_cannot_accept_cv(intake):
     assert err.value.status_code==404
 
 
+def confirm_synthetic_appointment(company_id,application_id):
+    with closing(database.get_connection()) as db:
+        db.execute("""INSERT INTO flow_candidate_appointment
+            (application_id,company_id,proposed_at,confirmed_at,confirmed_by,confirmed_on,updated_at)
+            VALUES(?,?,?,?,?,?,?)""",
+            (application_id,company_id,None,"2026-11-24T10:00:00+03:00",
+             "candidate","2026-11-20T15:00:00+03:00",ats.now()))
+        db.commit()
+
+
 def test_selin_public_intake_queue_approval_scoped_and_once(intake,monkeypatch):
     import selin_workflow
     manager,position,job,pdf,applicant=intake
@@ -138,6 +148,10 @@ def test_selin_public_intake_queue_approval_scoped_and_once(intake,monkeypatch):
     assert len(q)==1 and q[0]["position"]=="Depo Personeli"
     assert q[0]["status"]=="pending_review" and q[0]["source"]=="linkedin"
     assert ats_public_cv.list_intake(2222)==[]
+    with pytest.raises(HTTPException) as unconfirmed:
+        ats_public_cv.decide_intake(manager,app_id,"start",None,None,None)
+    assert unconfirmed.value.status_code==409
+    confirm_synthetic_appointment(manager.company_id,app_id)
     calls=[]
     def fake_begin(actor,app,doc,*args):
         calls.append((actor.company_id,app,doc))
@@ -179,6 +193,7 @@ def test_selin_intake_failed_processing_never_automatically_retries(intake,monke
     manager,position,job,pdf,applicant=intake
     manager.products=("ats","ai")
     result=ats_public_cv.submit(manager.company_id,job,applicant,"cv.pdf",pdf,"social","203.0.113.45")
+    confirm_synthetic_appointment(manager.company_id,result["application_id"])
     calls=[]
     def fail(*args):
         calls.append(1)
