@@ -14,6 +14,7 @@ import ik_cv_invites
 from services import invite_email
 import interview_assessments
 import selin_workflow
+import ats_public_cv
 import ats_workflow
 import ats_upload_queue
 import ats_matching
@@ -120,6 +121,7 @@ async def lifespan(_app):
     academy_assignments.initialize_schema()
     academy_video.initialize_schema()
     selin_workflow.initialize_schema()
+    ats_public_cv.initialize_schema()
     # Explicit, one-time ERNASA education demo cleanup. Never enabled by default.
     if os.getenv("ERNASA_TRAINING_DEMO_CLEANUP") == "keep-merve-20261120":
         import training_demo_cleanup_20261120
@@ -691,6 +693,34 @@ def send_ats_application(job_id: str, fields: ats.PublicApplication, profile: di
         if error.status_code != 409:
             raise
         return {"success":True}
+
+
+# A published ERNASA HR job can accept a PDF/DOCX resume directly.
+# Each request is tenant-scoped and protected by the same candidate notice.
+@app.post("/api/ats/jobs/{job_id}/apply-with-cv",status_code=201)
+def send_ats_application_cv(
+    job_id: str,
+    name: str = Form(...,min_length=1,max_length=160),
+    email: str = Form(...,min_length=3,max_length=254),
+    phone: str = Form(default="",max_length=50),
+    notice_version: str = Form(...,min_length=1,max_length=40),
+    acknowledge: bool = Form(...),
+    source: str = Form(default="direct",max_length=32),
+    cv: UploadFile = File(...),
+    request: Request = None,
+    profile: dict = Depends(public_ats_company)
+):
+    if not ats_public_cv.enabled():
+        raise HTTPException(404,"CV başvurusu etkin değil.")
+    # Do not trust proxy headers. Use only the ASGI connection peer for rate limiting.
+    client_ip=request.client.host if request and request.client else ""
+    fields=ats.PublicApplication(name=name,email=email,phone=phone,
+                                 acknowledge=acknowledge,notice_version=notice_version)
+    result=ats_public_cv.submit(profile["company_id"],job_id,fields,
+                                cv.filename or "cv",cv.file.read(ats.MAX_DOCUMENT+1),
+                                source,client_ip)
+    # The public response never exposes internal tenant or candidate identifiers.
+    return {"success":True,"message":"Başvurunuz ve CV dosyanız kaydedildi."}
 
 
 @app.patch("/api/ik/ats/applications/{application_id}/stage")
