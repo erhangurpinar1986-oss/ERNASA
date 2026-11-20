@@ -13,6 +13,7 @@ import ats_cv_import
 import ik_cv_invites
 from services import invite_email
 import interview_assessments
+import selin_workflow
 import ats_workflow
 import ats_upload_queue
 import ats_matching
@@ -118,6 +119,7 @@ async def lifespan(_app):
     academy_audio.initialize_schema()
     academy_assignments.initialize_schema()
     academy_video.initialize_schema()
+    selin_workflow.initialize_schema()
     # Explicit, one-time ERNASA education demo cleanup. Never enabled by default.
     if os.getenv("ERNASA_TRAINING_DEMO_CLEANUP") == "keep-merve-20261120":
         import training_demo_cleanup_20261120
@@ -147,6 +149,7 @@ async def lifespan(_app):
         workers = [
             asyncio.create_task(ats_upload_queue.worker(UPLOAD_DIRECTORY,stop)),
             asyncio.create_task(interview_assessments.worker(generate_job_fit_analysis,stop)),
+            asyncio.create_task(selin_workflow.worker(stop)),
         ]
         try:
             yield
@@ -1244,6 +1247,47 @@ def create_linked_ai_interview(application_id: str, fields: LinkedInterview,
                                actor: portal_access.Actor = Depends(require_combined)):
     text = ats_matching.source_text(UPLOAD_DIRECTORY,actor,application_id,fields.document_id) if fields.document_id else ''
     return save_interview_link({'cv_text':text}, actor, application_id,cv_document_id=fields.document_id)
+
+
+
+# SELİN automated candidate-to-training case flow (tenant-scoped and opt-in).
+# Existing ATS, interview, PDF and Academy routes remain unchanged.
+class SelinStart(BaseModel):
+    document_id: str = Field(min_length=1,max_length=64)
+
+
+@app.post("/api/ik/selin/applications/{application_id}/start",status_code=201)
+def selin_start(application_id: str,body: SelinStart,
+                actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return selin_workflow.begin(actor,application_id,body.document_id,UPLOAD_DIRECTORY,
+                                save_interview_link,send_interview_invitation_email)
+
+
+@app.get("/api/ik/selin/cases")
+def selin_cases(actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return {"cases":selin_workflow.list_cases(actor.company_id)}
+
+
+@app.get("/api/ik/selin/cases/{case_id}")
+def selin_case(case_id: str,actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return selin_workflow.get_case(actor.company_id,case_id)
+
+
+@app.get("/api/ik/selin/cases/{case_id}/report.pdf")
+def selin_case_pdf(case_id: str,actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    data=selin_workflow.archived_pdf(actor.company_id,case_id)
+    return Response(data,media_type="application/pdf",
+                    headers={"Content-Disposition":'attachment; filename="ERNASA_SELIN_Mulakat_Raporu.pdf"'})
+
+
+@app.get("/api/ik/selin/cases/{case_id}/evaluation")
+def selin_case_evaluation(case_id: str,actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return selin_workflow.evaluation(actor.company_id,case_id)
 
 
 @app.get("/api/ik/ats/applications/{application_id}/documents/{document_id}/match")
