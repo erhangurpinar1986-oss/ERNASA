@@ -69,6 +69,24 @@ DDL = (
         document_id TEXT PRIMARY KEY REFERENCES ats_documents(id) ON DELETE CASCADE,
         company_id BIGINT NOT NULL, application_id TEXT NOT NULL REFERENCES ats_applications,
         digest TEXT NOT NULL, content_base64 TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS flow_screening_jobs (
+        document_id TEXT PRIMARY KEY REFERENCES ats_documents(id) ON DELETE CASCADE,
+        company_id BIGINT NOT NULL, application_id TEXT NOT NULL,
+        available_at TEXT NOT NULL)""",
+    """CREATE INDEX IF NOT EXISTS flow_screening_jobs_ready
+        ON flow_screening_jobs(available_at,document_id)""",
+    """CREATE TABLE IF NOT EXISTS flow_booking_jobs (
+        application_id TEXT PRIMARY KEY REFERENCES ats_applications(id) ON DELETE CASCADE,
+        company_id BIGINT NOT NULL, document_id TEXT NOT NULL,
+        manager_id BIGINT NOT NULL, access_version TEXT NOT NULL,
+        slug TEXT NOT NULL, origin TEXT NOT NULL, status TEXT NOT NULL,
+        token_hash TEXT UNIQUE, expires_at TEXT, schedule_id TEXT,
+        error_code TEXT, updated_at TEXT NOT NULL)""",
+    """CREATE INDEX IF NOT EXISTS flow_booking_jobs_ready
+        ON flow_booking_jobs(status,updated_at)""",
+    """CREATE TABLE IF NOT EXISTS flow_scheduled_interviews (
+        token TEXT PRIMARY KEY REFERENCES interview_links(token) ON DELETE CASCADE,
+        company_id BIGINT NOT NULL, schedule_id TEXT NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS ats_interview_cv_sources (
         token TEXT PRIMARY KEY REFERENCES interview_links, company_id BIGINT NOT NULL,
         document_id TEXT NOT NULL REFERENCES ats_documents ON DELETE CASCADE)""",

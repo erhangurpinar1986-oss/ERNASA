@@ -5,10 +5,13 @@ configured job criteria; missing evidence never becomes a fabricated zero.
 All queries are tenant/role scoped. Sending email or minting interview links is
 out of scope for screening and permission requests.
 """
+import asyncio
 import hashlib
 import json
+import logging
 from contextlib import closing
-from datetime import datetime,timezone
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -81,10 +84,111 @@ def _result_row(c,tenant,application_id,document_id):
 
 
 def _permission(c,tenant,application_id):
-    c.execute("""SELECT id,status,requested_at,decided_at FROM flow_interview_permissions
-        WHERE company_id=? AND application_id=?""",(tenant,application_id))
+    c.execute("""SELECT p.id,p.status,p.requested_at,p.decided_at,b.status AS booking_status,
+            s.starts_at AS booked_at
+        FROM flow_interview_permissions p
+        LEFT JOIN flow_booking_jobs b ON b.application_id=p.application_id AND b.company_id=p.company_id
+        LEFT JOIN ats_schedules s ON s.id=b.schedule_id AND s.company_id=p.company_id
+        WHERE p.company_id=? AND p.application_id=?""",(tenant,application_id))
     row=c.fetchone()
     return dict(row) if row else None
+
+
+def _screen_document(actor, position_id, cv_root, app_id, doc, criteria, criteria_digest, existing):
+    if existing and existing["position_id"]==position_id and existing["cv_digest"]==doc["digest"] and existing["criteria_digest"]==criteria_digest:
+        data=json.loads(existing["details_json"])
+    else:
+        try:
+            data=ats_matching.evidence_match(cv_root,actor,app_id,doc["id"])
+        except HTTPException as exc:
+            # Access restriction and corrupted archives are not hidden.
+            if exc.status_code==403:
+                raise
+            data={"match_score":None,"evidence_coverage":None,
+                  "requirements":[],
+                  "reason":"Belge analizi başarısız; manuel kontrol gerekiyor."}
+        except (OSError,ValueError,RuntimeError):
+            data={"match_score":None,"evidence_coverage":None,
+                  "requirements":[],"reason":"CV incelenemedi; manuel kontrol gerekiyor."}
+        if not criteria:
+            state="criteria_missing"
+        elif data.get("match_score") is None:
+            state="review_required"
+        else:
+            state="analyzed"
+        # Save observed analysis, never invent absent scores.
+        with write(actor.company_id) as c:
+            application = ats.application(c, actor, app_id)
+            _, _, current_digest = _job_criteria(c, actor.company_id, position_id)
+            if application["position_id"] != position_id or current_digest != criteria_digest:
+                raise HTTPException(409,"Pozisyon veya kriterler değişti. ATS değerlendirmesi yenileniyor.")
+            c.execute("""INSERT INTO flow_screening_results
+                (company_id,application_id,position_id,document_id,cv_digest,
+                 criteria_digest,analysis_state,match_score,coverage,details_json,analyzed_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(company_id,application_id,document_id) DO UPDATE SET
+                    position_id=excluded.position_id,cv_digest=excluded.cv_digest,
+                    criteria_digest=excluded.criteria_digest,
+                    analysis_state=excluded.analysis_state,match_score=excluded.match_score,
+                    coverage=excluded.coverage,details_json=excluded.details_json,
+                    analyzed_at=excluded.analyzed_at""",
+                (actor.company_id,app_id,position_id,doc["id"],doc["digest"],
+                 criteria_digest,state,data.get("match_score"),
+                 data.get("evidence_coverage"),
+                 json.dumps(data,ensure_ascii=False,default=str),now()))
+        existing={"analysis_state":state}
+    return existing, data
+
+
+def process_one(cv_root):
+    with closing(get_connection()) as db:
+        c = db.cursor()
+        c.execute("""SELECT q.company_id,q.application_id,q.document_id,a.position_id,d.digest
+            FROM flow_screening_jobs q
+            JOIN ats_applications a ON a.id=q.application_id AND a.company_id=q.company_id
+            JOIN ats_document_digests d ON d.document_id=q.document_id
+                AND d.company_id=q.company_id AND d.application_id=q.application_id
+            WHERE q.available_at<=? ORDER BY q.available_at,q.document_id LIMIT 1""", (now(),))
+        job = c.fetchone()
+        if job is None:
+            return False
+        tenant, app_id, doc_id = job["company_id"], job["application_id"], job["document_id"]
+        position_id = job["position_id"]
+    # This internal actor can only process the tenant and document in a committed job.
+    actor = SimpleNamespace(company_id=tenant, role="hr_manager", user_id=None)
+    try:
+        with closing(get_connection()) as db:
+            c = db.cursor()
+            _, criteria, criteria_digest = _job_criteria(c, tenant, position_id)
+            existing = _result_row(c, tenant, app_id, doc_id)
+        _screen_document(actor, position_id, cv_root, app_id,
+                         {"id":doc_id, "digest":job["digest"]}, criteria, criteria_digest, existing)
+    except Exception as error:
+        logging.getLogger(__name__).warning("ATS screening job deferred (%s)", type(error).__name__)
+        retry_at = (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat()
+        with write(tenant) as c:
+            c.execute("""UPDATE flow_screening_jobs SET available_at=?
+                WHERE company_id=? AND application_id=? AND document_id=?""",
+                (retry_at, tenant, app_id, doc_id))
+    else:
+        with write(tenant) as c:
+            c.execute("""DELETE FROM flow_screening_jobs
+                WHERE company_id=? AND application_id=? AND document_id=?""",
+                (tenant, app_id, doc_id))
+    return True
+
+
+async def worker(cv_root, stop):
+    while not stop.is_set():
+        try:
+            if await asyncio.to_thread(process_one, cv_root):
+                continue
+        except Exception as error:
+            logging.getLogger(__name__).warning("ATS screening queue unavailable (%s)", type(error).__name__)
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=1)
+        except TimeoutError:
+            pass
 
 
 def screen_position(actor,position_id,cv_root,limit=20,offset=0):
@@ -129,43 +233,8 @@ def screen_position(actor,position_id,cv_root,limit=20,offset=0):
                           note="Belge bütünlük kanıtı yok; manuel inceleyin.")
             output.append(record)
             continue
-        if existing and existing["cv_digest"]==doc["digest"] and existing["criteria_digest"]==criteria_digest:
-            data=json.loads(existing["details_json"])
-        else:
-            try:
-                data=ats_matching.evidence_match(cv_root,actor,app_id,doc["id"])
-            except HTTPException as exc:
-                # Access restriction and corrupted archives are not hidden.
-                if exc.status_code==403:
-                    raise
-                data={"match_score":None,"evidence_coverage":None,
-                      "requirements":[],
-                      "reason":"Belge analizi başarısız; manuel kontrol gerekiyor."}
-            except (OSError,ValueError,RuntimeError):
-                data={"match_score":None,"evidence_coverage":None,
-                      "requirements":[],"reason":"CV incelenemedi; manuel kontrol gerekiyor."}
-            if not criteria:
-                state="criteria_missing"
-            elif data.get("match_score") is None:
-                state="review_required"
-            else:
-                state="analyzed"
-            # Save observed analysis, never invent absent scores.
-            with write(actor.company_id) as c:
-                c.execute("""INSERT INTO flow_screening_results
-                    (company_id,application_id,position_id,document_id,cv_digest,
-                     criteria_digest,analysis_state,match_score,coverage,details_json,analyzed_at)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?)
-                    ON CONFLICT(company_id,application_id,document_id) DO UPDATE SET
-                        cv_digest=excluded.cv_digest,criteria_digest=excluded.criteria_digest,
-                        analysis_state=excluded.analysis_state,match_score=excluded.match_score,
-                        coverage=excluded.coverage,details_json=excluded.details_json,
-                        analyzed_at=excluded.analyzed_at""",
-                    (actor.company_id,app_id,position_id,doc["id"],doc["digest"],
-                     criteria_digest,state,data.get("match_score"),
-                     data.get("evidence_coverage"),
-                     json.dumps(data,ensure_ascii=False,default=str),now()))
-            existing={"analysis_state":state}
+        existing, data = _screen_document(
+            actor, position_id, cv_root, app_id, doc, criteria, criteria_digest, existing)
         record.update(document_id=doc["id"],
                       analysis_state=existing["analysis_state"],
                       match_score=data.get("match_score"),
@@ -223,7 +292,7 @@ def request_permission(actor,application_id,document_id):
     return {"id":request_id,"status":"pending","requested_at":when,"decided_at":None}
 
 
-def decide_permission(actor,request_id,decision):
+def decide_permission(actor,request_id,decision, *, on_approved=None):
     """Manager approves the HR request, NOT an unscheduled email or hiring."""
     if actor.role not in recruitment.MANAGERS or "ats" not in actor.products:
         raise HTTPException(403,"İK yönetici yetkisi gerekli.")
@@ -243,5 +312,7 @@ def decide_permission(actor,request_id,decision):
             (decision,actor.user_id,now(),request_id,actor.company_id))
         if c.rowcount!=1:
             raise HTTPException(409,"Talep eşzamanlı sonuçlandırıldı.")
+        if decision == "approved" and on_approved is not None:
+            on_approved(c, actor, row)
     return {"id":request_id,"status":decision,
             "notice":"Bu karar adaya davet göndermez. Aday bilgilendirmesi ve müsaitlik teyidi ayrıca gereklidir."}

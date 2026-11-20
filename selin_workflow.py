@@ -168,9 +168,12 @@ def get_case(tenant, case_id):
 def list_cases(tenant):
     with closing(get_connection()) as db:
         c=db.cursor()
-        c.execute("""SELECT id,application_id,document_id,status,created_at,updated_at,
-            error_code,interview_token,training_token_hash
-            FROM selin_cases WHERE company_id=? ORDER BY created_at DESC LIMIT 100""",(tenant,))
+        c.execute("""SELECT s.id,s.application_id,s.document_id,s.status,s.created_at,s.updated_at,
+            s.error_code,s.interview_token,s.training_token_hash,
+            CASE WHEN r.case_id IS NULL THEN 0 ELSE 1 END AS report_available
+            FROM selin_cases s LEFT JOIN selin_report_archives r
+                ON r.case_id=s.id AND r.company_id=s.company_id
+            WHERE s.company_id=? ORDER BY s.created_at DESC LIMIT 100""",(tenant,))
         return [dict(row) for row in c.fetchall()]
 
 
@@ -190,7 +193,7 @@ def _transition(case_id, tenant, from_state, to_state, *, interview=None, traini
     return changed
 
 
-def begin(actor, application_id, document_id, cv_root, create_interview, send_interview):
+def begin(actor, application_id, document_id, cv_root, create_interview, send_interview, *, booked=False):
     """Authenticated HR manager starts ONE case; no automated CV rejection."""
     if actor.company_id is None or actor.role not in recruitment.MANAGERS:
         raise HTTPException(403,"İK yönetici yetkisi gerekli.")
@@ -223,8 +226,13 @@ def begin(actor, application_id, document_id, cv_root, create_interview, send_in
     hr_flow_contacts.require_interview_ready(actor.company_id,application_id,document_id)
     # Tenant-scoped source lookup: never infer a qualification or penalize missing CV evidence.
     match=ats_matching.evidence_match(cv_root,actor,application_id,document_id)
-    cv_text=ats_matching.source_text(cv_root,actor,application_id,document_id)
-    if not cv_text.strip():
+    try:
+        cv_text=ats_matching.source_text(cv_root,actor,application_id,document_id)
+    except HTTPException as error:
+        if not booked or error.status_code not in (404, 422):
+            raise
+        cv_text = ""
+    if not booked and not cv_text.strip():
         raise HTTPException(422,"CV okunamadı; manuel doğrulama gerekiyor.")
     summary={"position_id":position_id,"position":position["name"],
              "match_score":match.get("match_score"),
@@ -252,7 +260,7 @@ def begin(actor, application_id, document_id, cv_root, create_interview, send_in
         token=result["interview_id"]
         if not _transition(case_id,actor.company_id,"created","interview_created",interview=token):
             raise RuntimeError("ERNASA HR FLOW interview state changed unexpectedly")
-        if os.getenv("ERNASA_SELIN_SEND_ENABLED") != "1":
+        if not booked and os.getenv("ERNASA_SELIN_SEND_ENABLED") != "1":
             return get_case(actor.company_id,case_id)
         if not _transition(case_id,actor.company_id,"interview_created","invitation_sending"):
             raise RuntimeError("ERNASA HR FLOW invitation claim failed")

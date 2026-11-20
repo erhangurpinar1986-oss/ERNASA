@@ -114,6 +114,15 @@ def start(token, tenant, deadline_passed, intro, generate):
     expired = False
     with write(tenant) as cursor:
         interview = load_interview(cursor, token, tenant)
+        cursor.execute("""SELECT s.starts_at,s.status FROM flow_scheduled_interviews f
+            JOIN ats_schedules s ON s.id=f.schedule_id AND s.company_id=f.company_id
+            WHERE f.token=? AND f.company_id=?""", (token,tenant))
+        schedule = cursor.fetchone()
+        if schedule and interview["status"] in ("waiting","created","opened"):
+            if schedule["status"] != "planned":
+                raise HTTPException(409,"Bu görüşme takvimde etkin değil.")
+            if schedule["starts_at"] > datetime.now(timezone.utc).isoformat():
+                raise HTTPException(409,"Görüşmeyi randevu saatinde başlatabilirsiniz.")
         status = interview['status']
         if status == 'completed':
             raise HTTPException(409, 'Bu mülakat zaten tamamlandı.')

@@ -16,6 +16,7 @@ import interview_assessments
 import selin_workflow
 import hr_flow_evidence
 import hr_flow_contacts
+import hr_flow_booking
 import hr_flow_screening
 import ats_public_cv
 import ats_workflow
@@ -104,7 +105,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         if os.getenv("ERNASA_IK_LOCAL_PREVIEW") == "1":
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
@@ -155,6 +156,8 @@ async def lifespan(_app):
         _app.state.control_server = control_server
         workers = [
             asyncio.create_task(ats_upload_queue.worker(UPLOAD_DIRECTORY,stop)),
+            asyncio.create_task(hr_flow_screening.worker(UPLOAD_DIRECTORY,stop)),
+            asyncio.create_task(hr_flow_booking.worker(start_booked_flow,stop)),
             asyncio.create_task(interview_assessments.worker(generate_job_fit_analysis,stop)),
             asyncio.create_task(selin_workflow.worker(stop)),
         ]
@@ -1220,6 +1223,10 @@ def require_combined(actor: portal_access.Actor = Depends(require_ats)):
 def send_interview_invitation_email(
     token: str, actor: portal_access.Actor = Depends(require_ai)
 ):
+    return _dispatch_interview_email(token,actor)
+
+
+def _dispatch_interview_email(token, actor, *, scheduled_at=None):
     """Dispatch an existing invitation using the verified ERNASA sender.
 
     Recipient and URL are read from the tenant-scoped stored invitation; the
@@ -1241,6 +1248,8 @@ def send_interview_invitation_email(
         if record is None:
             raise HTTPException(404, "Mülakat daveti bulunamadı.")
         candidate = dict(record)
+        if scheduled_at:
+            candidate["scheduled_at"] = scheduled_at
         if candidate["status"] not in ("waiting", "created", "opened"):
             raise HTTPException(409, "Bu mülakat için yeni davet gönderilemez.")
         if not candidate.get("expires_at") or datetime.fromisoformat(candidate["expires_at"]) <= now:
@@ -1359,7 +1368,67 @@ def flow_request_interview_permission(application_id: str,body: FlowPermissionRe
 @app.post("/api/ik/flow/permissions/{request_id}/decision")
 def flow_decide_interview_permission(request_id: str,body: FlowPermissionDecision,
                                      actor: portal_access.Actor = Depends(require_ats_manager)):
-    return hr_flow_screening.decide_permission(actor,request_id,body.decision)
+    return hr_flow_screening.decide_permission(actor,request_id,body.decision,
+                                              on_approved=hr_flow_booking.enqueue)
+
+
+def start_booked_flow(actor, application_id, document_id):
+    def create(candidate, approved_actor, app_id, *, cv_document_id):
+        return save_interview_link(candidate, approved_actor, app_id, cv_document_id=cv_document_id,
+                                   flow_booking=True)
+
+    def send(token, approved_actor):
+        with closing(get_connection()) as db:
+            cursor = db.cursor()
+            cursor.execute("""SELECT s.starts_at FROM flow_booking_jobs b JOIN ats_schedules s
+                ON s.company_id=b.company_id AND s.application_id=b.application_id AND s.id=b.schedule_id
+                WHERE b.company_id=? AND b.application_id=? AND s.status='planned'""",
+                (approved_actor.company_id,application_id))
+            appointment = cursor.fetchone()
+        if not appointment:
+            raise HTTPException(409,"Görüşme takvimi değişmiş.")
+        return _dispatch_interview_email(token,approved_actor,scheduled_at=appointment["starts_at"])
+
+    return selin_workflow.begin(actor, application_id, document_id, UPLOAD_DIRECTORY,
+                                create, send, booked=True)
+
+
+def booking_page(message, *, form=False, status=200):
+    fields = (
+        '<form method="post"><label>Görüşme saati (Türkiye saati) '
+        '<input type="datetime-local" name="starts_at" required></label>'
+        '<p><button type="submit">Görüşme saatini onayla</button></p></form>'
+    ) if form else ""
+    return HTMLResponse(
+        '<!doctype html><html lang="tr"><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>ERNASA · Mülakat Uygunluğu</title>'
+        '<main><h1>Mülakat için uygun gün ve saat</h1>'
+        f'<p>{escape(message)}</p>{fields}</main></html>',
+        status_code=status, headers={"Cache-Control":"no-store","Referrer-Policy":"no-referrer"})
+
+
+@app.get("/mulakat-uygunluk/{token}")
+def flow_booking_page(token: str, request: Request):
+    portal = portal_access.portal_for(request)
+    if not portal or not __import__("re").fullmatch(r"[A-Za-z0-9_-]{43}",token):
+        raise HTTPException(404)
+    job = hr_flow_booking.booking(token,portal.slug)
+    if job["status"] != "waiting":
+        return booking_page("Görüşme saatiniz kaydedildi. Davet e-postası hazırlandığında gönderilecek.")
+    return booking_page("Önümüzdeki 30 gün içinde 30 dakikalık görüşme için uygun bir saat seçin.",form=True)
+
+
+@app.post("/mulakat-uygunluk/{token}")
+def flow_confirm_booking(token: str, request: Request, starts_at: str = Form(..., max_length=16)):
+    portal = portal_access.portal_for(request)
+    if not portal or not __import__("re").fullmatch(r"[A-Za-z0-9_-]{43}",token):
+        raise HTTPException(404)
+    try:
+        hr_flow_booking.confirm(token,portal.slug,starts_at)
+    except HTTPException as error:
+        return booking_page(str(error.detail),form=error.status_code in (409,422),status=error.status_code)
+    return RedirectResponse(url=request.url.path,status_code=303,headers={"Referrer-Policy":"no-referrer"})
 
 
 @app.get("/api/ik/selin/intake/{application_id}/contact-status")
@@ -1440,7 +1509,7 @@ def match_ats_document_supplied_text(
 
 def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=False, partner_questions=None,
                         partner_template=None, draft_id=None, cv_evidence=(), cv_document_id=None,
-                        active_cursor=None, introduction=None):
+                        active_cursor=None, introduction=None, flow_booking=False):
     company_name = _ik.company_name if _ik.portal else candidate.get("company", "")
     if _ik.portal and not company_name:
         raise HTTPException(503, "Doğrulanmış firma unvanı alınamadı.")
@@ -1470,6 +1539,17 @@ def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=Fa
                     raise HTTPException(400, "Geçersiz pozisyon.")
                 position = recruitment.position_name(cursor, _ik.company_id, position_id)
                 recruitment.staff_position(cursor, _ik, position_id)
+            if flow_booking:
+                hr_flow_contacts.require_fresh_approval(cursor,_ik.company_id,application_id,cv_document_id)
+                cursor.execute("""SELECT s.id,s.starts_at FROM flow_booking_jobs b
+                    JOIN ats_schedules s ON s.company_id=b.company_id
+                        AND s.application_id=b.application_id AND s.id=b.schedule_id
+                    WHERE b.company_id=? AND b.application_id=? AND s.status='planned'""",
+                    (_ik.company_id,application_id))
+                appointment = cursor.fetchone()
+                if not appointment:
+                    raise HTTPException(409,"Onaylı görüşme saati bulunamadı.")
+                expires_at = datetime.fromisoformat(appointment["starts_at"]) + timedelta(hours=8)
             recruitment.enforce_interview_quota(cursor, _ik)
             template = (partner_template if partner_questions else portal_access.control_call(
                 _ik.portal,"interview_template",id=str(_ik.company_id),position_id=position_id or ""))
@@ -1489,6 +1569,9 @@ def save_interview_link(candidate, _ik, application_id=None, *, ernasa_invite=Fa
               created_at.isoformat(), "waiting", candidate.get("cv_text", ""),
               _ik.company_id, position_id, _ik.user_id, application_id))
         if _ik.portal:
+            if flow_booking:
+                cursor.execute("INSERT INTO flow_scheduled_interviews VALUES(?,?,?)",
+                               (interview_id,_ik.company_id,appointment["id"]))
             if cv_document_id:
                 cursor.execute("INSERT INTO ats_interview_cv_sources VALUES (?,?,?)",
                                (interview_id,_ik.company_id,cv_document_id))

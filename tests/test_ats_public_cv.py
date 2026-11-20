@@ -322,15 +322,17 @@ def test_flow_position_screening_and_permission_full_human_gate(intake,tmp_path)
     hr_flow_screening.initialize_schema()
     entry=ats_public_cv.submit(manager.company_id,job,applicant,
                                "cv.pdf",pdf,"direct","203.0.113.51")
-    first=hr_flow_screening.screen_position(manager,position,tmp_path)
-    assert first["total"]==1
-    item=first["candidates"][0]
-    assert item["candidate"]=="Test Basvuran"
-    assert item["match_score"] is None
-    assert item["analysis_state"]=="criteria_missing"
     with pytest.raises(HTTPException) as exc:
         hr_flow_screening.request_permission(manager,entry["application_id"],entry["document_id"])
     assert exc.value.status_code==409
+    assert hr_flow_screening.process_one(tmp_path)
+    assert not hr_flow_screening.process_one(tmp_path)
+    with closing(database.get_connection()) as db:
+        row = db.execute("SELECT analysis_state,match_score FROM flow_screening_results").fetchone()
+        assert row["analysis_state"] == "criteria_missing"
+        assert row["match_score"] is None
+    request = hr_flow_screening.request_permission(manager,entry["application_id"],entry["document_id"])
+    assert request["status"] == "pending"
     with closing(database.get_connection()) as db:
         c=db.cursor()
         c.execute("SELECT fields FROM ats_position_profiles WHERE position_id=?",(position,))
@@ -370,6 +372,51 @@ def test_flow_position_screening_and_permission_full_human_gate(intake,tmp_path)
     assert hr_flow_screening.screen_position(manager,position,tmp_path)["candidates"][0]["permission"]["status"]=="approved"
     with closing(database.get_connection()) as db:
         assert db.execute("SELECT COUNT(*) FROM interview_links").fetchone()[0]==0
+
+
+def test_queued_cv_upload_scores_synthetic_wms_cv(intake, tmp_path, monkeypatch):
+    import json
+
+    import ats_upload_queue
+    import hr_flow_screening
+
+    manager, position, job, pdf, applicant = intake
+    entry = ats_public_cv.submit(manager.company_id, job, applicant,
+                                 "original.pdf", pdf, "direct", "203.0.113.52")
+    assert hr_flow_screening.process_one(tmp_path)
+    with closing(database.get_connection()) as db:
+        profile = db.execute("SELECT fields FROM ats_position_profiles WHERE position_id=?",
+                             (position,)).fetchone()
+        fields = json.loads(profile["fields"])
+        fields["matching_criteria"] = "Yetkinlik | WMS deneyimi | 80 | wms"
+        db.execute("UPDATE ats_position_profiles SET fields=? WHERE position_id=?",
+                   (json.dumps(fields), position))
+        db.commit()
+
+    manager.portal = ats_upload_queue.control.Portal("synthetic", "")
+    manager.access_version = "test"
+    monkeypatch.setattr(ats_upload_queue.control, "control_call", lambda *args, **kwargs: {
+        "company_id": manager.company_id, "version": manager.access_version,
+        "role": manager.role, "products": manager.products,
+    })
+    # Generate a distinct PDF for the existing application.
+    with pymupdf.open() as doc:
+        doc.new_page().insert_text((72, 100), "Warehouse experience: WMS and inventory tracking.")
+        replacement = doc.tobytes()
+    upload = ats_upload_queue.enqueue(manager, entry["application_id"], "replacement.pdf", replacement)
+    assert ats_upload_queue.process_one(tmp_path)
+    assert ats_upload_queue.jobs(manager, entry["application_id"])[0]["status"] == "ready"
+    assert hr_flow_screening.process_one(tmp_path)
+    assert not hr_flow_screening.process_one(tmp_path)
+    with closing(database.get_connection()) as db:
+        row = db.execute("SELECT * FROM flow_screening_results WHERE document_id=?",
+                         (upload["id"],)).fetchone()
+        assert row["company_id"] == manager.company_id
+        assert row["position_id"] == position
+        assert row["analysis_state"] == "analyzed"
+        assert row["match_score"] == 100
+        assert db.execute("SELECT COUNT(*) FROM interview_links").fetchone()[0] == 0
+        assert db.execute("SELECT COUNT(*) FROM flow_interview_permissions").fetchone()[0] == 0
 
 
 def test_flow_screening_honors_staff_visibility_and_stale_criteria(intake,tmp_path):
@@ -433,3 +480,94 @@ def test_interview_readiness_fails_when_source_or_approval_changes(intake):
         db.execute("UPDATE flow_interview_permissions SET status='declined' WHERE application_id=?",(app_id,))
         db.commit()
     assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,doc) is False
+
+
+def test_synthetic_flow_approval_booking_invite_and_pdf(intake, tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from urllib.parse import urlsplit
+
+    from fastapi.testclient import TestClient
+
+    import hr_flow_booking
+    import hr_flow_contacts
+    import hr_flow_screening
+    import selin_workflow
+    import openai
+
+    monkeypatch.setattr(openai,"OpenAI",lambda **kwargs: object())
+    from backend import main
+    from services import invite_email
+
+    manager, position, job, pdf, applicant = intake
+    selin_workflow.initialize_schema()
+    monkeypatch.setattr(main, "UPLOAD_DIRECTORY", tmp_path)
+    monkeypatch.setenv("ERNASA_IK_CONTROL_URL", "https://control.example.test")
+    portal = main.portal_access.Portal("synthetic", "https://synthetic.ernasa.com")
+    actor = main.portal_access.Actor(manager.company_id, manager.role, portal, manager.user_id,
+                                     "revision-1", "Sentetik Firma", products=("ats", "ai"))
+
+    def control_call(portal, operation, **kwargs):
+        if operation == "session":
+            return {"company_id": actor.company_id, "role": actor.role, "version": actor.access_version,
+                    "company_name": actor.company_name, "products": actor.products}
+        assert operation == "interview_template"
+        return {}
+
+    monkeypatch.setattr(main.portal_access, "control_call", control_call)
+    monkeypatch.setattr(invite_email, "configured_sender", lambda: ("fake", "synthetic@example.test"))
+    outgoing = []
+
+    def send_availability(candidate, url, **kwargs):
+        assert candidate["email"] == applicant.email
+        outgoing.append(("availability", url))
+        return "synthetic-availability-id"
+
+    def send_invitation(candidate, url, **kwargs):
+        assert candidate["email"] == applicant.email
+        assert candidate["scheduled_at"]
+        assert "Türkiye saati" in invite_email.invitation_message(candidate, url)[2]
+        outgoing.append(("invitation", url))
+        return "synthetic-interview-id"
+
+    monkeypatch.setattr(invite_email, "send_invitation", send_invitation)
+    entry = ats_public_cv.submit(actor.company_id, job, applicant, "cv.pdf", pdf, "direct", "203.0.113.99")
+    app_id, doc_id = entry["application_id"], entry["document_id"]
+    assert hr_flow_screening.process_one(tmp_path)
+    assert not hr_flow_booking.process_one(main.start_booked_flow, send_availability)
+    permission = hr_flow_screening.request_permission(actor, app_id, doc_id)
+    main.flow_decide_interview_permission(permission["id"], main.FlowPermissionDecision(decision="approved"), actor)
+    assert hr_flow_booking.process_one(main.start_booked_flow, send_availability)
+    assert not hr_flow_booking.process_one(main.start_booked_flow, send_availability)
+    assert [kind for kind, _ in outgoing] == ["availability"]
+    url = urlsplit(outgoing[0][1]).path
+    start = (datetime.now(hr_flow_booking.LOCAL_ZONE) + timedelta(days=2)).strftime("%Y-%m-%dT%H:%M")
+    client = TestClient(main.app, base_url=portal.origin)
+    assert client.get(url).status_code == 200
+    foreign = TestClient(main.app, base_url="https://other.ernasa.com")
+    assert foreign.get(url).status_code == 404
+    assert client.post(url, data={"starts_at":"2020-01-01T09:00"}).status_code == 422
+    assert "Görüşme saatiniz kaydedildi" in client.post(url, data={"starts_at":start}).text
+    assert client.post(url, data={"starts_at":start}).status_code == 200
+    assert hr_flow_contacts.may_create_interview_link(actor.company_id, app_id, doc_id)
+    assert hr_flow_booking.process_one(main.start_booked_flow, send_availability)
+    assert not hr_flow_booking.process_one(main.start_booked_flow, send_availability)
+    assert [kind for kind, _ in outgoing] == ["availability", "invitation"]
+    token = urlsplit(outgoing[1][1]).path.rsplit("/",1)[1]
+    early = main.portal_interviews.start
+    with pytest.raises(HTTPException) as ex:
+        early(token, actor.company_id, main._link_deadline_passed, main._intro_question, lambda *args: None)
+    assert ex.value.status_code == 409
+    with closing(database.get_connection()) as db:
+        assert db.execute("SELECT COUNT(*) FROM ats_schedules").fetchone()[0] == 1
+        assert db.execute("SELECT COUNT(*) FROM interview_links").fetchone()[0] == 1
+        record = db.execute("SELECT expires_at FROM interview_links WHERE token=?", (token,)).fetchone()
+        assert datetime.fromisoformat(record["expires_at"]) > datetime.now(timezone.utc) + timedelta(days=1)
+        app = db.execute("SELECT closure FROM ats_applications WHERE id=?", (app_id,)).fetchone()
+        assert app["closure"] is None
+        db.execute("UPDATE interview_links SET status='completed' WHERE token=?", (token,))
+        db.execute("INSERT INTO interview_reports VALUES (?,?,?)", (token, "Sentetik mülakat değerlendirmesi", ats.now()))
+        db.commit()
+    assert selin_workflow.process_one()
+    case = selin_workflow.list_cases(actor.company_id)[0]
+    assert case["report_available"] == 1
+    assert main.selin_case_pdf(case["id"], actor).body.startswith(b"%PDF-")

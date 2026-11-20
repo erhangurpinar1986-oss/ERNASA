@@ -366,7 +366,7 @@ if (companyPortalPage) {
                             body.append("selection",JSON.stringify({...selection,import_id:row.data.import_id}));
                             const result = await api("ats/cv-import/save","POST",body);
                             row.outcome = result.status;
-                            row.status.textContent = result.status === "saved" ? "Kaydedildi" : "Atlandı · " + result.message;
+                            row.status.textContent = result.status === "saved" ? "Kaydedildi · ATS değerlendirme kuyruğuna alındı" : "Atlandı · " + result.message;
                             row.done = true;
                             row.checked.checked = false;
                             row.checked.disabled = true;
@@ -436,19 +436,28 @@ if (companyPortalPage) {
                     }));
                     if(c.permission){
                         box.append(el("span",({pending:"Mülakat izni bekliyor",approved:"Mülakat izni onaylandı",declined:"Mülakat izni reddedildi"})[c.permission.status]||c.permission.status));
+                        const bookingStatus = {
+                            pending_email:"Uygunluk e-postası sırada", sending:"Uygunluk e-postası işleniyor",
+                            waiting:"Adayın gün ve saat seçimi bekleniyor", booked:"Görüşme kaydedildi",
+                            dispatching:"Mülakat daveti işleniyor", finished:"Mülakat daveti e-posta sağlayıcısına iletildi",
+                            failed:"Randevu veya e-posta işlemi İK kontrolü gerektiriyor"
+                        }[c.permission.booking_status];
+                        if(bookingStatus) box.append(el("span",bookingStatus));
+                        if(c.permission.booked_at) box.append(el("span",
+                            new Date(c.permission.booked_at).toLocaleString("tr-TR",{timeZone:"Europe/Istanbul"})));
                         if(manager()&&c.permission.status==="pending"){
                             for(const [decision,label] of [["approved","İzni Onayla"],["declined","İzni Reddet"]]){
                                 box.append(action(label,async button=>{
                                     button.disabled=true;
                                     try{
                                         await api("flow/permissions/"+encodeURIComponent(c.permission.id)+"/decision","POST",{decision});
-                                        notice(decision==="approved"?"İzin onaylandı; adayın teyidi olmadan mülakat bağlantısı gönderilmeyecek.":"İzin reddedildi; ATS başvurusu korundu.");
+                                        notice(decision==="approved"?"İzin onaylandı. FLOW, adaydan uygun görüşme saatini isteyecek.":"İzin reddedildi; ATS başvurusu korundu.");
                                         await renderFlow();
                                     }catch(error){notice(error.message,true);button.disabled=false}
                                 }));
                             }
                         }
-                    }else if(c.has_cv && c.document_id && c.analysis_state==="analyzed"){
+                    }else if(c.has_cv && c.document_id && ["analyzed","review_required","criteria_missing"].includes(c.analysis_state)){
                         box.append(action("Mülakat İçin İzin İste",async button=>{
                             button.disabled=true;
                             try{
@@ -459,7 +468,7 @@ if (companyPortalPage) {
                             }catch(error){notice(error.message,true);button.disabled=false}
                         }));
                     }else{
-                        box.append(el("span","İzin talebi için önce doğrulanabilir ATS analizi gerekiyor."));
+                        box.append(el("span","İzin talebi için önce ATS ön değerlendirmesi gerekiyor."));
                     }
                     panel.append(box);records.append(panel);
                 }
@@ -1169,13 +1178,13 @@ if (companyPortalPage) {
     // Native IK V5 dashboard for HR FLOW: observe operations, prioritize
     // manager-only decisions. Never imply an email was delivered when prepared.
     async function flow(root) {
-        root.append(el("p","Hedef: FLOW ilk mülakat dahil operasyonu yürütür. İK yalnızca onay, ikinci görüşme, ek eğitim veya ret kararını verir. Bu otomasyonun eksik parçaları tamamlanmadan canlı gönderimler başlamaz."));
+        root.append(el("p","İK onayından sonra FLOW adaydan uygun görüşme saatini ister ve teyit edilen randevu için davet gönderir."));
         const overview=el("section","",{class:"saas-panel"});
         const decisions=el("section","",{class:"saas-panel"});
         const casesArea=el("section","",{class:"saas-panel"});
         root.append(action("Durumu Yenile",()=>open("flow")),overview,decisions,casesArea);
-        const [settings,intake,cases]=await Promise.all([
-            api("selin/automation"),api("selin/intake"),api("selin/cases")
+        const [intake,cases]=await Promise.all([
+            api("selin/intake"),api("selin/cases")
         ]);
         const entries=intake.applications||[];
         const processes=cases.cases||[];
@@ -1190,12 +1199,8 @@ if (companyPortalPage) {
             card.append(el("strong",String(value)),el("span",label));
             stats.append(card);
         }
-        overview.append(el("h3","HR FLOW Operasyon Merkezi"),stats,
-            el("p",settings.ready&&settings.enabled?
-                "Mevcut otomasyon ayarları etkin. Aday teyidi ve güvenlik koşulları yine zorunludur.":
-                "Tam otomatik ilk mülakat henüz etkin değil. Aday saat teyidi ve e-posta doğrulaması tamamlanmalıdır."));
-        decisions.append(el("h3","İK Karar Merkezi"),
-            el("p","Hedef kararlar: Onay · İkinci görüşme · Ek eğitim · Ret. İlk mülakat ve rutin aday iletişimi otomatik yürütülecek. Nihai işe alım kararı insan denetiminde kalır."));
+        overview.append(el("h3","HR FLOW Operasyon Merkezi"),stats);
+        decisions.append(el("h3","İK Karar Merkezi"));
         if(!pending.length&&!exceptions.length)
             decisions.append(el("p","İlk aşamada bekleyen veya teknik müdahale gerektiren kayıt yok."));
         for(const item of [...exceptions,...pending].slice(0,80)){
@@ -1235,6 +1240,11 @@ if (companyPortalPage) {
                 }catch(error){details.replaceChildren(el("p","Kanıt alınamadı: "+error.message));}
                 finally{button.disabled=false;}
             }),details);
+            if(item.report_available){
+                card.append(el("a","Mülakat PDF Raporunu İndir",{
+                    href:"/api/ik/selin/cases/"+encodeURIComponent(item.id)+"/report.pdf"
+                }));
+            }
             casesArea.append(card);
         }
     }
