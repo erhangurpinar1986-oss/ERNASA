@@ -699,6 +699,44 @@ def test_legacy_calendar_blocks_early_and_expired_starts(intake):
 
 
 @pytest.mark.parametrize("intake", ["sqlite", "postgres"], indirect=True)
+@pytest.mark.parametrize("explicit_mapping", [False, True])
+def test_cancelled_schedule_blocks_interview_start(intake, explicit_mapping):
+    from datetime import datetime, timedelta, timezone
+
+    import ats_workflow
+    import portal_interviews
+
+    actor, _, job, pdf, applicant = intake
+    entry = ats_public_cv.submit(actor.company_id,job,applicant,"cv.pdf",pdf,"direct","203.0.113.123")
+    token = "synthetic-cancelled-interview"
+    now = datetime.now(timezone.utc)
+    start = now + timedelta(hours=1)
+    schedule = ats_workflow.save_schedule(actor,entry["application_id"],ats_workflow.Schedule(
+        interviewer_id=actor.user_id,starts_at=start.isoformat(),
+        ends_at=(start + timedelta(minutes=30)).isoformat(),kind="video"))
+    with closing(database.get_connection()) as db:
+        cursor = db.cursor()
+        cursor.execute("UPDATE ats_schedules SET status='cancelled' WHERE id=?", (schedule["id"],))
+        cursor.execute("""INSERT INTO interview_links (token,company_id,application_id,status,expires_at,created_at)
+            VALUES(?,?,?,'waiting',?,?)""", (token,actor.company_id,entry["application_id"],
+                (now + timedelta(hours=8)).isoformat(),now.isoformat()))
+        if explicit_mapping:
+            cursor.execute("INSERT INTO flow_scheduled_interviews VALUES(?,?,?)",
+                           (token,actor.company_id,schedule["id"]))
+        db.commit()
+
+    with pytest.raises(HTTPException) as error:
+        portal_interviews.start(token,actor.company_id,lambda row:False,lambda:"Intro",lambda *args:"Soru?")
+    assert error.value.status_code == 409
+    assert "takvimi" in error.value.detail
+    with closing(database.get_connection()) as db:
+        cursor = db.cursor()
+        interview = portal_interviews.load_interview(cursor,token,actor.company_id)
+        assert interview["status"] == "waiting"
+        assert portal_interviews.availability(cursor,interview,actor.company_id)["state"] == "unavailable"
+
+
+@pytest.mark.parametrize("intake", ["sqlite", "postgres"], indirect=True)
 def test_public_ats_groups_and_expired_job_preserve_applications(intake,tmp_path):
     import json
     from datetime import datetime,timedelta,timezone

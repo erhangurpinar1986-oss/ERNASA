@@ -123,10 +123,10 @@ def availability(cursor, interview, tenant, now=None):
     schedule = cursor.fetchone()
     if schedule is None:
         cursor.execute("""SELECT starts_at,status FROM ats_schedules
-            WHERE company_id=? AND application_id=? AND status='planned'
-            ORDER BY starts_at,id LIMIT 2""", (tenant,interview["application_id"]))
+            WHERE company_id=? AND application_id=?
+            ORDER BY CASE WHEN status='planned' THEN 0 ELSE 1 END, starts_at,id LIMIT 2""", (tenant,interview["application_id"]))
         schedules = cursor.fetchall()
-        if len(schedules) > 1:
+        if len(schedules) > 1 and schedules[1]["status"] == "planned":
             return {"state":"unavailable"}
         schedule = schedules[0] if schedules else None
     if schedule is None:
