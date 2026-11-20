@@ -124,3 +124,67 @@ def test_unpublished_job_cannot_accept_cv(intake):
     with pytest.raises(HTTPException) as err:
         ats_public_cv.submit(manager.company_id,job,applicant,"cv.pdf",pdf,"direct","203.0.113.19")
     assert err.value.status_code==404
+
+
+def test_selin_public_intake_queue_approval_scoped_and_once(intake,monkeypatch):
+    import selin_workflow
+    manager,position,job,pdf,applicant=intake
+    manager.products=("ats","ai")
+    result=ats_public_cv.submit(manager.company_id,job,applicant,"cv.pdf",pdf,"linkedin","203.0.113.33")
+    app_id=result["application_id"]
+    q=ats_public_cv.list_intake(manager.company_id)
+    assert len(q)==1 and q[0]["position"]=="Depo Personeli"
+    assert q[0]["status"]=="pending_review" and q[0]["source"]=="linkedin"
+    assert ats_public_cv.list_intake(2222)==[]
+    calls=[]
+    def fake_begin(actor,app,doc,*args):
+        calls.append((actor.company_id,app,doc))
+        return {"id":"case-01","status":"interview_created"}
+    monkeypatch.setattr(selin_workflow,"begin",fake_begin)
+    staff=SimpleNamespace(company_id=manager.company_id,user_id=33,role="hr_staff",products=("ats","ai"))
+    with pytest.raises(HTTPException) as e:
+        ats_public_cv.decide_intake(staff,app_id,"start",None,None,None)
+    assert e.value.status_code==403
+    outsider=SimpleNamespace(company_id=2222,user_id=99,role="hr_manager",products=("ats","ai"))
+    with pytest.raises(HTTPException) as e:
+        ats_public_cv.decide_intake(outsider,app_id,"start",None,None,None)
+    assert e.value.status_code==404
+    response=ats_public_cv.decide_intake(manager,app_id,"start",None,None,None)
+    assert response["status"]=="assigned"
+    assert calls==[(manager.company_id,app_id,result["document_id"])]
+    assert ats_public_cv.list_intake(manager.company_id)[0]["case_id"]=="case-01"
+    with pytest.raises(HTTPException) as e:
+        ats_public_cv.decide_intake(manager,app_id,"start",None,None,None)
+    assert e.value.status_code==409
+    assert len(calls)==1
+
+
+def test_selin_intake_skip_keeps_ats_record(intake):
+    manager,position,job,pdf,applicant=intake
+    manager.products=("ats","ai")
+    result=ats_public_cv.submit(manager.company_id,job,applicant,"cv.pdf",pdf,"indeed","203.0.113.35")
+    response=ats_public_cv.decide_intake(manager,result["application_id"],"skip",None,None,None)
+    assert response["status"]=="skipped"
+    with closing(database.get_connection()) as db:
+        assert db.execute("SELECT COUNT(*) FROM ats_applications WHERE id=?",
+                          (result["application_id"],)).fetchone()[0]==1
+        assert db.execute("SELECT COUNT(*) FROM ats_documents WHERE id=?",
+                          (result["document_id"],)).fetchone()[0]==1
+
+
+def test_selin_intake_failed_processing_never_automatically_retries(intake,monkeypatch):
+    import selin_workflow
+    manager,position,job,pdf,applicant=intake
+    manager.products=("ats","ai")
+    result=ats_public_cv.submit(manager.company_id,job,applicant,"cv.pdf",pdf,"social","203.0.113.45")
+    calls=[]
+    def fail(*args):
+        calls.append(1)
+        raise RuntimeError("synthetic")
+    monkeypatch.setattr(selin_workflow,"begin",fail)
+    with pytest.raises(RuntimeError):
+        ats_public_cv.decide_intake(manager,result["application_id"],"start",None,None,None)
+    assert ats_public_cv.list_intake(manager.company_id)[0]["status"]=="needs_attention"
+    with pytest.raises(HTTPException) as e:
+        ats_public_cv.decide_intake(manager,result["application_id"],"start",None,None,None)
+    assert e.value.status_code==409 and len(calls)==1
