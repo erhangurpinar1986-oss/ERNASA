@@ -50,7 +50,7 @@ def preview(filename, content):
     return {'import_id': ats.uid(), **contact}
 
 
-def save(root, actor, fields, filename, content):
+def save(root, actor, fields, filename, content, on_saved=None):
     name = ats.document_name(filename)
     tenant = actor.company_id
     document_id = ats.uid()
@@ -85,4 +85,10 @@ def save(root, actor, fields, filename, content):
         if created:
             path.unlink(missing_ok=True)
         raise
+    if on_saved is not None:
+        try:
+            on_saved(actor,app_id,document_id)
+        except Exception as error:
+            # Committed ATS import must remain successful even if SELİN fails.
+            logger.warning('SELİN post-import callback failed (%s)',type(error).__name__)
     return {'status': 'saved'}
