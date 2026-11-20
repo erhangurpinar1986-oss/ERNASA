@@ -1,4 +1,4 @@
-"""SELİN: tenant-scoped, opt-in recruitment-to-training case automation.
+"""ERNASA HR FLOW: tenant-scoped, opt-in recruitment-to-training case automation.
 
 A started case is permission to automate invitations and assigned training, NOT
 a hiring decision. All writes are additive to existing ERNASA ATS and Academy.
@@ -68,6 +68,12 @@ def initialize_schema():
             configured_by BIGINT NOT NULL,
             updated_at TEXT NOT NULL
         )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS flow_training_delivery (
+            case_id TEXT PRIMARY KEY REFERENCES selin_cases(id),
+            company_id BIGINT NOT NULL,
+            provider_message_id TEXT NOT NULL,
+            accepted_at TEXT NOT NULL
+        )""")
         c.execute("""CREATE TABLE IF NOT EXISTS selin_events (
             id TEXT PRIMARY KEY, company_id BIGINT NOT NULL,
             case_id TEXT NOT NULL REFERENCES selin_cases(id) ON DELETE CASCADE,
@@ -129,14 +135,14 @@ def auto_start(actor, app_id, document_id, cv_root, create_interview, send_inter
     """Best-effort hook called ONLY after a successful, committed CV upload.
 
     CV upload is never rolled back because an unrelated automation step fails.
-    A failed case is visible in the SELİN 'needs_attention' queue.
+    A failed case is visible in the ERNASA HR FLOW 'needs_attention' queue.
     """
     if not auto_enabled(actor):
         return None
     try:
         return begin(actor,app_id,document_id,cv_root,create_interview,send_interview)
     except Exception as error:
-        LOG.warning("SELİN auto-start paused: %s",type(error).__name__)
+        LOG.warning("ERNASA HR FLOW auto-start paused: %s",type(error).__name__)
         return None
 
 
@@ -149,7 +155,7 @@ def _case(c, tenant, case_id):
     c.execute("SELECT * FROM selin_cases WHERE company_id=? AND id=?",(tenant,case_id))
     result=c.fetchone()
     if result is None:
-        raise HTTPException(404, "SELİN aday dosyası bulunamadı.")
+        raise HTTPException(404, "ERNASA HR FLOW aday dosyası bulunamadı.")
     return dict(result)
 
 
@@ -240,15 +246,15 @@ def begin(actor, application_id, document_id, cv_root, create_interview, send_in
                                 cv_document_id=document_id)
         token=result["interview_id"]
         if not _transition(case_id,actor.company_id,"created","interview_created",interview=token):
-            raise RuntimeError("SELİN interview state changed unexpectedly")
+            raise RuntimeError("ERNASA HR FLOW interview state changed unexpectedly")
         if os.getenv("ERNASA_SELIN_SEND_ENABLED") != "1":
             return get_case(actor.company_id,case_id)
         if not _transition(case_id,actor.company_id,"interview_created","invitation_sending"):
-            raise RuntimeError("SELİN invitation claim failed")
+            raise RuntimeError("ERNASA HR FLOW invitation claim failed")
         send_interview(token,actor)
         _transition(case_id,actor.company_id,"invitation_sending","interview_invited")
     except Exception as error:
-        LOG.warning("SELİN invitation pipeline paused: %s",type(error).__name__)
+        LOG.warning("ERNASA HR FLOW invitation pipeline paused: %s",type(error).__name__)
         current=get_case(actor.company_id,case_id)
         if current["status"] in ("created","interview_created","invitation_sending"):
             _transition(case_id,actor.company_id,current["status"],"needs_attention",
@@ -352,7 +358,7 @@ def _training(case,analysis,send_training):
              json.dumps(modules,ensure_ascii=False),now.isoformat(),0))
         db.commit()
     if not _transition(case_id,tenant,"processing_report","training_sending",training_hash=digest):
-        raise RuntimeError("SELİN training state changed unexpectedly")
+        raise RuntimeError("ERNASA HR FLOW training state changed unexpectedly")
     if os.getenv("ERNASA_SELIN_SEND_ENABLED") != "1":
         return
     from services import invite_email
@@ -360,8 +366,15 @@ def _training(case,analysis,send_training):
         recipient=person["email"],name=person["name"],
         url="https://ernasa.com/egitim/"+token,expires_at=expiry,
         idempotency_key="selin-training-"+case_id)
-    if not result:
-        raise RuntimeError("Training delivery not confirmed")
+    if not isinstance(result,str) or not result.strip():
+        raise RuntimeError("Training provider acknowledgement missing")
+    with closing(get_connection()) as db:
+        c=db.cursor()
+        c.execute("""INSERT INTO flow_training_delivery
+            (case_id,company_id,provider_message_id,accepted_at)
+            VALUES(?,?,?,?) ON CONFLICT(case_id) DO NOTHING""",
+            (case_id,tenant,result[:200],stamp()))
+        db.commit()
     _transition(case_id,tenant,"training_sending","training_invited")
 
 
@@ -374,7 +387,7 @@ def _progress(case):
             (case["company_id"],case["training_token_hash"]))
         row=c.fetchone()
     if not row:
-        raise ValueError("SELİN training record unavailable")
+        raise ValueError("ERNASA HR FLOW training record unavailable")
     modules=json.loads(row["modules_json"])
     state=json.loads(row["state_json"]) if row["state_json"] else {}
     completed=sum(state.get("done",{}).get(mid) is True for mid in modules)
@@ -429,7 +442,7 @@ def process_one():
             from services import invite_email
             _training(case,analysis,invite_email.send_training_invitation)
         except Exception as error:
-            LOG.warning("SELİN post-interview processing paused: %s",type(error).__name__)
+            LOG.warning("ERNASA HR FLOW post-interview processing paused: %s",type(error).__name__)
             fresh=get_case(tenant,case_id)
             if fresh["status"] in ("processing_report","training_sending"):
                 _transition(case_id,tenant,fresh["status"],"needs_attention",
@@ -445,7 +458,7 @@ def process_one():
         try:
             data=_progress(case)
         except Exception as error:
-            LOG.warning("SELİN progress read unavailable: %s",type(error).__name__)
+            LOG.warning("ERNASA HR FLOW progress read unavailable: %s",type(error).__name__)
             continue
         if data["total_lessons"] and data["completed_lessons"]==data["total_lessons"]:
             return _transition(case["id"],case["company_id"],case["status"],"evaluation_ready")
@@ -464,7 +477,7 @@ async def worker(stop):
         try:
             await asyncio.to_thread(process_one)
         except Exception as error:
-            LOG.warning("SELİN worker tick failed: %s",type(error).__name__)
+            LOG.warning("ERNASA HR FLOW worker tick failed: %s",type(error).__name__)
         try:
             await asyncio.wait_for(stop.wait(),timeout=20)
         except TimeoutError:
