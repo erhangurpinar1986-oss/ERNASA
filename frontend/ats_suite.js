@@ -140,6 +140,57 @@ if (companyPortalPage) {
         if (picker.value) await show();
     }
 
+    // A job link belongs to the *current authenticated company portal*.
+    // Platform-specific source labels help internal attribution but do not
+    // prove that the external platform published or approved this vacancy.
+    function publishedJobUrl(jobId, source = "direct") {
+        const url = new URL("/basvuru/" + encodeURIComponent(jobId),window.location.origin);
+        if (source !== "direct") url.searchParams.set("src",source);
+        return url.toString();
+    }
+    async function copyPublicJobLink(jobId, source = "direct") {
+        const address = publishedJobUrl(jobId,source);
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(address);
+            notice("İlana özel başvuru bağlantısı kopyalandı.");
+        } else {
+            // Manual copy fallback in browsers without Clipboard API.
+            window.prompt("Başvuru bağlantısını kopyalayın:",address);
+            notice("Bağlantı kopyalama penceresinde gösterildi.");
+        }
+    }
+    function publishedJobShareControls(job) {
+        const actions = el("div","",{class:"saas-actions"});
+        actions.append(action("Linki Kopyala",()=>copyPublicJobLink(job.id)));
+        actions.append(action("Bağlantıyı Paylaş",async ()=>{
+            const url = publishedJobUrl(job.id);
+            if (navigator.share) {
+                try { await navigator.share({title:job.title,text:"İş ilanımız: "+job.title,url}); }
+                catch (error) {if (error.name !== "AbortError") notice("Paylaşım gerçekleştirilemedi.",true)}
+            } else {
+                await copyPublicJobLink(job.id);
+            }
+        }));
+        const additional = el("details","",{class:"saas-share-options"});
+        const heading = el("summary","İş arama platformları · isteğe bağlı");
+        const explanation=el("p","Platform paylaşımı yalnızca firma yetkilisi seçerse hazırlanır. Bu özellik platforma otomatik ilan göndermez; ilgili platformun kurallarına uygun şekilde yetkili kullanıcı paylaşır.");
+        const platform=select("sharing_source",[
+            ["linkedin","LinkedIn"],["indeed","Indeed"],
+            ["kariyer_net","Kariyer.net"],["social","Diğer sosyal kanal"],
+            ["other","Diğer kaynak"]
+        ],"linkedin");
+        const choice=input("platform_opt_in","checkbox","1");
+        choice.checked=false;
+        const copy=action("Seçilen Platformun Linkini Kopyala",()=>copyPublicJobLink(job.id,platform.value));
+        copy.disabled=true;
+        choice.addEventListener("change",()=>{copy.disabled=!choice.checked});
+        additional.append(heading,explanation,
+            field("Dış platform paylaşımını isteğe bağlı etkinleştir",choice),
+            field("Platform / kaynak",platform),copy);
+        actions.append(additional);
+        return actions;
+    }
+
     async function jobs(root) {
         const [data, choices] = await Promise.all([api("ats/jobs"),positions(true)]);
         const which = select("position_id",[["","Pozisyon seçin"],...choices]);
@@ -178,8 +229,9 @@ if (companyPortalPage) {
                 menu.dataset.filterPosition = row.position_id;
                 menu.click();
             }));
+            if (row.state === "published") actions.append(publishedJobShareControls(row));
             return [row.title,({draft:"Taslak",published:"Yayında",closed:"Kapalı"})[row.state],
-                row.state === "published" ? link("Yerel başvuru bağlantısını aç","/basvuru/" + row.id) : "—",actions];
+                row.state === "published" ? link("İlana özel başvuru sayfasını aç","/basvuru/" + row.id) : "—",actions];
         })));
         if (!choices.length) {
             root.append(action("Yeni Pozisyon Oluştur",()=>{
@@ -194,7 +246,7 @@ if (companyPortalPage) {
                 el("h4","Çalışma koşulları"),el("p",conditions.value || "—"));
             preview.hidden = false;
         });
-        root.append(el("p","Yayın, yalnızca ERNASA’nın yerel başvuru bağlantısını açar. Dış iş ilanı platformlarına gönderim yapılmaz."),
+        root.append(el("p","İlan yayımlandığında firmaya özel başvuru bağlantısı oluşur. Firma yetkilisi kendi web sitesinde ve kurumsal kanallarında paylaşabilir. İş arama platformları isteğe bağlıdır; otomatik platform yayını yapılmaz."),
             form([field("Pozisyon",which),field("İlan başlığı",title),field("İş tanımı",summary),
             field("Aranan nitelikler",qualifications),field("Çalışma koşulları",conditions),
             field("Aday aydınlatma metni",policy),field("Metin sürümü",version),field("Durum",state),
