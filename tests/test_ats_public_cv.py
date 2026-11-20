@@ -348,6 +348,13 @@ def test_flow_screening_honors_staff_visibility_and_stale_criteria(intake,tmp_pa
         db.commit()
     staff=SimpleNamespace(company_id=manager.company_id,user_id=44,
                           role="hr_staff",products=("ats",))
+    with pytest.raises(HTTPException) as unauthorized_position:
+        hr_flow_screening.screen_position(staff,position,tmp_path)
+    assert unauthorized_position.value.status_code==404
+    with closing(database.get_connection()) as db:
+        db.execute("INSERT INTO ats_position_members VALUES(?,?,?)",
+                   (manager.company_id,position,staff.user_id))
+        db.commit()
     assert hr_flow_screening.screen_position(staff,position,tmp_path)["total"]==0
     with pytest.raises(HTTPException) as exc:
         hr_flow_screening.request_permission(staff,entry["application_id"],entry["document_id"])
