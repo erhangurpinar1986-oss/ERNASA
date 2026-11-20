@@ -29,7 +29,7 @@ from database import get_connection
 LOG = logging.getLogger(__name__)
 STATES = ("created", "interview_created", "invitation_sending", "interview_invited",
           "processing_report", "training_sending", "training_invited",
-          "training_in_progress", "evaluation_ready", "needs_attention")
+          "training_in_progress", "evaluation_ready", "training_review_required", "needs_attention")
 DEFAULT_MODULES = ("ernasa", "hakkaniyet", "analiz", "demo", "olcme")
 RECOMMENDATION_MAP = {
     "avcilik": "avcilik", "crm": "crm", "müzakere": "muzakere",
@@ -412,6 +412,16 @@ def process_one():
         try:
             case=get_case(tenant,case_id)
             analysis=_archive_pdf(case)
+            # ERNASA Academy currently contains ERNASA-specific sales/HR materials.
+            # Never silently assign its sales curriculum to logistics, warehouse,
+            # healthcare or unrelated job applicants.
+            summary=json.loads(case["cv_summary"])
+            position=str(summary.get("position","")).casefold()
+            sales_role=any(term in position for term in ("satış","satis","b2b","sales"))
+            if not sales_role:
+                _transition(case_id,tenant,"processing_report","training_review_required",
+                            error="role_specific_curriculum_required")
+                return True
             if os.getenv("ERNASA_SELIN_SEND_ENABLED") != "1":
                 # Keep processing frozen until explicitly enabled, no training assignment.
                 _transition(case_id,tenant,"processing_report","needs_attention",error="send_disabled")
