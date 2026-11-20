@@ -915,8 +915,8 @@ def company_detail(db,actor,tenant,q):
             fields += select('Birincil iletişim','primary_contact',[('0','Hayır'),('1','Evet')],
                              str(current.get('primary_contact',0)))
         headers = tuple(label for label,_ in spec.values())+ (('Birincil',) if contact else ()) + ('İşlem',)
-        entries = ([e(r[key] or '—') for key in spec]+(['Evet' if r['primary_contact'] else 'Hayır'] if contact else [])+
-                   [f'<a href="{base}&amp;sekme={tab}&amp;kayit={r["id"]}#kayit-formu">Düzenle</a>'] for r in rows)
+        entries = [[e(r[key] or '—') for key in spec]+(['Evet' if r['primary_contact'] else 'Hayır'] if contact else [])+
+                   [f'<a href="{base}&amp;sekme={tab}&amp;kayit={r["id"]}#kayit-formu">Düzenle</a>'] for r in rows]
         title = ('Yetkiliyi düzenle' if edit else 'Yetkili ekle') if contact else ('Adresi düzenle' if edit else 'Adres ekle')
         if contact:
             # A company contact is informational until the founder separately grants sales login.
