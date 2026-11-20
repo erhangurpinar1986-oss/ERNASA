@@ -6,6 +6,7 @@ on:
       - 'hr_flow_screening.py'
       - 'hr_flow_contacts.py'
       - 'frontend/ats_suite.js'
+      - 'tests/test_hr_flow_browser.py'
       - 'frontend/ernasa_v5_ik.html'
       - 'frontend/saas_portal.js'
       - 'ats_public_cv.py'
@@ -25,6 +26,15 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt pytest
       - run: python -m pytest tests/test_selin_workflow.py tests/test_ats_public_cv.py -q
+      - run: python -m pip install playwright
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m pytest tests/test_hr_flow_browser.py -q
       - run: node --check frontend/ats_suite.js
       - run: node --check frontend/saas_portal.js
       - run: python -m pytest tests/test_academy_assignments.py tests/test_candidate_experience.py tests/test_ats_cv_match_integration.py -q
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hr-flow-real-chromium-ui
+          path: artifacts/ernasa_hr_flow_chromium_ui.png
+          if-no-files-found: ignore
