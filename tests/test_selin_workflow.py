@@ -43,6 +43,10 @@ def pipeline(tmp_path, monkeypatch):
         lambda cursor,who,app_id: {"id":app_id,"closure":None,"position_id":"position-1",
                                     "email":"synthetic@example.test"} if who.company_id==1001
         else (_ for _ in ()).throw(HTTPException(404,"Unknown app")))
+    # These workflow-state tests simulate a previously approved, confirmed
+    # candidate; readiness itself is verified against the real ATS fixture below.
+    monkeypatch.setattr(selin_workflow.hr_flow_contacts,"require_interview_ready",
+        lambda tenant,app,doc: None)
     monkeypatch.setattr(selin_workflow.ats_matching, "evidence_match",
         lambda root,who,app,doc: {"match_score":81.2,"evidence_coverage":75,
                                    "source":"original_document"})
@@ -183,4 +187,17 @@ def test_requires_both_products_and_rejects_unreadable_cv(pipeline):
     with pytest.raises(HTTPException) as exc:
         start_case(pipeline)
     assert exc.value.status_code==422
+    assert selin_workflow.list_cases(actor.company_id)==[]
+
+
+def test_direct_selin_start_never_mints_interview_without_approval(pipeline):
+    actor,actions,create,send,monkeypatch=pipeline
+    def not_ready(tenant,application,document):
+        assert (tenant,application,document)==(1001,"application-1","document-1")
+        raise HTTPException(409,"Onay ve aday teyidi gerekli.")
+    monkeypatch.setattr(selin_workflow.hr_flow_contacts,"require_interview_ready",not_ready)
+    with pytest.raises(HTTPException) as exc:
+        start_case(pipeline)
+    assert exc.value.status_code==409
+    assert actions=={"interview":0,"mail":0,"training":0}
     assert selin_workflow.list_cases(actor.company_id)==[]
