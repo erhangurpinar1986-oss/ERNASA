@@ -64,7 +64,7 @@ form.addEventListener("submit", async event => {
         if (cvMode) {
             const file=cvInput.files[0];
             if (!file || file.size===0 || file.size>10*1024*1024 ||
-                !/\\.(pdf|docx)$/i.test(file.name)) throw new Error("10 MB altındaki PDF veya DOCX dosyanızı seçin.");
+                !/\.(pdf|docx)$/i.test(file.name)) throw new Error("10 MB altındaki PDF veya DOCX dosyanızı seçin.");
             const body=new FormData(form);
             body.set("notice_version",version);
             body.set("acknowledge","true");
