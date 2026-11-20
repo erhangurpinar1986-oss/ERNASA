@@ -13,6 +13,11 @@ import ats_cv_import
 import ik_cv_invites
 from services import invite_email
 import interview_assessments
+import selin_workflow
+import hr_flow_evidence
+import hr_flow_contacts
+import hr_flow_screening
+import ats_public_cv
 import ats_workflow
 import ats_upload_queue
 import ats_matching
@@ -118,6 +123,10 @@ async def lifespan(_app):
     academy_audio.initialize_schema()
     academy_assignments.initialize_schema()
     academy_video.initialize_schema()
+    selin_workflow.initialize_schema()
+    ats_public_cv.initialize_schema()
+    hr_flow_contacts.initialize_schema()
+    hr_flow_screening.initialize_schema()
     # Explicit, one-time ERNASA education demo cleanup. Never enabled by default.
     if os.getenv("ERNASA_TRAINING_DEMO_CLEANUP") == "keep-merve-20261120":
         import training_demo_cleanup_20261120
@@ -147,6 +156,7 @@ async def lifespan(_app):
         workers = [
             asyncio.create_task(ats_upload_queue.worker(UPLOAD_DIRECTORY,stop)),
             asyncio.create_task(interview_assessments.worker(generate_job_fit_analysis,stop)),
+            asyncio.create_task(selin_workflow.worker(stop)),
         ]
         try:
             yield
@@ -579,7 +589,10 @@ def save_ats_cv(selection: str = Form(..., max_length=4096), cv: UploadFile = Fi
         raise HTTPException(422, 'Önizleme alanlarını kontrol edin.') from error
     try:
         return ats_cv_import.save(UPLOAD_DIRECTORY, actor, fields, cv.filename or 'cv',
-                                  cv.file.read(ats.MAX_DOCUMENT + 1))
+                                  cv.file.read(ats.MAX_DOCUMENT + 1),
+                                  on_saved=lambda approved_actor,app_id,doc_id: selin_workflow.auto_start(
+                                      approved_actor,app_id,doc_id,UPLOAD_DIRECTORY,
+                                      save_interview_link,send_interview_invitation_email))
     except HTTPException as error:
         if error.status_code == 409:
             return {'status': 'skipped', 'message': error.detail}
@@ -671,7 +684,8 @@ def public_ats_company(request: Request):
 def get_public_ats_job(job_id: str, profile: dict = Depends(public_ats_company)):
     with closing(get_connection()) as connection:
         return {**ats.public_job(connection.cursor(), profile['company_id'], job_id),
-                "company_name": profile['name']}
+                "company_name": profile['name'],
+                "cv_upload_enabled": ats_public_cv.enabled()}
 
 
 @app.get("/basvuru/{job_id}")
@@ -688,6 +702,34 @@ def send_ats_application(job_id: str, fields: ats.PublicApplication, profile: di
         if error.status_code != 409:
             raise
         return {"success":True}
+
+
+# A published ERNASA HR job can accept a PDF/DOCX resume directly.
+# Each request is tenant-scoped and protected by the same candidate notice.
+@app.post("/api/ats/jobs/{job_id}/apply-with-cv",status_code=201)
+def send_ats_application_cv(
+    job_id: str,
+    name: str = Form(...,min_length=1,max_length=160),
+    email: str = Form(...,min_length=3,max_length=254),
+    phone: str = Form(default="",max_length=50),
+    notice_version: str = Form(...,min_length=1,max_length=40),
+    acknowledge: bool = Form(...),
+    source: str = Form(default="direct",max_length=32),
+    cv: UploadFile = File(...),
+    request: Request = None,
+    profile: dict = Depends(public_ats_company)
+):
+    if not ats_public_cv.enabled():
+        raise HTTPException(404,"CV başvurusu etkin değil.")
+    # Do not trust proxy headers. Use only the ASGI connection peer for rate limiting.
+    client_ip=request.client.host if request and request.client else ""
+    fields=ats.PublicApplication(name=name,email=email,phone=phone,
+                                 acknowledge=acknowledge,notice_version=notice_version)
+    result=ats_public_cv.submit(profile["company_id"],job_id,fields,
+                                cv.filename or "cv",cv.file.read(ats.MAX_DOCUMENT+1),
+                                source,client_ip)
+    # The public response never exposes internal tenant or candidate identifiers.
+    return {"success":True,"message":"Başvurunuz ve CV dosyanız kaydedildi."}
 
 
 @app.patch("/api/ik/ats/applications/{application_id}/stage")
@@ -1022,6 +1064,16 @@ def open_hr_panel_v5(request: Request):
         )
 
     return FileResponse(FRONTEND_DIR / "ernasa_v5_ik.html")
+@app.get("/ik/selin")
+def open_selin_queue(request: Request):
+    if not has_hr_panel_session(request):
+        return RedirectResponse(url="/ik-giris",status_code=302)
+    actor=require_combined(require_ik_session(request))
+    require_manager(actor)
+    return FileResponse(FRONTEND_DIR / "selin_intake.html",
+                        headers={"Cache-Control":"private, no-store"})
+
+
 @app.get("/aday-takip")
 def open_candidate_tracking(request: Request):
     if not has_hr_panel_session(request):
@@ -1244,6 +1296,127 @@ def create_linked_ai_interview(application_id: str, fields: LinkedInterview,
                                actor: portal_access.Actor = Depends(require_combined)):
     text = ats_matching.source_text(UPLOAD_DIRECTORY,actor,application_id,fields.document_id) if fields.document_id else ''
     return save_interview_link({'cv_text':text}, actor, application_id,cv_document_id=fields.document_id)
+
+
+
+# SELİN automated candidate-to-training case flow (tenant-scoped and opt-in).
+# Existing ATS, interview, PDF and Academy routes remain unchanged.
+class SelinStart(BaseModel):
+    document_id: str = Field(min_length=1,max_length=64)
+
+
+@app.post("/api/ik/selin/applications/{application_id}/start",status_code=201)
+def selin_start(application_id: str,body: SelinStart,
+                actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return selin_workflow.begin(actor,application_id,body.document_id,UPLOAD_DIRECTORY,
+                                save_interview_link,send_interview_invitation_email)
+
+
+class SelinAutomationOption(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/ik/selin/automation")
+def selin_automation_get(actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return selin_workflow.automation_settings(actor)
+
+
+@app.put("/api/ik/selin/automation")
+def selin_automation_put(body: SelinAutomationOption,
+                         actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return selin_workflow.configure_automation(actor,body.enabled)
+
+
+class SelinIntakeDecision(BaseModel):
+    action: str = Field(pattern="^(start|skip)$")
+
+
+# FLOW is a job-specific, evidence-grounded ATS pre-screening workflow.
+# These operations do not create interviews, reject applicants, or send messages.
+class FlowPermissionDecision(BaseModel):
+    decision: str = Field(pattern="^(approved|declined)$")
+
+
+class FlowPermissionRequest(BaseModel):
+    document_id: str = Field(min_length=1,max_length=64)
+
+
+@app.post("/api/ik/flow/positions/{position_id}/screen")
+def flow_screen_position(position_id: str,offset: int = 0,
+                         actor: portal_access.Actor = Depends(require_ats)):
+    return hr_flow_screening.screen_position(actor,position_id,UPLOAD_DIRECTORY,offset=offset)
+
+
+@app.post("/api/ik/flow/applications/{application_id}/permission")
+def flow_request_interview_permission(application_id: str,body: FlowPermissionRequest,
+                                      actor: portal_access.Actor = Depends(require_ats)):
+    return hr_flow_screening.request_permission(actor,application_id,body.document_id)
+
+
+@app.post("/api/ik/flow/permissions/{request_id}/decision")
+def flow_decide_interview_permission(request_id: str,body: FlowPermissionDecision,
+                                     actor: portal_access.Actor = Depends(require_ats_manager)):
+    return hr_flow_screening.decide_permission(actor,request_id,body.decision)
+
+
+@app.get("/api/ik/selin/intake/{application_id}/contact-status")
+def flow_application_contact_status(application_id: str,
+                                    actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    with closing(get_connection()) as db:
+        ats.application(db.cursor(),actor,application_id)
+    return hr_flow_contacts.contact_status(actor.company_id,application_id)
+
+
+@app.get("/api/ik/selin/intake")
+def selin_intake_list(actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return {"applications":ats_public_cv.list_intake(actor.company_id)}
+
+
+@app.post("/api/ik/selin/intake/{application_id}/decision")
+def selin_intake_decide(application_id: str,body: SelinIntakeDecision,
+                        actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return ats_public_cv.decide_intake(actor,application_id,body.action,
+                                       UPLOAD_DIRECTORY,save_interview_link,
+                                       send_interview_invitation_email)
+
+
+@app.get("/api/ik/selin/cases")
+def selin_cases(actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return {"cases":selin_workflow.list_cases(actor.company_id)}
+
+
+@app.get("/api/ik/selin/cases/{case_id}")
+def selin_case(case_id: str,actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return selin_workflow.get_case(actor.company_id,case_id)
+
+
+@app.get("/api/ik/selin/cases/{case_id}/evidence")
+def hr_flow_case_evidence(case_id: str,
+                          actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return hr_flow_evidence.case_evidence(actor.company_id,case_id)
+
+
+@app.get("/api/ik/selin/cases/{case_id}/report.pdf")
+def selin_case_pdf(case_id: str,actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    data=selin_workflow.archived_pdf(actor.company_id,case_id)
+    return Response(data,media_type="application/pdf",
+                    headers={"Content-Disposition":'attachment; filename="ERNASA_SELIN_Mulakat_Raporu.pdf"'})
+
+
+@app.get("/api/ik/selin/cases/{case_id}/evaluation")
+def selin_case_evaluation(case_id: str,actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return selin_workflow.evaluation(actor.company_id,case_id)
 
 
 @app.get("/api/ik/ats/applications/{application_id}/documents/{document_id}/match")

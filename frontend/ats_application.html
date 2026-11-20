@@ -2,9 +2,9 @@
 <html lang="tr">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ERNASA ATS Başvuru</title>
+<title>ERNASA HR | İş Başvurusu</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#edf3fb;color:#132948;font:16px system-ui}main{max-width:640px;margin:32px auto;padding:24px;background:#fff;border-radius:14px}label{display:grid;gap:6px;margin:14px 0}input,button{font:inherit;padding:10px}label.check{display:flex;gap:8px}p#notice{white-space:pre-wrap}button{background:#153969;color:white;border:0;border-radius:7px}img{width:58px}button:disabled{opacity:.55}
+*{box-sizing:border-box}body{margin:0;background:#edf3fb;color:#132948;font:16px system-ui}main{max-width:640px;margin:32px auto;padding:24px;background:#fff;border-radius:14px}label{display:grid;gap:6px;margin:14px 0}input,button{font:inherit;padding:10px}label.check{display:flex;gap:8px}p#notice{white-space:pre-wrap}button{background:#153969;color:white;border:0;border-radius:7px}img{width:58px}button:disabled{opacity:.55}.hint{font-size:13px;color:#45617e}.file{border:1px solid #c3d1df;border-radius:7px;padding:12px;width:100%}
 </style>
 <main>
 <img src="/assets/ernasalogo.png" alt="ERNASA">
@@ -16,6 +16,9 @@
 <label>Ad soyad <input name="name" autocomplete="name" required maxlength="160"></label>
 <label>E-posta <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
 <label>Telefon <input name="phone" type="tel" autocomplete="tel" maxlength="50"></label>
+<label id="cvField" hidden>Özgeçmiş (PDF veya DOCX, en fazla 10 MB)
+<input class="file" name="cv" id="cvInput" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+<span class="hint">CV dosyanız yalnızca başvurduğunuz firmanın değerlendirmesi için kaydedilir.</span></label>
 <h2>Aday aydınlatma metni</h2><p id="notice"></p>
 <label class="check"><input name="acknowledge" type="checkbox" required>Aydınlatma metnini okudum.</label>
 <button type="submit">Başvuruyu kaydet</button>
@@ -27,6 +30,12 @@ const route = "/api/ats/jobs/" + encodeURIComponent(jobId);
 const form = document.getElementById("applyForm");
 const message = document.getElementById("message");
 let version = "";
+const source = new URLSearchParams(location.search).get("src");
+const allowedSources = new Set(["linkedin","indeed","kariyer_net","eleman_net","social","other","direct"]);
+const applicationSource = allowedSources.has(source) ? source : "direct";
+const cvInput = document.getElementById("cvInput");
+const cvField = document.getElementById("cvField");
+let cvMode = false;
 fetch(route,{cache:"no-store"}).then(async response => {
     if (!response.ok) throw new Error("Başvuru bağlantısı kullanılamıyor.");
     const data = await response.json();
@@ -40,6 +49,9 @@ fetch(route,{cache:"no-store"}).then(async response => {
     }
     document.getElementById("notice").textContent = data.notice;
     version = data.notice_version;
+    cvMode = data.cv_upload_enabled === true;
+    cvField.hidden = !cvMode;
+    cvInput.required = cvMode;
     form.hidden = false;
 }).catch(error => { message.textContent = error.message; });
 form.addEventListener("submit", async event => {
@@ -48,8 +60,20 @@ form.addEventListener("submit", async event => {
     button.disabled = true;
     const fields = Object.fromEntries(new FormData(form));
     try {
-        const response = await fetch(route + "/apply", {method:"POST",headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({...fields,acknowledge:fields.acknowledge === "on",notice_version:version})});
+        let response;
+        if (cvMode) {
+            const file=cvInput.files[0];
+            if (!file || file.size===0 || file.size>10*1024*1024 ||
+                !/\.(pdf|docx)$/i.test(file.name)) throw new Error("10 MB altındaki PDF veya DOCX dosyanızı seçin.");
+            const body=new FormData(form);
+            body.set("notice_version",version);
+            body.set("acknowledge","true");
+            body.set("source",applicationSource);
+            response=await fetch(route + "/apply-with-cv",{method:"POST",body});
+        } else {
+            response=await fetch(route + "/apply", {method:"POST",headers:{"Content-Type":"application/json"},
+                body:JSON.stringify({...fields,acknowledge:fields.acknowledge === "on",notice_version:version})});
+        }
         if (!response.ok) throw new Error("Başvuru tamamlanamadı. Form ve ilan bilgilerini kontrol edin.");
         form.reset();
         form.hidden = true;
