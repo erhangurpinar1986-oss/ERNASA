@@ -1344,7 +1344,7 @@ class FlowPermissionRequest(BaseModel):
     document_id: str = Field(min_length=1,max_length=64)
 
 
-@app.get("/api/ik/flow/positions/{position_id}/screen")
+@app.post("/api/ik/flow/positions/{position_id}/screen")
 def flow_screen_position(position_id: str,offset: int = 0,
                          actor: portal_access.Actor = Depends(require_ats)):
     return hr_flow_screening.screen_position(actor,position_id,UPLOAD_DIRECTORY,offset=offset)
