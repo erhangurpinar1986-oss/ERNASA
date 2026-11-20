@@ -113,7 +113,7 @@ PROGRAMS = {
         "modules": ("vizyon","paneller","ats","cv_analiz","iki_asama","mulakat","rapor","guvenlik","demo","kesif"),
     },
     "ik_urun": {
-        "title": "ERNASA İK Ürün Tanıtımı",
+        "title": "ERNASA HR Ürün Tanıtımı",
         "modules": ("vizyon","paneller","ats","cv_analiz","iki_asama","mulakat","rapor","guvenlik","demo"),
     },
     "ik_personel": {
