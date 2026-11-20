@@ -1350,7 +1350,14 @@ if (companyPortalPage) {
         for(const item of processes.slice(0,40)){
             const card=el("article","",{class:"saas-panel"});
             const details=el("div");
-            card.append(el("strong","Dosya · "+item.status),
+            const flowStages = {
+                created:"Dosya oluşturuldu",interview_created:"Mülakat oluşturuldu",
+                invitation_sending:"Davet gönderiliyor",interview_invited:"Mülakat daveti",
+                interview_completed:"Mülakat tamamlandı",training_assigned:"Eğitim atandı",
+                completed:"Tamamlandı",failed:"Teknik müdahale gerekli"
+            };
+            card.append(el("strong",(item.candidate_name||"Aday adı bulunamadı")+" · "+(item.position_name||"Pozisyon belirtilmedi")),
+                el("p","Aşama: "+(flowStages[item.status]||item.status||"Bilinmiyor")),
                 el("p","Son işlem: "+(item.updated_at||"—")));
             if(item.error_code)card.append(el("p","Kontrol kodu: "+item.error_code));
             card.append(action("İşlem Kanıtlarını Gör",async button=>{
