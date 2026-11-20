@@ -1162,7 +1162,81 @@ if (companyPortalPage) {
         ],"Filtrele",draw),output);
         draw({});
     }
-    const screens = {jobs:["İş İlanları",jobs],pool:["Aday Havuzu",pool],kanban:["İşe Alım Panosu",kanban],
+
+    // Native IK V5 dashboard for HR FLOW: observe operations, prioritize
+    // manager-only decisions. Never imply an email was delivered when prepared.
+    async function flow(root) {
+        root.append(el("p","Hedef: FLOW ilk mülakat dahil operasyonu yürütür. İK yalnızca ikinci görüşme, ek eğitim veya ret kararını verir. Bu otomasyonun eksik parçaları tamamlanmadan canlı gönderimler başlamaz."));
+        const overview=el("section","",{class:"saas-panel"});
+        const decisions=el("section","",{class:"saas-panel"});
+        const casesArea=el("section","",{class:"saas-panel"});
+        root.append(action("Durumu Yenile",()=>open("flow")),overview,decisions,casesArea);
+        const [settings,intake,cases]=await Promise.all([
+            api("selin/automation"),api("selin/intake"),api("selin/cases")
+        ]);
+        const entries=intake.applications||[];
+        const processes=cases.cases||[];
+        const exceptions=entries.filter(row=>row.status==="needs_attention");
+        const pending=entries.filter(row=>row.status==="pending_review");
+        const stats=el("div","",{class:"dashboard-stats"});
+        for(const [label,value] of [
+            ["Başvurular",entries.length],["İlk Aşama Bekleyen",pending.length],
+            ["Teknik Müdahale",exceptions.length],["FLOW Dosyası",processes.length]
+        ]){
+            const card=el("div","",{class:"dashboard-stat-card"});
+            card.append(el("strong",String(value)),el("span",label));
+            stats.append(card);
+        }
+        overview.append(el("h3","HR FLOW Operasyon Merkezi"),stats,
+            el("p",settings.ready&&settings.enabled?
+                "Mevcut otomasyon ayarları etkin. Aday teyidi ve güvenlik koşulları yine zorunludur.":
+                "Tam otomatik ilk mülakat henüz etkin değil. Aday saat teyidi ve e-posta doğrulaması tamamlanmalıdır."));
+        decisions.append(el("h3","İK Karar Merkezi"),
+            el("p","Hedef kararlar: İkinci görüşme · Ek eğitim · Ret. İlk mülakat ve rutin aday iletişimi otomatik yürütülecek. Nihai işe alım kararı insan denetiminde kalır."));
+        if(!pending.length&&!exceptions.length)
+            decisions.append(el("p","İlk aşamada bekleyen veya teknik müdahale gerektiren kayıt yok."));
+        for(const item of [...exceptions,...pending].slice(0,80)){
+            const card=el("article","",{class:"saas-panel"});
+            card.append(el("strong",(item.name||"Aday")+" · "+(item.position||"Pozisyon belirtilmedi")),
+                el("p","Durum: "+(item.status==="needs_attention"?"Teknik müdahale gerekli":"İlk aşama henüz otomatik tamamlanmadı")),
+                el("small","Kaynak: "+(item.source||"—")));
+            if(item.error_code)card.append(el("p","Hata kodu: "+item.error_code));
+            const detail=el("div");
+            card.append(action("Adayın İletişim Durumu",async button=>{
+                button.disabled=true;
+                try{
+                    const result=await api("selin/intake/"+encodeURIComponent(item.application_id)+"/contact-status");
+                    const outbox=(result.messages||[]).map(row=>row.purpose+" · "+row.channel+" · "+row.status);
+                    detail.replaceChildren(el("p","Aday randevu teyidi: "+(result.appointment?.confirmed_by==="candidate"?"Mevcut":"Bekliyor")),
+                        el("p","Kayıtlı iletişim: "+(outbox.join(", ")||"Yok")));
+                }catch(error){detail.replaceChildren(el("p","Durum alınamadı: "+error.message));}
+                finally{button.disabled=false;}
+            }),detail);
+            decisions.append(card);
+        }
+        casesArea.append(el("h3","FLOW İşlem Kanıtları"));
+        if(!processes.length)casesArea.append(el("p","Henüz bir FLOW dosyası oluşturulmadı."));
+        for(const item of processes.slice(0,40)){
+            const card=el("article","",{class:"saas-panel"});
+            const details=el("div");
+            card.append(el("strong","Dosya · "+item.status),
+                el("p","Son işlem: "+(item.updated_at||"—")));
+            if(item.error_code)card.append(el("p","Kontrol kodu: "+item.error_code));
+            card.append(action("İşlem Kanıtlarını Gör",async button=>{
+                button.disabled=true;
+                try{
+                    const result=await api("selin/cases/"+encodeURIComponent(item.id)+"/evidence");
+                    details.replaceChildren(...(result.steps||[]).map(step=>
+                        el("p",(step.title||step.code)+" · "+step.state+
+                            (step.detail?" · "+step.detail:""))));
+                }catch(error){details.replaceChildren(el("p","Kanıt alınamadı: "+error.message));}
+                finally{button.disabled=false;}
+            }),details);
+            casesArea.append(card);
+        }
+    }
+
+    const screens = {flow:["ERNASA HR FLOW",flow],jobs:["İş İlanları",jobs],pool:["Aday Havuzu",pool],kanban:["İşe Alım Panosu",kanban],
         calendar:["Görüşme Takvimi",calendar],evaluations:["Değerlendirmeler",evaluations],offers:["Teklifler",offers],
         reports:["AI Değerlendirme Raporları",reports],settings:["Firma Ayarları",settings],history:["İşlem Geçmişi",history]};
     async function open(name) {
