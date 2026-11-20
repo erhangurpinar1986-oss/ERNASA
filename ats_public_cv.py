@@ -80,6 +80,9 @@ def decide_intake(actor, application_id, action, root, create_interview, send_in
         raise HTTPException(403,"ATS ve AI İK yetkileri gerekiyor.")
     if action not in ("start","skip"):
         raise HTTPException(422,"Geçersiz işlem.")
+    if action=="start" and not hr_flow_contacts.may_create_interview_link(actor.company_id,application_id):
+        # A public CV alone never authorizes an unscheduled interview invitation.
+        raise HTTPException(409,"Adayın görüşme zamanı teyit edilmeden mülakat başlatılamaz.")
     with write(actor.company_id) as c:
         c.execute("""SELECT document_id,status FROM selin_intake_queue
             WHERE company_id=? AND application_id=?""",(actor.company_id,application_id))
