@@ -28,6 +28,11 @@ def pipeline(tmp_path, monkeypatch):
             company TEXT, position TEXT, status TEXT NOT NULL
         )""")
         c.execute("CREATE TABLE interview_reports(token TEXT PRIMARY KEY,job_fit_analysis TEXT)")
+        c.execute("""CREATE TABLE company_positions (
+            id TEXT PRIMARY KEY,company_id BIGINT NOT NULL,name TEXT NOT NULL,open INTEGER NOT NULL
+        )""")
+        c.execute("INSERT INTO company_positions VALUES(?,?,?,?)",
+                  ("position-1",1001,"Satış Temsilcisi",1))
         c.execute("""CREATE TABLE interview_answers (
             id TEXT PRIMARY KEY,token TEXT,question_number INTEGER,question TEXT,answer TEXT
         )""")
@@ -35,7 +40,8 @@ def pipeline(tmp_path, monkeypatch):
     selin_workflow.initialize_schema()
     actor=SimpleNamespace(company_id=1001,role="hr_manager",products=("ats","ai"),user_id=24)
     monkeypatch.setattr(selin_workflow.ats, "application",
-        lambda cursor,who,app_id: {"id":app_id,"closure":None} if who.company_id==1001
+        lambda cursor,who,app_id: {"id":app_id,"closure":None,"position_id":"position-1",
+                                    "email":"synthetic@example.test"} if who.company_id==1001
         else (_ for _ in ()).throw(HTTPException(404,"Unknown app")))
     monkeypatch.setattr(selin_workflow.ats_matching, "evidence_match",
         lambda root,who,app,doc: {"match_score":81.2,"evidence_coverage":75,
