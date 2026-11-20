@@ -22,7 +22,7 @@ MODULES = [
         "title": "ERNASA ve insan odaklı teknoloji",
         "narration": (
             "ERNASA Yazılım ve Teknoloji, iş süreçlerini iyileştiren dijital çözümler geliştirmeyi hedefler. "
-            "Öncelikli anlatımımız ERNASA İK üzerinedir. Bu sistem; aday takibi, dijital mülakat ve insan "
+            "Öncelikli anlatımımız ERNASA HR üzerinedir. Bu sistem; aday takibi, dijital mülakat ve insan "
             "kaynakları ekiplerine yönelik raporlama akışlarını destekler. Yapay zekâ karar desteği sunar, "
             "nihai işe alım kararı insana aittir. NEXUS ve diğer projeler için ticari hazırlık iddiasında bulunulmaz."
         ),
@@ -34,10 +34,10 @@ MODULES = [
         "questions": [
             {
                 "id": "temel-1",
-                "prompt": "ERNASA İK hakkında hangi ifade doğrudur?",
+                "prompt": "ERNASA HR hakkında hangi ifade doğrudur?",
                 "options": ["İşe alım kararlarını otomatik verir.", "İK ekibine karar desteği sunar.", "Klinik psikolojik tanı koyar.", "Tüm şirket sistemleriyle hazır entegredir."],
                 "correct": 1,
-                "explain": "ERNASA İK'nın anlatımı karar desteğidir; kabul veya ret kararının sahibi yetkili insandır.",
+                "explain": "ERNASA HR'nın anlatımı karar desteğidir; kabul veya ret kararının sahibi yetkili insandır.",
             },
             {
                 "id": "temel-2",
@@ -57,7 +57,7 @@ MODULES = [
     },
     {
         "id": "akis",
-        "title": "ERNASA İK iş akışını anlatma",
+        "title": "ERNASA HR iş akışını anlatma",
         "narration": (
             "Müşterinin işe alım süreci önce anlaşılır. Aday başvuru veya özgeçmiş kaydı alınır; "
             "uygun olduğunda ön değerlendirme ve mülakat daveti yürütülür. Dijital mülakat akışı "

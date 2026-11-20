@@ -442,10 +442,10 @@ def mutate(db, actor, path, data):
                     SELECT 1 FROM service_terms WHERE company_id=? AND product='ernasa-ik'
                 )""",(tenant,today,today,tenant))
             if not result.rowcount:
-                raise Problem(400,'Geçerli ERNASA İK aboneliği gerekir.')
+                raise Problem(400,'Geçerli ERNASA HR aboneliği gerekir.')
             db.execute("UPDATE companies SET status='Aktif' WHERE id=?",(tenant,))
             db.execute("UPDATE company_profile SET activated=1,stage='Aktif' WHERE company_id=?",(tenant,))
-            audit(db,actor,'ERNASA İK etkinleştirildi',tenant)
+            audit(db,actor,'ERNASA HR etkinleştirildi',tenant)
             return f'/firmalar?detay={tenant}'
         if action == 'logo':
             company(db,tenant)
@@ -886,7 +886,7 @@ def company_detail(db,actor,tenant,q):
         items = [('Ticari unvan',row['name']),('Firma kodu',profile['code']),('Ticari aşama',profile['stage']),('Erişim',row['status'])]
         portal = db.execute('SELECT slug FROM company_portals WHERE company_id=?',(tenant,)).fetchone()
         items.append(('Firma Portal Adresi',portal['slug']+'.ernasa.com' if portal else ''))
-        activate = form('/firmalar',actor,hidden('id',tenant)+hidden('action','activate_ik'),'ERNASA İK’yı etkinleştir')
+        activate = form('/firmalar',actor,hidden('id',tenant)+hidden('action','activate_ik'),'ERNASA HR’yı etkinleştir')
         items += [(label,profile[key]) for key,(label,_) in firma.PROFILE.items()]
         logo = ''
         if db.execute('SELECT 1 FROM company_logos WHERE company_id=?',(tenant,)).fetchone():
@@ -1100,7 +1100,7 @@ def screen(db, actor, path, q):
         if not current:
             ik_fields = (hidden('action','ik_account')+fields+
                          select('İK rolü','ik_role',[('hr_manager','İK Müdürü'),('hr_staff','İK Personeli')]))
-            permissions = card('ERNASA İK hesabı',form(path,actor,ik_fields,'İK hesabı oluştur'))
+            permissions = card('ERNASA HR hesabı',form(path,actor,ik_fields,'İK hesabı oluştur'))
         if actor['role'] == 'supervisor' and current:
             granted = db.execute('SELECT 1 FROM staff_subscription_access WHERE user_id=?',(edit,)).fetchone()
             if granted or delegation_allowed(db,tenant):
