@@ -22,6 +22,8 @@ def intake(tmp_path,monkeypatch):
     ats_public_cv.initialize_schema()
     import hr_flow_contacts
     hr_flow_contacts.initialize_schema()
+    import hr_flow_screening
+    hr_flow_screening.initialize_schema()
     manager=SimpleNamespace(company_id=1234,user_id=21,role="hr_manager",products=("ats",))
     dept=recruitment.add_department(manager,"Lojistik")
     position=recruitment.save_position(manager,recruitment.Position(
@@ -141,6 +143,8 @@ def approve_synthetic_interview(manager,position,application_id,document_id,root
         c.execute("UPDATE ats_position_profiles SET fields=? WHERE position_id=?",
                   (json.dumps(fields),position))
         db.commit()
+    if root is None:
+        root=database.DATABASE_PATH.parent / "synthetic_cv"
     result=hr_flow_screening.screen_position(manager,position,root)
     assert result["candidates"][0]["analysis_state"]=="analyzed"
     permission=hr_flow_screening.request_permission(manager,application_id,document_id)
