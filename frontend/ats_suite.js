@@ -399,6 +399,76 @@ if (companyPortalPage) {
         const stage = select("stage",[["","Tüm aşamalar"],...Object.entries(stageLabels)]);
         const people = manager() ? (await api("assignees")).users : [{id:metadata.user_id,name:metadata.user_name}];
         const assignee = select("assignee",[["","Tüm İK sorumluları"],["unassigned","Atanmamış"],...people.map(user=>[user.id,user.name])]);
+        const flowResults = el("section","",{class:"saas-panel",tabindex:"-1",hidden:""});
+        let flowOffset=0;
+        const renderFlow = async () => {
+            if (!target.value) {notice("Önce değerlendirmek istediğiniz pozisyonu seçin.",true);target.focus();return}
+            flowResults.hidden=false;
+            flowResults.replaceChildren(el("h3","ERNASA HR FLOW · Pozisyon ATS Analizi"),
+                el("p","Gerçek CV kayıtları değerlendirilirken otomatik ret veya davet gönderimi yapılmaz."));
+            try {
+                const data=await api("flow/positions/"+encodeURIComponent(target.value)+"/screen?offset="+flowOffset);
+                const header=el("div","",{class:"saas-actions"});
+                header.append(el("strong",data.position+" · "+data.total+" başvuru"));
+                const records=el("div");
+                for(const c of data.candidates){
+                    const panel=el("section","",{class:"saas-panel"});
+                    const score=c.match_score===null?"Kanıtlı puan yok":String(c.match_score)+" / 100";
+                    const coverage=c.coverage===null?"Kapsam hesaplanamadı":"Kanıt kapsamı: %"+c.coverage;
+                    panel.append(el("h4",c.candidate),
+                        el("p",c.position+" · "+c.source),
+                        el("p",score+" · "+coverage),
+                        el("p",c.note));
+                    if(c.evidence.length){
+                        const ul=el("ul");
+                        for(const e of c.evidence){
+                            ul.append(el("li",(e.requirement||"Kriter")+" — "+(e.status||"İncelenmedi")));
+                        }
+                        panel.append(ul);
+                    }
+                    const box=el("div","",{class:"saas-actions"});
+                    box.append(action("Aday Dosyasını Aç",()=>{
+                        chosenApplication=c.application_id;
+                        revealDetails(c.application_id);
+                    }));
+                    if(c.permission){
+                        box.append(el("span",({pending:"Mülakat izni bekliyor",approved:"Mülakat izni onaylandı",declined:"Mülakat izni reddedildi"})[c.permission.status]||c.permission.status));
+                        if(manager()&&c.permission.status==="pending"){
+                            for(const [decision,label] of [["approved","İzni Onayla"],["declined","İzni Reddet"]]){
+                                box.append(action(label,async button=>{
+                                    button.disabled=true;
+                                    try{
+                                        await api("flow/permissions/"+encodeURIComponent(c.permission.id)+"/decision","POST",{decision});
+                                        notice(decision==="approved"?"İzin onaylandı; adayın teyidi olmadan mülakat bağlantısı gönderilmeyecek.":"İzin reddedildi; ATS başvurusu korundu.");
+                                        await renderFlow();
+                                    }catch(error){notice(error.message,true);button.disabled=false}
+                                }));
+                            }
+                        }
+                    }else if(c.has_cv && c.document_id && c.analysis_state==="analyzed"){
+                        box.append(action("Mülakat İçin İzin İste",async button=>{
+                            button.disabled=true;
+                            try{
+                                await api("flow/applications/"+encodeURIComponent(c.application_id)+"/permission",
+                                    "POST",{document_id:c.document_id});
+                                notice("Mülakat izin talebi kaydedildi. Adaya davet gönderilmedi.");
+                                await renderFlow();
+                            }catch(error){notice(error.message,true);button.disabled=false}
+                        }));
+                    }else{
+                        box.append(el("span","İzin talebi için önce doğrulanabilir ATS analizi gerekiyor."));
+                    }
+                    panel.append(box);records.append(panel);
+                }
+                flowResults.replaceChildren(el("h3","ERNASA HR FLOW · ATS Değerlendirmesi"),
+                    header,el("p",data.note),records);
+                const pager=el("div","",{class:"saas-actions"});
+                if(flowOffset>0)pager.append(action("Önceki 20",()=>{flowOffset-=20;renderFlow()}));
+                if(flowOffset+20<data.total)pager.append(action("Sonraki 20",()=>{flowOffset+=20;renderFlow()}));
+                flowResults.append(pager);
+                flowResults.focus();
+            }catch(error){flowResults.append(el("p","Analiz başlatılamadı: "+error.message));notice(error.message,true)}
+        };
         const results = el("section","",{class:"saas-panel",tabindex:"-1"});
         const details = el("section","",{class:"saas-panel",tabindex:"-1",hidden:""});
         const editor = el("section","",{class:"saas-panel",hidden:""});
@@ -432,13 +502,18 @@ if (companyPortalPage) {
             async () => {offset=0;await draw();},openPositions.length ? reveal : null);
         const actions = el("div","",{class:"saas-actions"});
         if (openPositions.length) actions.append(action("Yeni Aday Ekle",reveal));
+        actions.append(action("CV'leri Getir ve ATS Analizi Yap",async button=>{
+            button.disabled=true;
+            flowOffset=0;
+            try {await renderFlow()}finally{button.disabled=false}
+        }));
         actions.append(action("Başvuruları Listele",async()=>{offset=0;await draw();results.focus();}),action("CV Yükle",()=>{
             importer.hidden = false;
             cvInput.focus();
         }));
         root.append(actions,form([field("Ad veya e-posta",search),field("Pozisyon",target),field("Aşama",stage),
                                   field("İK sorumlusu",assignee)],
-                         "Filtrele",() => {offset=0;return draw();}),importer,results,editor,details);
+                         "Filtrele",() => {offset=0;return draw();}),flowResults,importer,results,editor,details);
         if (openPositions.length) editor.append(el("h3","Manuel başvuru"),form([
             field("Ad soyad",input("name","text","",{required:"",maxlength:160})),
             field("E-posta",input("email","email","",{required:"",maxlength:254})),
