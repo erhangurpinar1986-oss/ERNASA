@@ -28,14 +28,20 @@ def _safe_provider_error(error: HTTPError) -> str:
     API keys or other untrusted fields. Only whitelist known categories.
     """
     status = int(getattr(error, "code", 0) or 0)
+    # A CDN/WAF may respond with HTML instead of a Resend JSON error.
+    # Never expose the response body, invitation URLs, tokens or addresses.
+    content_type = str(error.headers.get("Content-Type", "") if error.headers else "").lower()
+    raw = error.read(2048)
     try:
-        details = json.loads(error.read(2048))
+        details = json.loads(raw)
         if not isinstance(details, dict):
             details = {}
-    except (ValueError, OSError, UnicodeError):
+    except (ValueError, UnicodeError, TypeError):
         details = {}
     message = str(details.get("message") or "").lower()
     name = str(details.get("name") or "").lower()
+    if status == 403 and (("text/html" in content_type) or (raw.lstrip().lower().startswith((b"<!doctype html", b"<html")))):
+        return "Resend HTTP 403: Istek bir HTML guvenlik engeline takilmis olabilir. HTTP istemcisi ve ag filtreleri kontrol edilmeli."
     if status in (401,):
         meaning = "API anahtarı geçersiz veya erişim izni yetersiz. Resend API Keys bölümünü kontrol edin."
     elif status == 403:
@@ -66,6 +72,13 @@ def _safe_provider_error(error: HTTPError) -> str:
         meaning = "E-posta sağlayıcısı gönderimi reddetti. Resend işlem kayıtlarını kontrol edin."
     return f"Resend HTTP {status}: {meaning}"
 
+
+# Use an explicit, stable identity for both delivery and read-only diagnostics.
+# Some intermediary filters treat the default Python-urllib user agent differently.
+_RESEND_HTTP_HEADERS = {
+    "User-Agent": "ERNASA-Mailer/1.0 (+https://ernasa.com)",
+    "Accept": "application/json",
+}
 
 _ALLOWED_SENDERS = {"iletisim@ernasa.com"}
 
@@ -188,6 +201,7 @@ def send_invitation(candidate, url, *, idempotency_key):
         data=payload,
         headers={
             "Authorization": "Bearer " + api_key,
+            **_RESEND_HTTP_HEADERS,
             "Content-Type": "application/json",
             "Idempotency-Key": idempotency_key,
         },
@@ -267,7 +281,8 @@ def send_training_invitation(*, recipient, name, url, expires_at, idempotency_ke
     }, ensure_ascii=False).encode("utf-8")
     request = Request(
         "https://api.resend.com/emails", data=payload,
-        headers={"Authorization": "Bearer " + api_key,
+        headers={**_RESEND_HTTP_HEADERS,
+                 "Authorization": "Bearer " + api_key,
                  "Content-Type": "application/json",
                  "Idempotency-Key": idempotency_key},
         method="POST",
@@ -305,7 +320,7 @@ def inspect_sender_domain():
     try:
         request = Request(
             "https://api.resend.com/domains?limit=100",
-            headers={"Authorization":"Bearer "+key,"Accept":"application/json"},
+            headers={**_RESEND_HTTP_HEADERS,"Authorization":"Bearer "+key},
             method="GET",
         )
         with urlopen(request,timeout=8) as response:
