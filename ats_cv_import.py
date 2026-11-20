@@ -85,10 +85,15 @@ def save(root, actor, fields, filename, content, on_saved=None):
         if created:
             path.unlink(missing_ok=True)
         raise
+    # Never report a successful automation when the post-import trigger failed.
+    # The CV is already committed, so preserve it and surface a retryable state.
+    automation_status = 'not_configured'
     if on_saved is not None:
         try:
-            on_saved(actor,app_id,document_id)
+            on_saved(actor, app_id, document_id)
+            automation_status = 'triggered'
         except Exception as error:
-            # Committed ATS import must remain successful even if SELİN fails.
-            logger.warning('SELİN post-import callback failed (%s)',type(error).__name__)
-    return {'status': 'saved'}
+            automation_status = 'failed'
+            logger.exception('SELİN post-import callback failed; CV remains saved')
+    return {'status': 'saved', 'automation_status': automation_status,
+            'application_id': app_id, 'document_id': document_id}

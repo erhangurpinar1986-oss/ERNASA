@@ -88,7 +88,7 @@ def configured_sender():
     return key, sender
 
 
-def _recipient(value):
+def validate_recipient(value):
     if not isinstance(value, str) or len(value) > 254 or any(c in value for c in "\r\n"):
         raise ValueError("Adayın e-posta adresi geçersiz.")
     display, address = parseaddr(value.strip())
@@ -98,7 +98,7 @@ def _recipient(value):
 
 
 def invitation_message(candidate, url):
-    recipient = _recipient(candidate["email"])
+    recipient = validate_recipient(candidate["email"])
     expiry = datetime.fromisoformat(candidate["expires_at"])
     expiry_local = expiry.astimezone(__import__("zoneinfo").ZoneInfo("Europe/Istanbul"))
     deadline = expiry_local.strftime("%d.%m.%Y %H:%M")
@@ -106,9 +106,15 @@ def invitation_message(candidate, url):
     company = str(candidate.get("company") or "ERNASA").strip().replace("\r", " ").replace("\n", " ")[:160]
     position = str(candidate.get("position") or "Mülakat").strip().replace("\r", " ").replace("\n", " ")[:160]
     subject = f"{company} · {position} mülakat daveti"
+    scheduled = candidate.get("scheduled_at")
+    appointment = ""
+    if scheduled:
+        local = datetime.fromisoformat(scheduled).astimezone(__import__("zoneinfo").ZoneInfo("Europe/Istanbul"))
+        appointment = f"Görüşme: {local:%d.%m.%Y %H:%M} (Türkiye saati).\n\n"
     body = (
         f"Merhaba {name},\n\n"
         f"{company} bünyesindeki {position} pozisyonu için mülakat bağlantınız:\n{url}\n\n"
+        f"{appointment}"
         f"Bağlantının son geçerlilik zamanı: {deadline} (Türkiye saati).\n"
         "Mülakatı bu süre içinde başlatmanız gerekmektedir.\n\n"
         "İyi çalışmalar,\nERNASA Yazılım Sistemleri\n"
@@ -172,8 +178,20 @@ def _send_brevo(*, api_key, sender, recipient, subject, text, html=None):
 
 
 def send_invitation(candidate, url, *, idempotency_key):
-    api_key, sender = configured_sender()
     recipient, subject, body = invitation_message(candidate, url)
+    return _send_text(recipient, subject, body, idempotency_key)
+
+
+def send_availability(candidate, url, *, idempotency_key):
+    address = validate_recipient(candidate["email"])
+    subject = "ERNASA · Mülakat için uygun gün ve saat"
+    body = ("Merhaba,\n\nBaşvurunuz için bir görüşme saati seçmenizi rica ediyoruz.\n"
+            f"{url}\n\nBağlantı size özeldir ve 7 gün geçerlidir.\nERNASA")
+    return _send_text(address, subject, body, idempotency_key)
+
+
+def _send_text(recipient, subject, body, idempotency_key):
+    api_key, sender = configured_sender()
     if _email_provider() == "brevo":
         return _send_brevo(api_key=api_key, sender=sender, recipient=recipient,
                            subject=subject, text=body)
@@ -212,7 +230,7 @@ def send_training_invitation(*, recipient, name, url, expires_at, idempotency_ke
     stored training invite, not from arbitrary client-controlled HTML.
     """
     api_key, sender = configured_sender()
-    email_address = _recipient(recipient)
+    email_address = validate_recipient(recipient)
     if not isinstance(url, str) or not re.fullmatch(
         r"https://(?:www\.)?ernasa\.com/egitim/[A-Za-z0-9_-]{43}", url
     ):

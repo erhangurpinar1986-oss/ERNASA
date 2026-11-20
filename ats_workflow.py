@@ -1,6 +1,6 @@
 import json
 from collections import Counter
-from contextlib import closing
+from contextlib import closing, nullcontext
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -141,9 +141,10 @@ def list_schedules(actor, app_id=None):
         return [dict(row) for row in cursor.fetchall()]
 
 
-def save_schedule(actor, app_id, fields, schedule_id=None):
+def save_schedule(actor, app_id, fields, schedule_id=None, *, active_cursor=None):
     starts, ends = time_bounds(fields)
-    with write(actor.company_id) as cursor:
+    transaction = write(actor.company_id) if active_cursor is None else nullcontext(active_cursor)
+    with transaction as cursor:
         row = application(cursor,actor,app_id)
         if actor.role not in MANAGERS:
             require_staff_position(cursor,actor,row['position_id'])

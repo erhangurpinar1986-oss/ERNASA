@@ -394,12 +394,20 @@ def archive_document(cursor, actor, app_id, document_id, content):
          b64encode(content).decode('ascii')))
 
 
+def queue_screening(cursor, actor, app_id, document_id):
+    cursor.execute("""INSERT INTO flow_screening_jobs
+        (document_id,company_id,application_id,available_at) VALUES(?,?,?,?)
+        ON CONFLICT(document_id) DO NOTHING""",
+        (document_id,actor.company_id,app_id,now()))
+
+
 def record_document(cursor, actor, app_id, document_id, name, media, content):
     cursor.execute('INSERT INTO ats_documents VALUES (?,?,?,?,?,?,?,?)',
                    (document_id,actor.company_id,app_id,name,media,len(content),actor.user_id,now()))
     cursor.execute('INSERT INTO ats_document_digests VALUES (?,?,?,?)',
                    (actor.company_id,app_id,sha256(content).hexdigest(),document_id))
     archive_document(cursor,actor,app_id,document_id,content)
+    queue_screening(cursor,actor,app_id,document_id)
     record(cursor,actor,'application_document_added',app_id)
 
 
@@ -445,6 +453,7 @@ def upload_document(root, actor, app_id, filename, content, job_id=None):
                 except FileExistsError:
                     raise HTTPException(409,'Bu dosya bu başvuruya zaten yüklenmiş.') from None
                 archive_document(cursor,actor,app_id,document_id,content)
+                queue_screening(cursor,actor,app_id,document_id)
                 record(cursor,actor,'application_document_restored',app_id)
                 if job_id:
                     cursor.execute("UPDATE ats_upload_jobs SET status='ready',payload=NULL,error=NULL WHERE id=?", (job_id,))

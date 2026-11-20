@@ -115,57 +115,57 @@ def contact_status(company_id, application_id):
     }
 
 
-def may_create_interview_link(company_id, application_id, document_id=None):
-    """Single non-mutating gate for ALL SELIN interview-creation paths.
+def require_fresh_approval(c, company_id, application_id, document_id):
+    c.execute("""SELECT p.status,p.document_id,p.decided_by,p.decided_at,
+               s.analysis_state,s.match_score,s.criteria_digest,s.cv_digest,
+               a.position_id,a.closure,pr.fields,dg.digest,pos.open,
+               ap.confirmed_at,ap.confirmed_on,ap.confirmed_by
+        FROM flow_interview_permissions p
+        JOIN ats_applications a ON a.id=p.application_id
+            AND a.company_id=p.company_id
+        JOIN company_positions pos ON pos.id=a.position_id AND pos.company_id=a.company_id
+        JOIN flow_screening_results s ON s.application_id=p.application_id
+            AND s.company_id=p.company_id AND s.document_id=p.document_id
+            AND s.position_id=a.position_id
+        JOIN ats_document_digests dg ON dg.company_id=p.company_id
+            AND dg.application_id=p.application_id
+            AND dg.document_id=p.document_id
+        LEFT JOIN ats_position_profiles pr ON pr.position_id=a.position_id
+            AND pr.company_id=a.company_id
+        LEFT JOIN flow_candidate_appointment ap ON
+            ap.application_id=p.application_id AND ap.company_id=p.company_id
+        WHERE p.company_id=? AND p.application_id=? AND p.document_id=?""",
+        (company_id,application_id,document_id))
+    row=c.fetchone()
+    valid = bool(row and row["status"] == "approved" and row["decided_by"] and row["decided_at"]
+                 and not row["closure"] and row["open"] and row["digest"] == row["cv_digest"]
+                 and row["analysis_state"] in ("analyzed", "review_required", "criteria_missing"))
+    if valid:
+        try:
+            fields = json.loads(row["fields"] or "{}")
+            criteria = str(fields.get("matching_criteria") or "")
+            valid = hashlib.sha256(criteria.encode("utf-8")).hexdigest() == row["criteria_digest"]
+        except (ValueError, TypeError, AttributeError):
+            valid = False
+    if not valid:
+        raise HTTPException(409, "Güncel ATS ön değerlendirmesi ve İK yönetici onayı gerekiyor.")
+    return row
 
-    A score is evidence for human review, never permission to interview.
-    An actual manager approval, unchanged CV/job criteria and an explicit
-    candidate-confirmed future appointment are each required.
-    """
+
+def may_create_interview_link(company_id, application_id, document_id=None):
     if not company_id or not application_id or not document_id:
         return False
-    with closing(get_connection()) as db:
-        c=db.cursor()
-        c.execute("""SELECT p.status,p.document_id,p.decided_by,p.decided_at,
-                   s.analysis_state,s.match_score,s.criteria_digest,s.cv_digest,
-                   a.position_id,a.closure,pr.fields,dg.digest,
-                   ap.confirmed_at,ap.confirmed_on,ap.confirmed_by
-            FROM flow_interview_permissions p
-            JOIN ats_applications a ON a.id=p.application_id
-                AND a.company_id=p.company_id
-            JOIN flow_screening_results s ON s.application_id=p.application_id
-                AND s.company_id=p.company_id AND s.document_id=p.document_id
-                AND s.position_id=a.position_id
-            JOIN ats_document_digests dg ON dg.company_id=p.company_id
-                AND dg.application_id=p.application_id
-                AND dg.document_id=p.document_id
-            LEFT JOIN ats_position_profiles pr ON pr.position_id=a.position_id
-                AND pr.company_id=a.company_id
-            LEFT JOIN flow_candidate_appointment ap ON
-                ap.application_id=p.application_id AND ap.company_id=p.company_id
-            WHERE p.company_id=? AND p.application_id=? AND p.document_id=?""",
-            (company_id,application_id,document_id))
-        row=c.fetchone()
-    if not row or row["status"]!="approved" or not row["decided_by"] or not row["decided_at"]:
-        return False
-    if row["closure"] or row["analysis_state"]!="analyzed" or row["match_score"] is None:
-        return False
-    if row["digest"]!=row["cv_digest"]:
-        return False
     try:
-        criteria=json.loads(row["fields"] or "{}")
-        current=str(criteria.get("matching_criteria") or "")
-        if not current or hashlib.sha256(current.encode("utf-8")).hexdigest()!=row["criteria_digest"]:
+        with closing(get_connection()) as db:
+            row = require_fresh_approval(db.cursor(), company_id, application_id, document_id)
+        if row["confirmed_by"] != "candidate" or not row["confirmed_on"]:
             return False
-        if row["confirmed_by"]!="candidate" or not row["confirmed_on"]:
-            return False
-        from datetime import datetime,timezone
-        appointment=datetime.fromisoformat(row["confirmed_at"])
+        appointment = datetime.fromisoformat(row["confirmed_at"])
         if appointment.tzinfo is None:
             return False
-        remaining=appointment.astimezone(timezone.utc)-datetime.now(timezone.utc)
-        return timedelta(0)<remaining<=timedelta(days=90)
-    except (ValueError,TypeError,AttributeError,KeyError):
+        remaining = appointment.astimezone(timezone.utc) - datetime.now(timezone.utc)
+        return timedelta(0) < remaining <= timedelta(days=90)
+    except (HTTPException, ValueError, TypeError):
         return False
 
 
