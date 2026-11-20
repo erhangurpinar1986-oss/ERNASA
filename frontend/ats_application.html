@@ -29,7 +29,13 @@ const jobId = location.pathname.split("/").pop();
 const route = "/api/ats/jobs/" + encodeURIComponent(jobId);
 const form = document.getElementById("applyForm");
 const message = document.getElementById("message");
-let version = "";\nconst source = new URLSearchParams(location.search).get("src");\nconst allowedSources = new Set(["linkedin","indeed","kariyer_net","social","other","direct"]);\nconst applicationSource = allowedSources.has(source) ? source : "direct";\nconst cvInput = document.getElementById("cvInput");\nconst cvField = document.getElementById("cvField");\nlet cvMode = false;
+let version = "";
+const source = new URLSearchParams(location.search).get("src");
+const allowedSources = new Set(["linkedin","indeed","kariyer_net","eleman_net","social","other","direct"]);
+const applicationSource = allowedSources.has(source) ? source : "direct";
+const cvInput = document.getElementById("cvInput");
+const cvField = document.getElementById("cvField");
+let cvMode = false;
 fetch(route,{cache:"no-store"}).then(async response => {
     if (!response.ok) throw new Error("Başvuru bağlantısı kullanılamıyor.");
     const data = await response.json();
@@ -43,6 +49,9 @@ fetch(route,{cache:"no-store"}).then(async response => {
     }
     document.getElementById("notice").textContent = data.notice;
     version = data.notice_version;
+    cvMode = data.cv_upload_enabled === true;
+    cvField.hidden = !cvMode;
+    cvInput.required = cvMode;
     form.hidden = false;
 }).catch(error => { message.textContent = error.message; });
 form.addEventListener("submit", async event => {
