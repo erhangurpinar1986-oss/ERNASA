@@ -15,6 +15,14 @@ DDL = (
     """CREATE TABLE IF NOT EXISTS ats_job_details (
         job_id TEXT PRIMARY KEY REFERENCES ats_jobs, company_id BIGINT NOT NULL,
         qualifications TEXT NOT NULL, work_conditions TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS ats_job_deadlines (
+        job_id TEXT PRIMARY KEY REFERENCES ats_jobs(id) ON DELETE CASCADE,
+        company_id BIGINT NOT NULL, closes_at TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS ats_candidate_email_conflicts (
+        candidate_id TEXT PRIMARY KEY REFERENCES ats_candidates(id) ON DELETE CASCADE,
+        company_id BIGINT NOT NULL, reported_email TEXT NOT NULL)""",
+    """CREATE INDEX IF NOT EXISTS ats_candidate_email_conflicts_lookup
+        ON ats_candidate_email_conflicts(company_id,reported_email)""",
     """CREATE TABLE IF NOT EXISTS ats_applications (
         id TEXT PRIMARY KEY, company_id BIGINT NOT NULL, candidate_id TEXT NOT NULL REFERENCES ats_candidates,
         position_id TEXT NOT NULL REFERENCES company_positions, job_id TEXT REFERENCES ats_jobs,
@@ -69,6 +77,14 @@ DDL = (
         document_id TEXT PRIMARY KEY REFERENCES ats_documents(id) ON DELETE CASCADE,
         company_id BIGINT NOT NULL, application_id TEXT NOT NULL REFERENCES ats_applications,
         digest TEXT NOT NULL, content_base64 TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS flow_screening_results (
+            company_id BIGINT NOT NULL, application_id TEXT NOT NULL,
+            position_id TEXT NOT NULL, document_id TEXT NOT NULL,
+            cv_digest TEXT NOT NULL, criteria_digest TEXT NOT NULL,
+            analysis_state TEXT NOT NULL, match_score REAL, coverage REAL,
+            details_json TEXT NOT NULL, analyzed_at TEXT NOT NULL,
+            PRIMARY KEY(company_id,application_id,document_id)
+        )""",
     """CREATE TABLE IF NOT EXISTS flow_screening_jobs (
         document_id TEXT PRIMARY KEY REFERENCES ats_documents(id) ON DELETE CASCADE,
         company_id BIGINT NOT NULL, application_id TEXT NOT NULL,

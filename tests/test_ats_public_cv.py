@@ -13,8 +13,22 @@ import recruitment
 
 
 @pytest.fixture
-def intake(tmp_path,monkeypatch):
-    monkeypatch.setattr(database,"DATABASE_URL",None)
+def intake(tmp_path,monkeypatch,request):
+    import os
+    from uuid import uuid4
+
+    dsn = None
+    if getattr(request, "param", None) == "postgres":
+        import psycopg2
+        from psycopg2.extensions import make_dsn
+        dsn = os.getenv("HR_FLOW_TEST_POSTGRES_DSN")
+        if not dsn:
+            pytest.skip("Isolated PostgreSQL DSN required")
+        schema = "flow_test_" + uuid4().hex
+        with closing(psycopg2.connect(dsn)) as connection, connection:
+            connection.cursor().execute("CREATE SCHEMA " + schema)
+        dsn = make_dsn(dsn, options="-csearch_path=" + schema)
+    monkeypatch.setattr(database,"DATABASE_URL",dsn)
     monkeypatch.setattr(database,"DATABASE_PATH",tmp_path/"public-cv.db")
     monkeypatch.setenv("ERNASA_PUBLIC_CV_ENABLED","1")
     monkeypatch.setenv("ERNASA_PUBLIC_CV_RATE_SECRET","synthetic-only-secret-key-abcdef0123456789")
@@ -482,6 +496,7 @@ def test_interview_readiness_fails_when_source_or_approval_changes(intake):
     assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,doc) is False
 
 
+@pytest.mark.parametrize("intake", ["sqlite", "postgres"], indirect=True)
 def test_synthetic_flow_approval_booking_invite_and_pdf(intake, tmp_path, monkeypatch):
     from datetime import datetime, timedelta, timezone
     from urllib.parse import urlsplit
@@ -510,6 +525,9 @@ def test_synthetic_flow_approval_booking_invite_and_pdf(intake, tmp_path, monkey
         if operation == "session":
             return {"company_id": actor.company_id, "role": actor.role, "version": actor.access_version,
                     "company_name": actor.company_name, "products": actor.products}
+        if operation == "resolve":
+            return {"company_id": actor.company_id if portal.slug == "synthetic" else 4444,
+                    "name": actor.company_name, "products": actor.products}
         assert operation == "interview_template"
         return {}
 
@@ -530,7 +548,16 @@ def test_synthetic_flow_approval_booking_invite_and_pdf(intake, tmp_path, monkey
         return "synthetic-interview-id"
 
     monkeypatch.setattr(invite_email, "send_invitation", send_invitation)
-    entry = ats_public_cv.submit(actor.company_id, job, applicant, "cv.pdf", pdf, "direct", "203.0.113.99")
+    client = TestClient(main.app, base_url=portal.origin)
+    foreign = TestClient(main.app, base_url="https://other.ernasa.com")
+    assert client.get("/basvuru/"+job).status_code == 200
+    assert foreign.get("/basvuru/"+job).status_code == 404
+    result = client.post("/api/ats/jobs/"+job+"/apply-with-cv",
+        data={"name":applicant.name,"email":applicant.email,"notice_version":applicant.notice_version,
+              "acknowledge":"true","source":"direct"},
+        files={"cv":("cv.pdf",pdf,"application/pdf")}, headers={"Origin":portal.origin})
+    assert result.status_code == 201, result.text
+    entry = ats_public_cv.list_intake(actor.company_id)[0]
     app_id, doc_id = entry["application_id"], entry["document_id"]
     assert hr_flow_screening.process_one(tmp_path)
     assert not hr_flow_booking.process_one(main.start_booked_flow, send_availability)
@@ -541,9 +568,7 @@ def test_synthetic_flow_approval_booking_invite_and_pdf(intake, tmp_path, monkey
     assert [kind for kind, _ in outgoing] == ["availability"]
     url = urlsplit(outgoing[0][1]).path
     start = (datetime.now(hr_flow_booking.LOCAL_ZONE) + timedelta(days=2)).strftime("%Y-%m-%dT%H:%M")
-    client = TestClient(main.app, base_url=portal.origin)
     assert client.get(url).status_code == 200
-    foreign = TestClient(main.app, base_url="https://other.ernasa.com")
     assert foreign.get(url).status_code == 404
     assert client.post(url, data={"starts_at":"2020-01-01T09:00"}).status_code == 422
     assert "Görüşme saatiniz kaydedildi" in client.post(url, data={"starts_at":start}).text
@@ -557,17 +582,151 @@ def test_synthetic_flow_approval_booking_invite_and_pdf(intake, tmp_path, monkey
     with pytest.raises(HTTPException) as ex:
         early(token, actor.company_id, main._link_deadline_passed, main._intro_question, lambda *args: None)
     assert ex.value.status_code == 409
+    info = main.get_interview_link(token,actor.company_id)
+    assert info["schedule_state"] == "scheduled" and info["can_start"] is False
+    assert main.mark_interview_opened(token,actor.company_id)["can_start"] is False
+    starts_at = datetime.fromisoformat(info["scheduled_at"])
+    assert datetime.fromisoformat(info["expires_at"]) - starts_at == timedelta(hours=8)
     with closing(database.get_connection()) as db:
-        assert db.execute("SELECT COUNT(*) FROM ats_schedules").fetchone()[0] == 1
-        assert db.execute("SELECT COUNT(*) FROM interview_links").fetchone()[0] == 1
-        record = db.execute("SELECT expires_at FROM interview_links WHERE token=?", (token,)).fetchone()
+        assert db.cursor().execute("SELECT COUNT(*) FROM ats_schedules").fetchone()[0] == 1
+        assert db.cursor().execute("SELECT COUNT(*) FROM interview_links").fetchone()[0] == 1
+        record = db.cursor().execute("SELECT expires_at FROM interview_links WHERE token=?", (token,)).fetchone()
         assert datetime.fromisoformat(record["expires_at"]) > datetime.now(timezone.utc) + timedelta(days=1)
-        app = db.execute("SELECT closure FROM ats_applications WHERE id=?", (app_id,)).fetchone()
+        app = db.cursor().execute("SELECT closure FROM ats_applications WHERE id=?", (app_id,)).fetchone()
         assert app["closure"] is None
-        db.execute("UPDATE interview_links SET status='completed' WHERE token=?", (token,))
-        db.execute("INSERT INTO interview_reports VALUES (?,?,?)", (token, "Sentetik mülakat değerlendirmesi", ats.now()))
+        db.cursor().execute("UPDATE interview_links SET status='completed' WHERE token=?", (token,))
+        db.cursor().execute("INSERT INTO interview_reports VALUES (?,?,?)", (token, "Sentetik mülakat değerlendirmesi", ats.now()))
         db.commit()
     assert selin_workflow.process_one()
     case = selin_workflow.list_cases(actor.company_id)[0]
     assert case["report_available"] == 1
     assert main.selin_case_pdf(case["id"], actor).body.startswith(b"%PDF-")
+
+
+@pytest.mark.parametrize("intake", ["sqlite", "postgres"], indirect=True)
+def test_import_same_email_different_candidates_and_latest_cv(intake,tmp_path):
+    from io import BytesIO
+    from uuid import uuid4
+
+    from docx import Document
+
+    import ats_cv_import
+    import hr_flow_screening
+
+    manager, position, _, _, _ = intake
+    email = "shared@example.test"
+
+    def cv(name, phone, skill):
+        document = Document()
+        for line in (f"Ad Soyad: {name}", email, phone, "Eğitim", "Lojistik ön lisans", "Deneyim", skill):
+            document.add_paragraph(line)
+        output = BytesIO()
+        document.save(output)
+        return output.getvalue()
+
+    def save(name, phone, skill):
+        content = cv(name, phone, skill)
+        preview = ats_cv_import.preview("candidate.docx",content,manager)
+        assert preview["name"] == name
+        assert preview["education"] == ["Lojistik ön lisans"]
+        assert preview["experience"] == [skill]
+        assert preview["suggested_position_id"] == position
+        fields = ats_cv_import.Selection(import_id=uuid4(),position_id=position,name=name,email=email,phone=phone)
+        return ats_cv_import.save(tmp_path,manager,fields,"candidate.docx",content)
+
+    first = save("Zeynep Demir","0531 111 22 33","Depo yönetimi")
+    second = save("Deniz Karaca","0531 444 55 66","Stok takibi")
+    updated = save("Deniz Karaca","0531 444 55 66","Stok ve WMS")
+    assert first["application_id"] != second["application_id"]
+    assert second["identity_conflict"]
+    assert updated["existing_application"]
+    assert updated["application_id"] == second["application_id"]
+    assert updated["document_id"] != second["document_id"]
+    for item in (first,second,updated):
+        assert hr_flow_screening.process_one(tmp_path)
+        assert ats_cv_import.screening_status(manager,item["application_id"],item["document_id"])["state"] != "pending"
+    assert not hr_flow_screening.process_one(tmp_path)
+    assert ats.list_applications(manager,email,limit=1,name_order="asc")["applications"][0]["name"] == "Deniz Karaca"
+    assert ats.list_applications(manager,email,limit=1,offset=1,name_order="asc")["applications"][0]["name"] == "Zeynep Demir"
+    rows = ats.list_applications(manager,email,limit=1,name_order="desc")
+    assert rows["total"] == 2 and rows["applications"][0]["name"] == "Zeynep Demir"
+    stranger = SimpleNamespace(company_id=4444,user_id=41,role="hr_manager",products=("ats",))
+    assert ats.list_applications(stranger,email)["total"] == 0
+    with pytest.raises(HTTPException) as error:
+        ats_cv_import.screening_status(stranger,updated["application_id"],updated["document_id"])
+    assert error.value.status_code == 404
+    second_app = ats.details(manager,second["application_id"])
+    assert not second_app["application"]["email"]
+    assert len(second_app["documents"]) == 2
+
+
+@pytest.mark.parametrize("intake", ["sqlite", "postgres"], indirect=True)
+def test_legacy_calendar_blocks_early_and_expired_starts(intake):
+    from datetime import datetime, timedelta, timezone
+
+    import ats_workflow
+    import portal_interviews
+
+    actor, _, job, pdf, applicant = intake
+    entry = ats_public_cv.submit(actor.company_id,job,applicant,"cv.pdf",pdf,"direct","203.0.113.123")
+    token = "synthetic-interview"
+    now = datetime.now(timezone.utc)
+    starts = now + timedelta(hours=1)
+    schedule = ats_workflow.save_schedule(actor,entry["application_id"],ats_workflow.Schedule(
+        interviewer_id=actor.user_id,starts_at=starts.isoformat(),
+        ends_at=(starts + timedelta(minutes=30)).isoformat(),kind="video"))
+    with closing(database.get_connection()) as db:
+        db.cursor().execute("""INSERT INTO interview_links
+            (token,company_id,application_id,status,expires_at,created_at)
+            VALUES(?,?,?,'waiting',?,?)""",(token,actor.company_id,entry["application_id"],
+                                          (now+timedelta(days=1)).isoformat(),now.isoformat()))
+        db.commit()
+    def start():
+        return portal_interviews.start(token,actor.company_id,lambda row:False,lambda:"Intro",lambda *args:"Soru?")
+    with pytest.raises(HTTPException) as error:
+        start()
+    assert error.value.status_code == 409 and "Türkiye saati" in error.value.detail
+    with closing(database.get_connection()) as db:
+        cursor = db.cursor()
+        interview = portal_interviews.load_interview(cursor,token,actor.company_id)
+        assert portal_interviews.availability(cursor,interview,actor.company_id,now=starts)["state"] == "available"
+        assert portal_interviews.availability(cursor,interview,actor.company_id,now=starts+timedelta(hours=8))["state"] == "expired"
+        cursor.execute("UPDATE ats_schedules SET starts_at=? WHERE id=?",((now-timedelta(hours=9)).isoformat(),schedule["id"]))
+        db.commit()
+    with pytest.raises(HTTPException) as error:
+        start()
+    assert error.value.status_code == 410
+
+
+@pytest.mark.parametrize("intake", ["sqlite", "postgres"], indirect=True)
+def test_public_ats_groups_and_expired_job_preserve_applications(intake,tmp_path):
+    import json
+    from datetime import datetime,timedelta,timezone
+    import hr_flow_screening
+
+    actor, position, job, _, applicant = intake
+    with closing(database.get_connection()) as db:
+        db.cursor().execute("UPDATE ats_position_profiles SET fields=? WHERE position_id=?",
+            (json.dumps({"matching_criteria":"Yetkinlik | WMS | 60 | WMS\nYetkinlik | CRM | 40 | CRM"}),position))
+        db.commit()
+    scenarios = [("WMS ve CRM kullandim", "suitable"), ("WMS kullandim; CRM bilgim yok", "development"),
+                 ("Lojistik depo operasyonu", "review")]
+    for index, (skills, group) in enumerate(scenarios):
+        with pymupdf.open() as pdf:
+            pdf.new_page().insert_text((72,100),f"Experience\n{skills}")
+            content = pdf.tobytes()
+        candidate = applicant.model_copy(update={"name":f"Sentetik Aday {index}", "email":f"candidate{index}@example.test"})
+        entry = ats_public_cv.submit(actor.company_id,job,candidate,"cv.pdf",content,"direct",f"203.0.113.{10+index}")
+        assert hr_flow_screening.process_one(tmp_path)
+        result = ats.list_applications(actor,classification=group)
+        assert result["total"] == 1
+        assert result["applications"][0]["id"] == entry["application_id"]
+        assert hr_flow_screening.request_permission(actor,entry["application_id"],entry["document_id"])["status"] == "pending"
+    with closing(database.get_connection()) as db:
+        db.cursor().execute("UPDATE ats_job_deadlines SET closes_at=? WHERE job_id=?",
+                            ((datetime.now(timezone.utc)-timedelta(seconds=1)).isoformat(),job))
+        db.commit()
+    with pytest.raises(HTTPException) as error:
+        ats_public_cv.submit(actor.company_id,job,applicant,"cv.pdf",content,"direct","203.0.113.241")
+    assert error.value.status_code == 404
+    assert ats.list_applications(actor,position_id=position)["total"] == 3

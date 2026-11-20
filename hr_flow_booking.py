@@ -24,6 +24,9 @@ def enqueue(cursor, actor, permission):
     if not actor.portal or "ai" not in actor.products:
         return
     app_id = permission["application_id"]
+    app = ats.application(cursor,actor,app_id)
+    if app["identity_conflict_email"] or not app["email"]:
+        raise HTTPException(409,"Uygunluk e-postasından önce adayın e-posta adresini doğrulayın.")
     hr_flow_contacts.stage_availability_message(cursor, actor.company_id, app_id)
     cursor.execute("""INSERT INTO flow_booking_jobs
         (application_id,company_id,document_id,manager_id,access_version,slug,origin,status,updated_at)

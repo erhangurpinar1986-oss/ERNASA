@@ -107,13 +107,15 @@ function closeModal() {
     document.body.style.overflow = "";
 }
 
+let scheduledStartBlocked = false;
+
 function updateStartButton() {
     const allApproved =
         kvkkCheckbox.checked &&
         consentCheckbox.checked &&
         accuracyCheckbox.checked;
 
-    startInterviewButton.disabled = !allApproved;
+    startInterviewButton.disabled = scheduledStartBlocked || !allApproved;
     document.querySelector(".button-note").hidden = allApproved;
 }
 
@@ -213,7 +215,7 @@ if (data.success) {
                 startInterviewButton.style.display = "none";
                 return;
             }
-            alert("Mülakat başlatılamadı. Lütfen tekrar deneyin veya İnsan Kaynakları birimiyle iletişime geçin.");
+            alert(error.status === 409 ? error.message : "Mülakat başlatılamadı. Lütfen tekrar deneyin veya İnsan Kaynakları birimiyle iletişime geçin.");
             interviewStarting = false;
             updateStartButton();
         });
@@ -261,6 +263,24 @@ if (interviewToken) {
 
     if (companyName && data.candidate) {
         companyName.textContent = data.candidate.company || "-";
+    }
+
+    if (data.schedule_state === "scheduled" || data.schedule_state === "unavailable") {
+        scheduledStartBlocked = true;
+        updateStartButton();
+        const note = document.createElement("p");
+        note.setAttribute("role","status");
+        const format = value => new Date(value).toLocaleString("tr-TR",{timeZone:"Europe/Istanbul"});
+        note.textContent = data.scheduled_at
+            ? "Görüşme başlangıcı " + format(data.scheduled_at) + ". Bağlantı " +
+                format(data.expires_at) + " tarihine kadar geçerlidir (Türkiye saati)."
+            : "Görüşme saatini doğrulamak için İnsan Kaynakları ile iletişime geçin.";
+        welcomeCard?.append(note);
+        if (data.scheduled_at) {
+            const delay = new Date(data.scheduled_at).getTime() - Date.now();
+            if (delay > 0) setTimeout(() => location.reload(), Math.min(delay + 500, 2147483647));
+        }
+        return;
     }
 
     if (data.expired === true || data.status === "expired") {

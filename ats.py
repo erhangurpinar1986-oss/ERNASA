@@ -6,9 +6,10 @@ import json
 import re
 import zipfile
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from typing import Literal
 from uuid import uuid4
 
@@ -64,6 +65,7 @@ class Job(BaseModel):
     notice: str = Field(min_length=1,max_length=6000)
     notice_version: str = Field(min_length=1,max_length=40)
     confirm_publish: bool = False
+    closes_at: str = Field(default='',max_length=40)
 
 
 class Note(BaseModel):
@@ -78,9 +80,11 @@ def author_clause(actor):
 
 def application(cursor, actor, application_id):
     staff, params = author_clause(actor)
-    cursor.execute(f"""SELECT a.*,c.name,c.email,c.phone,c.source,c.tags,p.name AS position
+    cursor.execute(f"""SELECT a.*,c.name,c.email,c.phone,c.source,c.tags,p.name AS position,
+        e.reported_email AS identity_conflict_email
         FROM ats_applications a JOIN ats_candidates c ON c.id=a.candidate_id AND c.company_id=a.company_id
         JOIN company_positions p ON p.id=a.position_id AND p.company_id=a.company_id
+        LEFT JOIN ats_candidate_email_conflicts e ON e.candidate_id=c.id AND e.company_id=c.company_id
         WHERE a.company_id=? AND a.id=? {staff}""", (actor.company_id,application_id,*params))
     result = cursor.fetchone()
     if result is None:
@@ -88,7 +92,15 @@ def application(cursor, actor, application_id):
     return dict(result)
 
 
-def list_applications(actor, search='', position_id='', stage='', limit=25, offset=0, assignee=''):
+ATS_CLASSIFICATION = """CASE
+    WHEN s.analysis_state IS NULL OR s.analysis_state <> 'analyzed'
+         OR s.match_score IS NULL OR COALESCE(s.coverage,0) < 50 THEN 'review'
+    WHEN s.match_score >= 75 THEN 'suitable'
+    WHEN s.match_score >= 50 THEN 'development'
+    ELSE 'review' END"""
+
+
+def list_applications(actor, search='', position_id='', stage='', limit=25, offset=0, assignee='', name_order='', classification=''):
     staff, params = author_clause(actor)
     terms, args = [], [actor.company_id,*params]
     for sql, value in (('a.position_id=?',position_id),('a.stage=?',stage)):
@@ -104,33 +116,70 @@ def list_applications(actor, search='', position_id='', stage='', limit=25, offs
         args.append(int(assignee))
     if search:
         pattern = '%' + search.lower().replace('!','!!').replace('%','!%').replace('_','!_') + '%'
-        terms.append("(lower(c.name) LIKE ? ESCAPE '!' OR lower(COALESCE(c.email,'')) LIKE ? ESCAPE '!')")
+        terms.append("(lower(c.name) LIKE ? ESCAPE '!' OR lower(COALESCE(c.email,e.reported_email,'')) LIKE ? ESCAPE '!')")
         args.extend((pattern,pattern))
+    if classification:
+        terms.append("(" + ATS_CLASSIFICATION + ")=?")
+        args.append(classification)
     suffix = ''.join(' AND ' + term for term in terms)
     with closing(get_connection()) as connection:
         cursor = connection.cursor()
         query = f"""FROM ats_applications a JOIN ats_candidates c ON c.id=a.candidate_id AND c.company_id=a.company_id
+            LEFT JOIN ats_candidate_email_conflicts e ON e.candidate_id=c.id AND e.company_id=c.company_id
             JOIN company_positions p ON p.id=a.position_id AND p.company_id=a.company_id
+            LEFT JOIN flow_screening_results s ON s.company_id=a.company_id
+                AND s.application_id=a.id AND s.position_id=a.position_id
+                AND s.document_id=(SELECT cv.id FROM ats_documents cv
+                    WHERE cv.company_id=a.company_id AND cv.application_id=a.id
+                    ORDER BY cv.created_at DESC,cv.id DESC LIMIT 1)
             WHERE a.company_id=? {staff} {suffix}"""
         cursor.execute('SELECT COUNT(*) AS total ' + query, args)
         total = cursor.fetchone()['total']
-        cursor.execute("""SELECT a.*, c.name,c.email,c.phone,c.source,c.tags,p.name AS position,
+        order = {"asc":"lower(c.name) ASC,a.id", "desc":"lower(c.name) DESC,a.id"}.get(
+            name_order, "a.created_at DESC,a.id")
+        cursor.execute("""SELECT a.*, c.name,COALESCE(c.email,e.reported_email) AS email,
+            e.reported_email AS identity_conflict_email,c.phone,c.source,c.tags,p.name AS position,
             (SELECT COUNT(*) FROM interview_links i WHERE i.company_id=a.company_id
-                AND i.application_id=a.id) AS interview_count """ + query +
-            ' ORDER BY a.created_at DESC,a.id LIMIT ? OFFSET ?', (*args,limit,offset))
+                AND i.application_id=a.id) AS interview_count, s.match_score AS ats_score, """ +
+            ATS_CLASSIFICATION + ' AS ats_classification ' + query +
+            ' ORDER BY ' + order + ' LIMIT ? OFFSET ?', (*args,limit,offset))
         return {'applications':[dict(row) for row in cursor.fetchall()],'total':total}
 
 
 def record_application(cursor, tenant, position_id, details, creator, source, tags='', job_id=None,
-                       *, allow_missing_email=False, reuse_application=False):
+                       *, allow_missing_email=False, reuse_application=False, review_identity_conflict=False):
     name = validate_candidate_name(details.name)
     email = details.email.strip().lower()
     if (email or not allow_missing_email) and not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email):
         raise HTTPException(400,'Geçerli bir e-posta girin.')
     person = None
+    conflict = False
     if email:
-        cursor.execute('SELECT id FROM ats_candidates WHERE company_id=? AND email=?',(tenant,email))
-        person = cursor.fetchone()
+        cursor.execute("""SELECT c.id,c.name,c.phone,c.email,e.reported_email
+            FROM ats_candidates c LEFT JOIN ats_candidate_email_conflicts e
+                ON e.candidate_id=c.id AND e.company_id=c.company_id
+            WHERE c.company_id=? AND (c.email=? OR e.reported_email=?)""",(tenant,email,email))
+        people = cursor.fetchall()
+        normalize_name = lambda value: " ".join(value.casefold().replace("i̇","i").split())
+        normalize_phone = lambda value: re.sub(r"\D", "", value or "")[-10:]
+        phone = normalize_phone(details.phone)
+        matches = [row for row in people if normalize_name(row["name"]) == normalize_name(name)
+                   and (not phone or not normalize_phone(row["phone"])
+                        or phone == normalize_phone(row["phone"]))]
+        if len(matches) > 1:
+            raise HTTPException(409,'Birden fazla kimlik eşleşmesi var. İK aday kayıtlarını incelemeli.')
+        person = matches[0] if matches else None
+        conflict = bool(people) and not person
+        if conflict and not review_identity_conflict:
+            raise HTTPException(409,'E-posta başka kimlik bilgileriyle kayıtlı. İK incelemesi gerekiyor.')
+    elif details.phone and reuse_application:
+        cursor.execute("""SELECT id,name,phone FROM ats_candidates WHERE company_id=? AND phone<>''""",(tenant,))
+        digits = re.sub(r"\D", "", details.phone)[-10:]
+        matches = [row for row in cursor.fetchall() if digits and
+                   re.sub(r"\D", "", row["phone"] or "")[-10:] == digits
+                   and " ".join(row["name"].casefold().split()) == " ".join(name.casefold().split())]
+        if len(matches) == 1:
+            person = matches[0]
     candidate_id = person['id'] if person else uid()
     if person:
         cursor.execute('SELECT id FROM ats_applications WHERE company_id=? AND candidate_id=? AND position_id=?',
@@ -139,16 +188,19 @@ def record_application(cursor, tenant, position_id, details, creator, source, ta
         if existing:
             if reuse_application:
                 return {'id':existing['id'],'candidate_id':candidate_id,'existing_candidate':True,
-                        'existing_application':True}
+                        'existing_application':True,
+                        'identity_conflict':bool('reported_email' in dict(person) and person['reported_email'])}
             raise HTTPException(409,'Bu adayın pozisyon için başvurusu zaten var.')
     else:
         cursor.execute("""INSERT INTO ats_candidates(id,company_id,name,email,phone,source,tags,created_by,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?)""",(candidate_id,tenant,name,email or None,details.phone.strip(),source,tags,creator,now()))
+            VALUES (?,?,?,?,?,?,?,?,?)""",(candidate_id,tenant,name,(email or None) if not conflict else None,details.phone.strip(),source,tags,creator,now()))
+        if conflict:
+            cursor.execute("INSERT INTO ats_candidate_email_conflicts VALUES(?,?,?)",(candidate_id,tenant,email))
     app_id = uid()
     cursor.execute("""INSERT INTO ats_applications
         (id,company_id,candidate_id,position_id,job_id,stage,created_by,created_at,changed_at)
         VALUES (?,?,?,?,?,'new',?,?,?)""",(app_id,tenant,candidate_id,position_id,job_id,creator,now(),now()))
-    return {'id':app_id,'candidate_id':candidate_id,'existing_candidate':bool(person)}
+    return {'id':app_id,'candidate_id':candidate_id,'existing_candidate':bool(person),'identity_conflict':conflict or bool(person and 'reported_email' in dict(person) and person['reported_email'])}
 
 
 def create_application(actor, fields):
@@ -189,6 +241,29 @@ def update_candidate_name(actor, app_id, fields):
     return {'name':name}
 
 
+def resolve_candidate_email(actor, app_id, email):
+    email = email.strip().lower()
+    if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email):
+        raise HTTPException(422,'Doğrulanmış geçerli bir e-posta girin.')
+    with write(actor.company_id) as cursor:
+        row = application(cursor,actor,app_id)
+        if not row["identity_conflict_email"] and row["email"]:
+            raise HTTPException(409,'Adayın e-posta adresi zaten kayıtlı.')
+        cursor.execute("""SELECT 1 FROM ats_candidates c
+            LEFT JOIN ats_candidate_email_conflicts e
+                ON e.candidate_id=c.id AND e.company_id=c.company_id
+            WHERE c.company_id=? AND c.id<>? AND (c.email=? OR e.reported_email=?)""",
+            (actor.company_id,row["candidate_id"],email,email))
+        if cursor.fetchone():
+            raise HTTPException(409,'Bu e-posta başka aday kaydında kullanılıyor.')
+        cursor.execute("UPDATE ats_candidates SET email=? WHERE company_id=? AND id=?",
+                       (email,actor.company_id,row["candidate_id"]))
+        cursor.execute("DELETE FROM ats_candidate_email_conflicts WHERE company_id=? AND candidate_id=?",
+                       (actor.company_id,row["candidate_id"]))
+        record(cursor,actor,'candidate_email_verified',row["candidate_id"])
+    return {"email":email}
+
+
 def set_position_member(actor, position_id, user_id, enabled):
     with write(actor.company_id) as cursor:
         cursor.execute('SELECT 1 FROM company_positions WHERE id=? AND company_id=?',(position_id,actor.company_id))
@@ -221,8 +296,9 @@ def position_members(actor, position_id):
 def list_jobs(actor):
     with closing(get_connection()) as connection:
         cursor = connection.cursor()
-        cursor.execute("""SELECT j.*,COALESCE(d.qualifications,'') AS qualifications,COALESCE(d.work_conditions,'') AS work_conditions
+        cursor.execute("""SELECT j.*,t.closes_at,COALESCE(d.qualifications,'') AS qualifications,COALESCE(d.work_conditions,'') AS work_conditions
             FROM ats_jobs j LEFT JOIN ats_job_details d ON d.job_id=j.id AND d.company_id=j.company_id
+            LEFT JOIN ats_job_deadlines t ON t.job_id=j.id AND t.company_id=j.company_id
             WHERE j.company_id=? ORDER BY j.created_at DESC""",(actor.company_id,))
         return [dict(row) for row in cursor.fetchall()]
 
@@ -240,6 +316,19 @@ def save_job(actor, fields):
         cursor.execute('SELECT id FROM ats_jobs WHERE company_id=? AND position_id=?',(actor.company_id,fields.position_id))
         old = cursor.fetchone()
         job_id = old['id'] if old else uid()+uid()
+        closes_at = None
+        if fields.closes_at:
+            try:
+                close_time = datetime.fromisoformat(fields.closes_at)
+                if close_time.tzinfo is None:
+                    close_time = close_time.replace(tzinfo=ZoneInfo("Europe/Istanbul"))
+                closes_at = close_time.astimezone(timezone.utc).isoformat()
+            except ValueError:
+                raise HTTPException(422,"Geçerli bir son başvuru tarihi girin.") from None
+        elif fields.state == 'published' and not old:
+            closes_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        if fields.state == 'published' and closes_at and closes_at <= now():
+            raise HTTPException(422,"Son başvuru tarihi gelecekte olmalıdır.")
         title, summary, notice, version = (str(value).strip() for value in
                                           (fields.title,fields.summary,fields.notice,fields.notice_version))
         if not all((title,summary,notice,version)):
@@ -251,16 +340,22 @@ def save_job(actor, fields):
         cursor.execute("""INSERT INTO ats_job_details VALUES(?,?,?,?)
             ON CONFLICT(job_id) DO UPDATE SET qualifications=excluded.qualifications,work_conditions=excluded.work_conditions""",
             (job_id,actor.company_id,fields.qualifications.strip(),fields.work_conditions.strip()))
+        if closes_at:
+            cursor.execute("""INSERT INTO ats_job_deadlines VALUES(?,?,?)
+                ON CONFLICT(job_id) DO UPDATE SET closes_at=excluded.closes_at""",
+                (job_id,actor.company_id,closes_at))
         record(cursor,actor,'job_'+fields.state,job_id)
     return {'id':job_id,'application_path':'/basvuru/'+job_id if fields.state=='published' else None}
 
 
 def public_job(cursor, company_id, job_id):
     cursor.execute("""SELECT j.id,j.position_id,j.title,j.summary,j.notice,j.notice_version,p.name AS position,
-        COALESCE(d.qualifications,'') AS qualifications,COALESCE(d.work_conditions,'') AS work_conditions
+        t.closes_at, COALESCE(d.qualifications,'') AS qualifications,COALESCE(d.work_conditions,'') AS work_conditions
         FROM ats_jobs j JOIN company_positions p ON p.id=j.position_id AND p.company_id=j.company_id
         LEFT JOIN ats_job_details d ON d.job_id=j.id AND d.company_id=j.company_id
-        WHERE j.id=? AND j.company_id=? AND j.state='published' AND p.open=1""",(job_id,company_id))
+        LEFT JOIN ats_job_deadlines t ON t.job_id=j.id AND t.company_id=j.company_id
+        WHERE j.id=? AND j.company_id=? AND j.state='published' AND p.open=1
+            AND (t.closes_at IS NULL OR t.closes_at>?)""",(job_id,company_id,now()))
     job = cursor.fetchone()
     if not job:
         raise HTTPException(404,'Başvuru bağlantısı bulunamadı.')

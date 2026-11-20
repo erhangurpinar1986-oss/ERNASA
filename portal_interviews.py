@@ -1,5 +1,6 @@
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import json
 
 from fastapi import HTTPException
@@ -110,23 +111,54 @@ def current_question(interview, recorded, intro, generate):
     return result
 
 
+def availability(cursor, interview, tenant, now=None):
+    """Return the current schedule gate for a tenant-bound interview."""
+    if tenant is None or not interview.get("application_id"):
+        return None
+    cursor.execute("""SELECT s.starts_at,s.status FROM flow_scheduled_interviews f
+        LEFT JOIN ats_schedules s ON s.id=f.schedule_id AND s.company_id=f.company_id
+            AND s.application_id=?
+        WHERE f.token=? AND f.company_id=?""",
+        (interview["application_id"],interview["token"],tenant))
+    schedule = cursor.fetchone()
+    if schedule is None:
+        cursor.execute("""SELECT starts_at,status FROM ats_schedules
+            WHERE company_id=? AND application_id=? AND status='planned'
+            ORDER BY starts_at,id LIMIT 2""", (tenant,interview["application_id"]))
+        schedules = cursor.fetchall()
+        if len(schedules) > 1:
+            return {"state":"unavailable"}
+        schedule = schedules[0] if schedules else None
+    if schedule is None:
+        return None
+    if schedule["status"] != "planned" or not schedule["starts_at"]:
+        return {"state":"unavailable"}
+    try:
+        start_at = datetime.fromisoformat(schedule["starts_at"])
+        if start_at.tzinfo is None:
+            return {"state":"unavailable"}
+    except (ValueError, TypeError):
+        return {"state":"unavailable"}
+    end_at = start_at + timedelta(hours=8)
+    now = now or datetime.now(timezone.utc)
+    state = "scheduled" if now < start_at else "expired" if now >= end_at else "available"
+    return {"state":state,"starts_at":start_at.isoformat(),"expires_at":end_at.isoformat()}
+
+
 def start(token, tenant, deadline_passed, intro, generate):
     expired = False
     with write(tenant) as cursor:
         interview = load_interview(cursor, token, tenant)
-        cursor.execute("""SELECT s.starts_at,s.status FROM flow_scheduled_interviews f
-            JOIN ats_schedules s ON s.id=f.schedule_id AND s.company_id=f.company_id
-            WHERE f.token=? AND f.company_id=?""", (token,tenant))
-        schedule = cursor.fetchone()
-        if schedule and interview["status"] in ("waiting","created","opened"):
-            if schedule["status"] != "planned":
-                raise HTTPException(409,"Bu görüşme takvimde etkin değil.")
-            if schedule["starts_at"] > datetime.now(timezone.utc).isoformat():
-                raise HTTPException(409,"Görüşmeyi randevu saatinde başlatabilirsiniz.")
+        window = availability(cursor, interview, tenant) if interview["status"] in ("waiting","created","opened") else None
+        if window and window["state"] == "unavailable":
+            raise HTTPException(409,"Görüşme takvimi için İnsan Kaynakları ile iletişime geçin.")
+        if window and window["state"] == "scheduled":
+            local = datetime.fromisoformat(window["starts_at"]).astimezone(ZoneInfo("Europe/Istanbul"))
+            raise HTTPException(409,f"Görüşme başlangıcı {local:%d.%m.%Y %H:%M} (Türkiye saati).")
         status = interview['status']
         if status == 'completed':
             raise HTTPException(409, 'Bu mülakat zaten tamamlandı.')
-        if status == 'expired' or (status in ('waiting','created','opened') and deadline_passed(interview)):
+        if status == 'expired' or (status in ('waiting','created','opened') and (window['state']=='expired' if window else deadline_passed(interview))):
             cursor.execute("UPDATE interview_links SET status='expired' WHERE token=?", (token,))
             expired = True
         elif status in ('waiting','created','opened'):

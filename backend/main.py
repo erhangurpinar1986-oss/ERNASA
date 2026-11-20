@@ -558,8 +558,10 @@ def evaluate_candidate(token: str, fields: recruitment.Evaluation, actor: portal
 def list_ats_applications(search: str = Query("", max_length=160), position_id: str = Query("", max_length=64),
                           stage: str = Query("", max_length=30), limit: int = Query(25, ge=1, le=100),
                           offset: int = Query(0, ge=0), assignee: str = Query("",max_length=18),
+                          name_order: str = Query("",pattern="^(|asc|desc)$"),
+                          classification: str = Query("",pattern="^(|suitable|development|review)$"),
                           actor: portal_access.Actor = Depends(require_ats)):
-    return ats.list_applications(actor, search, position_id, stage, limit, offset, assignee)
+    return ats.list_applications(actor, search, position_id, stage, limit, offset, assignee, name_order, classification)
 
 
 @app.post("/api/ik/ats/applications", status_code=201)
@@ -578,9 +580,25 @@ def update_ats_candidate_name(application_id: str, fields: ats.CandidateName,
     return ats.update_candidate_name(actor, application_id, fields)
 
 
+class CandidateVerifiedEmail(BaseModel):
+    email: str = Field(min_length=3,max_length=254)
+
+
+@app.patch("/api/ik/ats/applications/{application_id}/verified-email")
+def verify_ats_candidate_email(application_id: str, fields: CandidateVerifiedEmail,
+                               actor: portal_access.Actor = Depends(require_ats_manager)):
+    return ats.resolve_candidate_email(actor,application_id,fields.email)
+
+
 @app.post("/api/ik/ats/cv-import/preview")
 def preview_ats_cv(cv: UploadFile = File(...), actor: portal_access.Actor = Depends(require_ats)):
-    return ats_cv_import.preview(cv.filename or 'cv', cv.file.read(ats.MAX_DOCUMENT + 1))
+    return ats_cv_import.preview(cv.filename or 'cv', cv.file.read(ats.MAX_DOCUMENT + 1), actor)
+
+
+@app.get("/api/ik/ats/applications/{application_id}/documents/{document_id}/screening")
+def get_import_screening(application_id: str, document_id: str,
+                         actor: portal_access.Actor = Depends(require_ats)):
+    return ats_cv_import.screening_status(actor, application_id, document_id)
 
 
 @app.post("/api/ik/ats/cv-import/save")
@@ -1242,13 +1260,19 @@ def _dispatch_interview_email(token, actor, *, scheduled_at=None):
     now = datetime.now(timezone.utc)
     scope, parameters = recruitment.scope(actor)
     with recruitment.write(actor.company_id) as cursor:
-        cursor.execute(f"""SELECT token,name,email,company,position,expires_at,status
+        cursor.execute(f"""SELECT token,name,email,company,position,expires_at,status,application_id
             FROM interview_links WHERE token=? AND {scope}""", (token, *parameters))
         record = cursor.fetchone()
         if record is None:
             raise HTTPException(404, "Mülakat daveti bulunamadı.")
         candidate = dict(record)
-        if scheduled_at:
+        window = portal_interviews.availability(cursor, candidate, actor.company_id)
+        if window and window["state"] == "unavailable":
+            raise HTTPException(409,"Davet göndermeden önce görüşme takvimini doğrulayın.")
+        if window:
+            candidate["scheduled_at"] = window["starts_at"]
+            candidate["expires_at"] = window["expires_at"]
+        elif scheduled_at:
             candidate["scheduled_at"] = scheduled_at
         if candidate["status"] not in ("waiting", "created", "opened"):
             raise HTTPException(409, "Bu mülakat için yeni davet gönderilemez.")
@@ -1762,15 +1786,17 @@ def get_interview_link(token: str, company_id: int | None = Depends(portal_acces
         elif template and language == "en" and question_count == 1:
             sales_round = "english_demo"
         status = interview["status"]
-        expired = status == "expired" or (
-            status in ("waiting", "created", "opened") and _link_deadline_passed(interview)
-        )
+        pending = status in ("waiting", "created", "opened")
+        window = portal_interviews.availability(cursor, interview, company_id) if pending else None
+        expired = status == "expired" or (pending and
+            (window["state"] == "expired" if window else _link_deadline_passed(interview)))
+        expires_at = window.get("expires_at",interview["expires_at"]) if window else interview["expires_at"]
         if expired:
             # Yalnızca bilgilendirme: başlatma endpoint'i 410 engelini korur.
             return {
                 "success": True,
                 "candidate": {key: interview.get(key) for key in ("name", "company", "position")},
-                "expires_at": interview["expires_at"],
+                "expires_at": expires_at,
                 "status": "expired",
                 "language": language,
                 "question_count": question_count,
@@ -1780,11 +1806,14 @@ def get_interview_link(token: str, company_id: int | None = Depends(portal_acces
         return {
             "success": True,
             "candidate": {key: interview.get(key) for key in ("name", "company", "position")},
-            "expires_at": interview["expires_at"],
+            "expires_at": expires_at,
             "status": status,
             "language": language,
             "question_count": question_count,
             "sales_round": sales_round,
+            "scheduled_at": window.get("starts_at") if window else None,
+            "schedule_state": window["state"] if window else None,
+            "can_start": not window or window["state"] == "available",
         }
     finally:
         connection.close()
@@ -1816,8 +1845,13 @@ def mark_interview_opened(token: str, company_id: int | None = Depends(portal_ac
             raise HTTPException(status_code=404, detail="Mülakat bağlantısı bulunamadı.")
         interview = dict(row)
         status = interview["status"]
-        if status == "expired" or (status in ("waiting", "created", "opened") and _link_deadline_passed(interview)):
+        pending = status in ("waiting", "created", "opened")
+        window = portal_interviews.availability(cursor, interview, company_id) if pending else None
+        if status == "expired" or (pending and
+                (window["state"] == "expired" if window else _link_deadline_passed(interview))):
             raise HTTPException(status_code=410, detail="Mülakata başlama süresi dolmuş.")
+        if window and window["state"] != "available":
+            return {"success":True,"can_start":False}
         if status in ("waiting", "created"):
             cursor.execute("UPDATE interview_links SET status = ? WHERE token = ? AND status = ?", ("opened", token, status))
             connection.commit()
