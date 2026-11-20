@@ -195,6 +195,10 @@ def test_hr_flow_evidence_only_marks_durable_records_verified(intake):
     import selin_workflow
     from uuid import uuid4
     manager,position,job,pdf,applicant=intake
+    import ernasa_training
+    import academy_assignments
+    ernasa_training.initialize_schema()
+    academy_assignments.initialize_schema()
     selin_workflow.initialize_schema()
     entry=ats_public_cv.submit(manager.company_id,job,applicant,
                                "cv.pdf",pdf,"linkedin","203.0.113.100")
