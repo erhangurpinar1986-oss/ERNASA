@@ -128,6 +128,26 @@ def test_unpublished_job_cannot_accept_cv(intake):
     assert err.value.status_code==404
 
 
+def approve_synthetic_interview(manager,position,application_id,document_id,root):
+    import json
+    import hr_flow_screening
+    hr_flow_screening.initialize_schema()
+    with closing(database.get_connection()) as db:
+        c=db.cursor()
+        fields=json.loads(c.execute(
+            "SELECT fields FROM ats_position_profiles WHERE position_id=?",
+            (position,)).fetchone()["fields"])
+        fields["matching_criteria"]="Yetkinlik | Depo deneyimi | 80 | depo"
+        c.execute("UPDATE ats_position_profiles SET fields=? WHERE position_id=?",
+                  (json.dumps(fields),position))
+        db.commit()
+    result=hr_flow_screening.screen_position(manager,position,root)
+    assert result["candidates"][0]["analysis_state"]=="analyzed"
+    permission=hr_flow_screening.request_permission(manager,application_id,document_id)
+    assert permission["status"]=="pending"
+    assert hr_flow_screening.decide_permission(manager,permission["id"],"approved")["status"]=="approved"
+
+
 def confirm_synthetic_appointment(company_id,application_id):
     with closing(database.get_connection()) as db:
         db.execute("""INSERT INTO flow_candidate_appointment
@@ -152,6 +172,7 @@ def test_selin_public_intake_queue_approval_scoped_and_once(intake,monkeypatch):
         ats_public_cv.decide_intake(manager,app_id,"start",None,None,None)
     assert unconfirmed.value.status_code==409
     confirm_synthetic_appointment(manager.company_id,app_id)
+    approve_synthetic_interview(manager,position,app_id,result["document_id"],None)
     calls=[]
     def fake_begin(actor,app,doc,*args):
         calls.append((actor.company_id,app,doc))
@@ -194,6 +215,7 @@ def test_selin_intake_failed_processing_never_automatically_retries(intake,monke
     manager.products=("ats","ai")
     result=ats_public_cv.submit(manager.company_id,job,applicant,"cv.pdf",pdf,"social","203.0.113.45")
     confirm_synthetic_appointment(manager.company_id,result["application_id"])
+    approve_synthetic_interview(manager,position,result["application_id"],result["document_id"],None)
     calls=[]
     def fail(*args):
         calls.append(1)
@@ -261,7 +283,7 @@ def test_flow_contact_channels_are_prepared_but_no_delivery_claims(intake):
     assert status["messages"][0]["provider_message_id"] is None
     assert status["linkedin"]["status"]=="integration_required"
     assert status["whatsapp"]["status"]=="future_opt_in"
-    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id) is False
+    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,result["document_id"]) is False
     assert hr_flow_contacts.contact_status(9999,app_id)["messages"]==[]
     with closing(database.get_connection()) as db:
         db.execute("""INSERT INTO flow_candidate_appointment
@@ -270,8 +292,11 @@ def test_flow_contact_channels_are_prepared_but_no_delivery_claims(intake):
             (app_id,manager.company_id,None,"2026-11-24T10:00:00+03:00",
              "candidate","2026-11-20T15:00:00+03:00",ats.now()))
         db.commit()
-    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id) is True
-    assert hr_flow_contacts.may_create_interview_link(9999,app_id) is False
+    # A confirmed appointment alone never bypasses the manager's ATS approval.
+    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,result["document_id"]) is False
+    approve_synthetic_interview(manager,position,app_id,result["document_id"],None)
+    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,result["document_id"]) is True
+    assert hr_flow_contacts.may_create_interview_link(9999,app_id,result["document_id"]) is False
 
 
 def test_flow_position_screening_and_permission_full_human_gate(intake,tmp_path):
@@ -370,3 +395,25 @@ def test_flow_screening_honors_staff_visibility_and_stale_criteria(intake,tmp_pa
     with pytest.raises(HTTPException) as exc:
         hr_flow_screening.request_permission(manager,entry["application_id"],entry["document_id"])
     assert exc.value.status_code==409
+
+
+def test_interview_readiness_fails_when_source_or_approval_changes(intake):
+    import hr_flow_contacts
+    manager,position,job,pdf,applicant=intake
+    result=ats_public_cv.submit(manager.company_id,job,applicant,"cv.pdf",pdf,"direct","203.0.113.84")
+    app_id,doc=result["application_id"],result["document_id"]
+    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,doc) is False
+    confirm_synthetic_appointment(manager.company_id,app_id)
+    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,doc) is False
+    approve_synthetic_interview(manager,position,app_id,doc,None)
+    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,doc) is True
+    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,"wrong-document") is False
+    with closing(database.get_connection()) as db:
+        db.execute("UPDATE flow_candidate_appointment SET confirmed_by='staff' WHERE application_id=?",(app_id,))
+        db.commit()
+    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,doc) is False
+    with closing(database.get_connection()) as db:
+        db.execute("UPDATE flow_candidate_appointment SET confirmed_by='candidate' WHERE application_id=?",(app_id,))
+        db.execute("UPDATE flow_interview_permissions SET status='declined' WHERE application_id=?",(app_id,))
+        db.commit()
+    assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,doc) is False
