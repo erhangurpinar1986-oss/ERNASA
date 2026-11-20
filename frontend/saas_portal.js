@@ -344,6 +344,7 @@ if (companyPortalPage) {
     const screenLink = name => navigation.querySelector('[data-screen="' + name + '"]');
     const sectionGroups = {
         dashboard: ["dashboard"],
+        flow: ["suite_flow"],
         pool: ["suite_pool","candidates","suite_kanban","cv"],
         positions: ["positions","suite_jobs"],
         interviews: ["interviews","suite_calendar"],
@@ -355,7 +356,7 @@ if (companyPortalPage) {
     const mainForScreen = new Map(Object.entries(sectionGroups).flatMap(([section,screens]) =>
         screens.map(screen => [screen,section])));
     const labelOverrides = {
-        "suite_pool":"Aday Havuzu","suite_jobs":"İş İlanları","suite_calendar":"Görüşme Takvimi",
+        "suite_flow":"ERNASA HR FLOW","suite_pool":"Aday Havuzu","suite_jobs":"İş İlanları","suite_calendar":"Görüşme Takvimi",
         "suite_evaluations":"Değerlendirmeler","suite_kanban":"İşe Alım Panosu",
         "suite_reports":"AI Değerlendirme Raporları","suite_offers":"Teklifler",
         "suite_settings":"Firma Ayarları","suite_history":"İşlem Geçmişi",
@@ -417,6 +418,7 @@ if (companyPortalPage) {
         const home = byId("portalHomeLink");
         const links = {
             dashboard:byId("portalOverviewLink"),
+            suite_flow:selinQueue,
             positions:byId("positionsMenu"),
             suite_jobs:byId("jobsMenu"),
             suite_pool:byId("poolMenu"),
@@ -435,6 +437,7 @@ if (companyPortalPage) {
             personnel:byId("personnelMenu"),
             usage:byId("usageMenu")
         };
+        if (ats && ai && manager) availableScreens.add("suite_flow");
         if (ats) ["positions","suite_jobs","suite_pool","suite_kanban","suite_calendar",
             "suite_evaluations","suite_offers"].forEach(name=>availableScreens.add(name));
         if (ai) ["cv","candidates","interviews","suite_reports"].forEach(name=>availableScreens.add(name));
@@ -460,6 +463,7 @@ if (companyPortalPage) {
         hiddenLinks.setAttribute("aria-hidden","true");
         const primaries = [
             ["dashboard","dashboard","Ana Sayfa"],
+            ["flow","suite_flow","ERNASA HR FLOW"],
             ["pool",ats?"suite_pool":"candidates","Aday Havuzu"],
             ["positions","positions","Pozisyonlar ve İlanlar"],
             ["interviews",ai?"interviews":"suite_calendar","Mülakatlar"],
@@ -480,7 +484,7 @@ if (companyPortalPage) {
                 link.textContent = label;
             }
             const icons = {
-                dashboard:"house",pool:"users-round",positions:"briefcase",
+                dashboard:"house",flow:"bot",pool:"users-round",positions:"briefcase",
                 interviews:"messages-square",evaluations:"clipboard-check",
                 training:"graduation-cap",training_tracking:"chart-no-axes-column",settings:"settings"
             };
