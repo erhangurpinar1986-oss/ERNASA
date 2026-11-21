@@ -12,6 +12,7 @@ import ats
 import ats_cv_import
 import ik_cv_invites
 from services import invite_email
+from services import email_delivery_webhook
 import interview_assessments
 import selin_workflow
 import hr_flow_evidence
@@ -644,6 +645,19 @@ def change_position_member(position_id: str, user_id: int, enabled: bool,
 def get_position_members(position_id: str, actor: portal_access.Actor = Depends(require_ats_manager)):
     return {"users":eligible_assignees(actor)['users'], "members":ats.position_members(actor,position_id)}
 
+
+
+
+@app.post("/api/webhooks/resend", include_in_schema=False)
+async def receive_resend_delivery_event(request: Request):
+    body = await request.body()
+    if len(body) > 65536:
+        raise HTTPException(413, "Webhook payload too large")
+    try:
+        outcome = email_delivery_webhook.accept_event(body, request.headers)
+    except ValueError:
+        raise HTTPException(401, "Invalid webhook") from None
+    return {"status": outcome}
 
 @app.post("/api/ik/ats/applications/{application_id}/notes", status_code=201)
 def add_ats_note(application_id: str, fields: ats.Note, actor: portal_access.Actor = Depends(require_ats)):
