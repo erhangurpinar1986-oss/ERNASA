@@ -891,7 +891,7 @@ if (companyPortalPage) {
                         button.disabled = true;
                         try {
                             const result = await api("interviews/" + encodeURIComponent(invite.interview_id) + "/send-email","POST",{});
-                            notice(result.message || "Davet kurumsal e-postayla gönderildi.");
+                            notice(result.message || (result.delivery_status === "delivered" ? "E-posta teslimatı doğrulandı." : "E-posta sağlayıcısı isteği kabul etti; alıcıya teslim henüz doğrulanmadı."));
                         } catch (error) {
                             notice(error.message,true);
                             button.disabled = false;
