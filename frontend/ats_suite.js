@@ -586,23 +586,51 @@ if (companyPortalPage) {
             }catch(error){flowResults.append(el("p","Analiz başlatılamadı: "+error.message));notice(error.message,true)}
         };
         const results = el("section","",{class:"saas-panel",tabindex:"-1"});
-        const details = el("section","",{class:"saas-panel",tabindex:"-1",hidden:""});
+        const details = el("section","",{class:"ernasa-candidate-body",tabindex:"-1",hidden:""});
         const editor = el("section","",{class:"saas-panel",hidden:""});
         const importer = el("section","",{class:"saas-panel",hidden:""});
         const reveal = () => { editor.hidden = false; editor.querySelector("[name=name]")?.focus(); };
+        if (!document.getElementById("ernasa-candidate-design")) {
+            const style = document.createElement("style");
+            style.id = "ernasa-candidate-design";
+            style.textContent = `
+              .ernasa-file-window{background:#f5f8fd!important;padding:0!important;border:1px solid #dce5f1;overflow:auto;scrollbar-gutter:stable}
+              .ernasa-file-toolbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:#fff;border-bottom:1px solid #e3eaf4;box-shadow:0 3px 12px #122e5210}
+              .ernasa-file-toolbar button{background:#123968;color:#fff;border:0;border-radius:9px;padding:10px 16px;font-weight:650;cursor:pointer}
+              .ernasa-file-title{font-size:13px;font-weight:700;color:#55718e;letter-spacing:.05em}
+              .ernasa-candidate-body{padding:24px!important;display:flex;flex-direction:column;gap:16px;max-width:1100px;margin:auto;background:transparent!important;border:0!important;box-shadow:none!important}
+              .ernasa-candidate-body>.ernasa-profile-header{background:linear-gradient(115deg,#09254b,#174b86);border-radius:16px;padding:24px;color:white;box-shadow:0 12px 24px #0c356225}
+              .ernasa-profile-header h3{color:white!important;font-size:22px!important;margin:0 0 12px!important;line-height:1.3}
+              .ernasa-profile-header p{color:#dce9fa!important;margin:5px 0!important}
+              .ernasa-file-card{background:#fff;border:1px solid #e0e8f3;border-radius:14px;padding:20px 22px;box-shadow:0 4px 15px #1536570b;min-width:0}
+              .ernasa-file-card>h4{font-size:17px;color:#123765;margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid #e8edf5}
+              .ernasa-file-card .saas-panel{box-shadow:none!important;border:1px solid #e4ebf5;border-radius:12px}
+              .ernasa-file-card form{margin:10px 0;max-width:100%;gap:12px}
+              .ernasa-file-card input,.ernasa-file-card textarea,.ernasa-file-card select{border-radius:9px;max-width:100%}
+              .ernasa-file-card button{border-radius:9px;min-height:35px;padding:8px 14px}
+              .ernasa-file-card p{line-height:1.5;overflow-wrap:anywhere}
+              .ernasa-file-card table{display:block;overflow-x:auto}
+              .ernasa-file-actions{border:1px solid #f1d8d8;background:#fff;padding:18px 22px;border-radius:14px;display:flex;flex-wrap:wrap;gap:12px}
+              .ernasa-file-actions button{border-radius:9px;padding:10px 16px;font-weight:700}
+              .ernasa-file-actions button:last-child{background:#fff2f2;color:#a32323;border:1px solid #efb4b4}
+              .ernasa-file-actions button:first-child{background:#e8f2ff;color:#16467d;border:1px solid #c8dbf4}
+              @media(max-width:650px){.ernasa-candidate-body{padding:12px!important}.ernasa-file-card{padding:14px}.ernasa-file-toolbar{padding:10px 12px}.ernasa-profile-header h3{font-size:18px!important}}
+            `;
+            document.head.append(style);
+        }
         // Open the candidate file immediately in a separate overlay, rather than
         // loading below the long applications list and scrolling several seconds later.
         const fileOverlay = el("div","",{role:"dialog","aria-modal":"true","aria-label":"Aday dosyası"});
         fileOverlay.style.cssText = "position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.58);display:none;align-items:center;justify-content:center;padding:16px;";
-        const fileWindow = el("div","",{class:"saas-panel"});
+        const fileWindow = el("div","",{class:"saas-panel ernasa-file-window"});
         fileWindow.style.cssText = "background:var(--surface,#fff);color:var(--text,#18212f);width:min(1100px,100%);height:min(92vh,100%);overflow:auto;border-radius:14px;padding:20px;box-shadow:0 18px 60px rgba(0,0,0,.35);";
-        const fileTop = el("div","",{class:"saas-actions"});
+        const fileTop = el("div","",{class:"ernasa-file-toolbar"});
         const closeFile = action("← Aday listesine dön",() => {
             fileOverlay.style.display = "none";
             details.hidden = true;
             document.body.style.overflow = fileOverlay.dataset.previousOverflow || "";
         });
-        fileTop.append(closeFile);
+        fileTop.append(el("span","ERNASA  /  ADAY DOSYASI",{class:"ernasa-file-title"}),closeFile);
         fileWindow.append(fileTop,details);
         fileOverlay.append(fileWindow);
         document.body.append(fileOverlay);
@@ -719,52 +747,6 @@ if (companyPortalPage) {
                 });
                 editButton.setAttribute("aria-expanded","false");
                 root.append(editButton,editName);
-                // Browser-managed local export: never sends private candidate data to third parties.
-                const candidateActions = el("div","",{class:"ats-candidate-admin-actions"});
-                const archiveButton = action("Arşivle / İndir",async button => {
-                    button.disabled = true;
-                    try {
-                        const current = await api(appRoute(id));
-                        const payload = {
-                            format:"ERNASA ATS aday bilgi arşivi v1",
-                            exported_at:new Date().toISOString(),
-                            warning:"Bu JSON arşivi CV dosyalarının ikili içeriklerini içermez. Kalıcı silme öncesi tam yedek değildir.",
-                            application:current.application,
-                            notes:current.notes,
-                            history:current.history,
-                            documents:current.documents,
-                            interviews:current.interviews || []
-                        };
-                        const blob = new Blob([JSON.stringify(payload,null,2)],{type:"application/json;charset=utf-8"});
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = "ERNASA_aday_"+String(id).replace(/[^a-zA-Z0-9_-]/g,"")+"_bilgi_arsivi.json";
-                        document.body.append(a);
-                        a.click();
-                        a.remove();
-                        setTimeout(()=>URL.revokeObjectURL(url),60000);
-                        notice("Aday bilgileri indirildi. CV dosyaları bu arşive dahil değildir.");
-                    } catch(error) { notice(error.message,true); }
-                    finally { button.disabled = false; }
-                });
-                const deleteButton = action("Kalıcı Sil",async button => {
-                    if (!window.confirm(row.name+" adlı adayın TÜM ATS başvuruları ve CV kayıtları kalıcı olarak silinecek. Devam edilsin mi?")) return;
-                    const typed = window.prompt("Son onay: KALICI SIL yazın.");
-                    if (typed !== "KALICI SIL") { notice("Silme iptal edildi."); return; }
-                    button.disabled = true;
-                    try {
-                        await api(appRoute(id)+"/permanent-delete","POST",{confirmation:typed});
-                        root.replaceChildren(el("p","Aday kalıcı olarak silindi."));
-                        notice("Aday silindi. Liste yenileniyor.");
-                        await onNameChanged();
-                    } catch(error) { notice(error.message,true); }
-                    finally { button.disabled = false; }
-                });
-                archiveButton.title = "Aday bilgilerini bilgisayara JSON dosyası olarak indirir; CV dosyalarını içermez.";
-                deleteButton.title = "İki aşamalı onayla adayı ve ilişkili ATS kayıtlarını kalıcı siler.";
-                candidateActions.append(archiveButton,deleteButton);
-                root.append(candidateActions,el("p","Arşivle / İndir aday bilgilerini bilgisayarına kaydeder; CV dosyalarını içermez. Kalıcı Sil iki aşamalı onay gerektirir.",{class:"saas-warning"}));
                 const {users} = await api("assignees");
                 const assigned = select("assignee",[["","Atanmadı"],...users.map(user => [user.id,user.name])],row.assigned_user_id || "");
                 root.append(form([field("İK sorumlusu",assigned)],"Ata",async data => {
@@ -1023,6 +1005,24 @@ if (companyPortalPage) {
                         await api(appRoute(id)+"/privacy-requests","POST",fields);
                         notice("Talep inceleme için kaydedildi.");
                      }));
+            // Group existing live data and controls without replacing any functional elements.
+            const nodes = Array.from(root.children);
+            let currentCard = null;
+            const header = el("section","",{class:"ernasa-profile-header"});
+            for (const node of nodes) {
+                if (node.tagName === "H4") {
+                    currentCard = el("section","",{class:"ernasa-file-card"});
+                    root.append(currentCard);
+                }
+                if (!currentCard) header.append(node);
+                else if (node.classList.contains("saas-actions") && node.querySelectorAll("button").length === 2 &&
+                    [...node.querySelectorAll("button")].some(b => b.textContent.includes("Kalıcı Sil"))) {
+                    const actions = el("section","",{class:"ernasa-file-actions"});
+                    actions.append(node);
+                    root.append(actions);
+                } else currentCard.append(node);
+            }
+            root.prepend(header);
         } catch(error) { notice(error.message); }
     }
 
