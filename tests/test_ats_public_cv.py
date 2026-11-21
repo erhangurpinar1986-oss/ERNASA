@@ -769,3 +769,30 @@ def test_public_ats_groups_and_expired_job_preserve_applications(intake,tmp_path
         ats_public_cv.submit(actor.company_id,job,applicant,"cv.pdf",content,"direct","203.0.113.241")
     assert error.value.status_code == 404
     assert ats.list_applications(actor,position_id=position)["total"] == 3
+
+
+def test_twenty_synthetic_applicants_and_repeat_submissions_preserve_records(intake):
+    """20 distinct synthetic applicants, followed by safe repeat attempts."""
+    manager,position,job,pdf,template=intake
+    ids=[]
+    for index in range(20):
+        applicant=template.model_copy(update={
+            "name":f"Sentetik Basvuran {index:02d}",
+            "email":f"synthetic-{index:02d}@example.test",
+        })
+        ip=f"198.51.100.{index+10}"
+        first=ats_public_cv.submit(manager.company_id,job,applicant,
+                                  "synthetic.pdf",pdf,"direct",ip)
+        assert first["application_id"] not in ids
+        assert first["document_id"]
+        ids.append(first["application_id"])
+        second=ats_public_cv.submit(manager.company_id,job,applicant,
+                                   "synthetic.pdf",pdf,"direct",ip)
+        assert second["already_applied"] is True
+        assert second["application_id"] == first["application_id"]
+        assert second["document_id"] is None
+    with closing(database.get_connection()) as db:
+        for table in ("ats_candidates","ats_applications","ats_documents",
+                      "ats_notices","ats_application_sources","selin_intake_queue"):
+            assert db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 20
+        assert db.execute("SELECT COUNT(DISTINCT candidate_id) FROM ats_applications").fetchone()[0] == 20
