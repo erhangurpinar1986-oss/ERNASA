@@ -903,6 +903,35 @@ if (companyPortalPage) {
             }
             if (data.history.length) root.append(el("h4","Aşama geçmişi"),table(["Önceki","Sonraki","Tarih"],
                 data.history.map(event=>[stageLabels[event.previous],closureLabels[event.closure] || stageLabels[event.next],day(event.occurred_at)])));
+            if (manager() && row.candidate_id) {
+                const controls = el("div","",{class:"saas-actions"});
+                controls.append(action("Arşivle",async button => {
+                    if (!window.confirm(row.name+" adlı adayı arşivlemek istiyor musunuz? CV ve mülakat kayıtları korunacak.")) return;
+                    button.disabled = true;
+                    try {
+                        await api("ats/candidates/"+encodeURIComponent(row.candidate_id)+"/archive","POST",{});
+                        notice("Aday arşivlendi. Kayıtlar silinmedi.");
+                        await reload();
+                    } catch(error) { notice(error.message,true); button.disabled=false; }
+                }));
+                controls.append(action("Kalıcı Sil",async button => {
+                    if (!window.confirm("Yalnızca "+row.name+" adlı adayı ve bağlı ATS dosyalarını kalıcı silmek istiyor musunuz? Bu işlem geri alınamaz.")) return;
+                    const confirmedName = window.prompt("Onaylamak için adayın adını aynen yazın:", "");
+                    if (confirmedName !== row.name) {
+                        notice("Aday adı eşleşmedi; hiçbir kayıt silinmedi.",true);
+                        return;
+                    }
+                    button.disabled = true;
+                    try {
+                        await api("ats/candidates/"+encodeURIComponent(row.candidate_id)+"/permanent-delete","POST",
+                            {confirmed_name:confirmedName});
+                        notice("Seçilen aday kalıcı silindi.");
+                        root.replaceChildren(el("p","Aday kaydı silindi."));
+                        if (typeof onNameChanged === "function") await onNameChanged();
+                    } catch(error) { notice(error.message,true); button.disabled=false; }
+                }));
+                root.append(controls);
+            }
             if (manager()) root.append(link("Başvuru verisini dışa aktar",apiRoot+appRoute(id)+"/export"),
                 form([field("Gizlilik talebi",select("kind",[["erase","Silme talebi"],["anonymize","Anonimleştirme"],["export","Dışa aktarma"]],"erase"))],
                      "Talebi kaydet",async fields => {
