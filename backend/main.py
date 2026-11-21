@@ -9,6 +9,7 @@ import academy_video
 import ernasa_training
 import candidate_experience
 import ats
+import ats_candidate_delete
 import ats_cv_import
 import ik_cv_invites
 from services import invite_email
@@ -604,6 +605,16 @@ def delete_ats_candidate(candidate_id: str, fields: CandidateDeleteConfirmation,
 @app.get("/api/ik/ats/applications/{application_id}")
 def get_ats_application(application_id: str, actor: portal_access.Actor = Depends(require_ats)):
     return ats.details(actor, application_id)
+
+
+class CandidateDeleteConfirmation(BaseModel):
+    confirmation: str
+
+
+@app.post("/api/ik/ats/applications/{application_id}/permanent-delete")
+def permanent_delete_ats_candidate(application_id: str, fields: CandidateDeleteConfirmation,
+                                   actor: portal_access.Actor = Depends(require_ats_manager)):
+    return ats_candidate_delete.delete_candidate(actor,application_id,fields.confirmation)
 
 
 @app.patch("/api/ik/ats/applications/{application_id}/candidate-name")
