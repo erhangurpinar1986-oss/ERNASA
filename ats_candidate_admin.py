@@ -12,8 +12,6 @@ def candidate_removal_preflight(actor, candidate_id: str) -> dict:
     """Identify the exact tenant-owned candidate and blockers without mutation."""
     if not candidate_id or len(candidate_id) > 64:
         raise HTTPException(400, "Geçersiz aday kimliği.")
-    if actor.role not in ("admin", "owner", "company_admin", "hr_manager"):
-        raise HTTPException(403, "Bu işlem için yönetici yetkisi gerekli.")
     with closing(get_connection()) as conn:
         cur = conn.cursor()
         cur.execute(
