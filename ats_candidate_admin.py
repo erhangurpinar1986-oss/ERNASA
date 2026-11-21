@@ -52,3 +52,39 @@ def candidate_removal_preflight(actor, candidate_id: str) -> dict:
             "deletion_enabled": False,
             "reason": "Kalıcı silme için doğrulanmış üretim yedeği ve ilişkili kayıt işlemi gerekli.",
         }
+
+
+def set_candidate_archive(actor, candidate_id: str, archived: bool) -> dict:
+    """Soft archive: preserve every candidate, CV, application and interview row."""
+    if not candidate_id or len(candidate_id) > 64:
+        raise HTTPException(400, "Geçersiz aday kimliği.")
+    from datetime import datetime, timezone
+    with closing(get_connection()) as conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("""CREATE TABLE IF NOT EXISTS ats_candidate_archives (
+                candidate_id TEXT PRIMARY KEY REFERENCES ats_candidates(id) ON DELETE CASCADE,
+                company_id BIGINT NOT NULL,
+                archived_by BIGINT NOT NULL,
+                archived_at TEXT NOT NULL
+            )""")
+            cur.execute("SELECT id FROM ats_candidates WHERE id=? AND company_id=?",
+                        (candidate_id, actor.company_id))
+            if cur.fetchone() is None:
+                raise HTTPException(404, "Aday bulunamadı.")
+            if archived:
+                cur.execute("""INSERT INTO ats_candidate_archives
+                    (candidate_id,company_id,archived_by,archived_at)
+                    VALUES (?,?,?,?) ON CONFLICT(candidate_id) DO UPDATE SET
+                    archived_by=excluded.archived_by,archived_at=excluded.archived_at
+                    WHERE ats_candidate_archives.company_id=excluded.company_id""",
+                    (candidate_id, actor.company_id, actor.user_id,
+                     datetime.now(timezone.utc).isoformat()))
+            else:
+                cur.execute("DELETE FROM ats_candidate_archives WHERE candidate_id=? AND company_id=?",
+                            (candidate_id, actor.company_id))
+            conn.commit()
+            return {"candidate_id": candidate_id, "archived": archived}
+        except Exception:
+            conn.rollback()
+            raise
