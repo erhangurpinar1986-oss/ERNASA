@@ -134,6 +134,8 @@ def permanently_delete_candidate(actor, candidate_id: str, confirmed_name: str) 
                     for item_id in ids:
                         cur.execute(f"DELETE FROM {table} WHERE {column}=? AND company_id=?",
                                     (item_id, actor.company_id))
+                for doc_id in doc_ids:
+                    cur.execute("DELETE FROM flow_screening_jobs WHERE document_id=? AND company_id=?", (doc_id, actor.company_id))
                 for table in (
                     "ats_document_blobs", "ats_document_digests", "ats_evaluations",
                     "ats_notes", "ats_notices", "ats_offers", "ats_privacy_requests",
