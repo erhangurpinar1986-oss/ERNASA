@@ -1287,7 +1287,7 @@ def _dispatch_interview_email(token, actor, *, scheduled_at=None):
         previous = cursor.fetchone()
         if previous and previous["status"] == "sent":
             return {"success": True, "already_sent": True,
-                    "message": "Bu davet daha önce kurumsal e-postadan gönderildi."}
+                    "delivery_status": "provider_accepted", "message": "Bu davet e-posta sağlayıcısı tarafından daha önce kabul edildi; alıcıya teslim edildiği henüz doğrulanmadı."}
         if previous and previous["status"] == "pending":
             try:
                 recent = (now - datetime.fromisoformat(previous["initiated_at"])).total_seconds() < 120
@@ -1321,7 +1321,7 @@ def _dispatch_interview_email(token, actor, *, scheduled_at=None):
         if actor.company_id is not None:
             recruitment.record(cursor, actor, "interview_invitation_email_sent", token)
     return {"success":True, "already_sent":False,
-            "message":"Mülakat daveti kurumsal e-posta servisine teslim edildi."}
+            "delivery_status":"provider_accepted", "message":"Mülakat daveti e-posta sağlayıcısı tarafından kabul edildi. Alıcıya teslim edildiği henüz doğrulanmadı."}
 
 
 @app.post("/api/ik/ats/applications/{application_id}/ai-interview", status_code=201)
