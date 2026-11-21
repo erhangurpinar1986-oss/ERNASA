@@ -558,7 +558,7 @@ def evaluate_candidate(token: str, fields: recruitment.Evaluation, actor: portal
 def list_ats_applications(search: str = Query("", max_length=160), position_id: str = Query("", max_length=64),
                           stage: str = Query("", max_length=30), limit: int = Query(25, ge=1, le=100),
                           offset: int = Query(0, ge=0), assignee: str = Query("",max_length=18),
-                          name_order: str = Query("",pattern="^(|asc|desc)$"),
+                          name_order: str = Query("",pattern="^(|asc|desc|score_asc|score_desc)$"),
                           classification: str = Query("",pattern="^(|suitable|development|review)$"),
                           actor: portal_access.Actor = Depends(require_ats)):
     return ats.list_applications(actor, search, position_id, stage, limit, offset, assignee, name_order, classification)
