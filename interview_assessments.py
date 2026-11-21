@@ -97,6 +97,31 @@ Otomatik kabul veya ret kararı verilmedi. İK incelemesi ve gerekirse yeniden m
 """
 
 
+def _unusable_keyboard_answer(value):
+    """Detect obvious key-smashing without penalizing short meaningful answers."""
+    text = str(value or "").strip().casefold()
+    tokens = re.findall(r"[^\W\d_]+", text, flags=re.UNICODE)
+    if not tokens:
+        return True
+    letters = "".join(tokens)
+    if len(letters) < 4:
+        return False  # Brief but possibly meaningful; defer to aggregate evidence.
+    if re.search(r"(.)\1{5,}", letters):
+        return True
+    # Repeated nonsense sequences or long consonant runs are strong indicators,
+    # but require several such tokens before treating an entire answer as noise.
+    vowels = set("aeıioöuü")
+    suspect = sum(
+        len(token) >= 8 and (
+            not any(char in vowels for char in token)
+            or bool(re.search(r"[^aeıioöuü\s]{8,}", token))
+            or (len(token) >= 12 and len(set(token)) <= 3)
+        )
+        for token in tokens
+    )
+    return suspect >= 2 or (len(tokens) == 1 and suspect == 1 and len(letters) >= 16)
+
+
 def insufficient_answer_evidence(answers):
     """Fail closed on unmistakably unusable transcripts; never assign invented scores.
 
@@ -114,6 +139,11 @@ def insufficient_answer_evidence(answers):
     if nonempty < 5 or total_words < 20:
         return True
     if long_unbroken >= 5:
+        return True
+    # Ten questions with predominantly keyboard-smashing are not evidence.
+    # Do not use the CV to invent interview scores in this situation.
+    unusable = sum(_unusable_keyboard_answer(value) for value in texts if value)
+    if nonempty >= 5 and unusable >= max(5, (nonempty * 7 + 9) // 10):
         return True
     return False
 
