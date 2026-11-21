@@ -681,7 +681,18 @@ if (companyPortalPage) {
               .ernasa-ats-metrics{display:grid;gap:12px;color:#28496e;font-weight:600}
               .ernasa-file-card .ernasa-subsection{border:1px solid #e6edf7;border-radius:12px;padding:16px;margin:12px 0;background:#fbfdff}
               .ernasa-file-card .ernasa-subsection-title{font-size:14px;font-weight:750;color:#1a477e;margin:0 0 12px}
-              .ernasa-profile-header .ernasa-profile-tools{background:#ffffff13;border:1px solid #ffffff30;padding:15px;border-radius:12px;margin-top:16px}
+              .ernasa-profile-header .ernasa-profile-tools{background:#ffffff13;border:1px solid #ffffff30;padding:20px;border-radius:12px;margin-top:16px;display:grid;grid-template-columns:1fr;gap:14px;max-width:760px}
+              .ernasa-profile-tools>button{justify-self:start;min-width:180px}
+              .ernasa-profile-tools>form{display:grid!important;grid-template-columns:minmax(0,1fr) 150px;gap:12px!important;align-items:end!important;margin:0!important;max-width:100%!important}
+              .ernasa-profile-tools>form[hidden]{display:none!important}
+              .ernasa-profile-tools>form>label,.ernasa-profile-tools>form>.saas-field{min-width:0;width:100%;margin:0}
+              .ernasa-profile-tools>form input,.ernasa-profile-tools>form select{width:100%!important;box-sizing:border-box}
+              .ernasa-profile-tools>form>button{width:100%!important;margin:0!important;align-self:end;min-height:42px}
+              .ernasa-file-card.ernasa-notes-card>form{display:grid!important;grid-template-columns:minmax(0,1fr) 150px;gap:14px;align-items:end;max-width:100%}
+              .ernasa-notes-card>form textarea{width:100%!important;min-height:115px;box-sizing:border-box}
+              .ernasa-notes-card>form>button{width:100%;align-self:end;margin:0!important;min-height:42px}
+              @media(max-width:650px){.ernasa-profile-tools>form,.ernasa-file-card.ernasa-notes-card>form{grid-template-columns:1fr}.ernasa-profile-tools>form>button,.ernasa-notes-card>form>button{width:100%}}
+
               .ernasa-profile-header .ernasa-profile-tools label{color:#eef6ff!important}
               .ernasa-profile-header .ernasa-profile-tools button{border:1px solid #ffffff55;background:#edf4ff;color:#17447a;border-radius:9px;padding:9px 16px}
               .ernasa-file-card>h4{font-size:17px;color:#123765;margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid #e8edf5}
@@ -1100,6 +1111,7 @@ if (companyPortalPage) {
                 if (node.tagName === "H4") {
                     currentCard = el("section","",{class:"ernasa-file-card"});
                     root.append(currentCard);
+                    if (node.textContent === "Notlar") currentCard.classList.add("ernasa-notes-card");
                     if (node.textContent === "Belgeler") docsCard = currentCard;
                     if (node.textContent === "AI mülakatlar") interviewCard = currentCard;
                 }
