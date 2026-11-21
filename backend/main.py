@@ -576,6 +576,20 @@ def ats_candidate_removal_preflight(candidate_id: str,
     return ats_candidate_admin.candidate_removal_preflight(actor, candidate_id)
 
 
+@app.post("/api/ik/ats/candidates/{candidate_id}/archive")
+def archive_ats_candidate(candidate_id: str,
+                          actor: portal_access.Actor = Depends(require_ats_manager)):
+    import ats_candidate_admin
+    return ats_candidate_admin.set_candidate_archive(actor, candidate_id, True)
+
+
+@app.post("/api/ik/ats/candidates/{candidate_id}/restore")
+def restore_ats_candidate(candidate_id: str,
+                          actor: portal_access.Actor = Depends(require_ats_manager)):
+    import ats_candidate_admin
+    return ats_candidate_admin.set_candidate_archive(actor, candidate_id, False)
+
+
 @app.get("/api/ik/ats/applications/{application_id}")
 def get_ats_application(application_id: str, actor: portal_access.Actor = Depends(require_ats)):
     return ats.details(actor, application_id)
