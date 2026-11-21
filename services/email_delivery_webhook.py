@@ -95,3 +95,34 @@ def accept_event(body, headers):
         raise
     finally:
         connection.close()
+
+
+def reconcile_provider_events(cursor, provider_id):
+    """Apply signed events that arrived before the send record was committed.
+
+    Call inside the transaction that stores the provider message id. This
+    preserves the strongest known delivery state without reprocessing events.
+    """
+    if not provider_id:
+        return None
+    cursor.execute("""SELECT event_type FROM ik_email_delivery_events
+        WHERE provider_message_id=?""", (provider_id,))
+    states = [EVENT_STATES[row["event_type"]] for row in cursor.fetchall()
+              if row["event_type"] in EVENT_STATES]
+    if not states:
+        return None
+    new = max(states, key=lambda state: RANK[state])
+    cursor.execute("""SELECT delivery_status FROM ik_email_delivery_states
+        WHERE provider_message_id=?""", (provider_id,))
+    previous = cursor.fetchone()
+    if previous and RANK.get(previous["delivery_status"], 0) > RANK[new]:
+        return previous["delivery_status"]
+    stamp = datetime.now(timezone.utc).isoformat()
+    cursor.execute("""INSERT INTO ik_email_delivery_states
+        (provider_message_id,delivery_status,updated_at)
+        SELECT provider_message_id,?,? FROM ik_invitation_email_sends
+        WHERE provider_message_id=?
+        ON CONFLICT(provider_message_id) DO UPDATE SET
+        delivery_status=excluded.delivery_status,updated_at=excluded.updated_at""",
+        (new,stamp,provider_id))
+    return new
