@@ -293,14 +293,19 @@ if (companyPortalPage) {
                       (result.coverage == null ? "" : " · Kanıt kapsamı %" + result.coverage)));
                 if (result.state !== "pending" && Number.isFinite(Number(result.score)) && result.score !== null) {
                     const score = Math.max(0,Math.min(100,Number(result.score)));
-                    const track = el("div","",{role:"progressbar","aria-label":"ATS uyum puanı",
-                        "aria-valuemin":"0","aria-valuemax":"100","aria-valuenow":String(score)});
-                    track.style.cssText = "width:100%;height:16px;border-radius:10px;background:#e5eaf2;overflow:hidden;margin:12px 0;";
-                    const fill = el("div");
-                    fill.style.cssText = "height:100%;width:"+score+"%;background:"+
-                        (score>=75?"#17835c":score>=50?"#d69a24":"#a45d48")+";border-radius:10px;";
-                    track.append(fill);
-                    container.append(track);
+                    const donut = el("div","",{class:"ernasa-ats-donut",role:"img",
+                        "aria-label":"ATS uyum puanı yüzde "+score.toFixed(1)});
+                    donut.style.setProperty("--ats-score",String(score)+"%");
+                    const donutCenter = el("div","",{class:"ernasa-ats-donut-center"});
+                    donutCenter.append(el("strong",score.toFixed(1)),el("span","ATS UYUM PUANI"));
+                    donut.append(donutCenter);
+                    const coverage = result.coverage == null ? "Hesaplanmadı" : "%"+result.coverage;
+                    const metrics = el("div","",{class:"ernasa-ats-metrics"});
+                    metrics.append(el("div","Kanıt kapsamı: "+coverage),
+                        el("div","Sonuç: İnsan değerlendirmesi gereklidir"));
+                    const summary = el("div","",{class:"ernasa-ats-summary"});
+                    summary.append(donut,metrics);
+                    container.append(summary);
                 }
                 if (result.state !== "pending" && result.classification)
                     container.append(el("p",atsGroups[result.classification]));
@@ -603,6 +608,17 @@ if (companyPortalPage) {
               .ernasa-profile-header h3{color:white!important;font-size:22px!important;margin:0 0 12px!important;line-height:1.3}
               .ernasa-profile-header p{color:#dce9fa!important;margin:5px 0!important}
               .ernasa-file-card{background:#fff;border:1px solid #e0e8f3;border-radius:14px;padding:20px 22px;box-shadow:0 4px 15px #1536570b;min-width:0}
+              .ernasa-ats-summary{display:flex;align-items:center;gap:28px;flex-wrap:wrap;padding:18px 0}
+              .ernasa-ats-donut{width:176px;height:176px;flex:none;border-radius:50%;background:conic-gradient(#2265b2 var(--ats-score),#e5ebf4 0);display:grid;place-items:center}
+              .ernasa-ats-donut-center{width:137px;height:137px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+              .ernasa-ats-donut-center strong{font-size:38px;line-height:1;color:#173b68}
+              .ernasa-ats-donut-center span{font-size:10px;letter-spacing:.07em;color:#637d99;font-weight:700}
+              .ernasa-ats-metrics{display:grid;gap:12px;color:#28496e;font-weight:600}
+              .ernasa-file-card .ernasa-subsection{border:1px solid #e6edf7;border-radius:12px;padding:16px;margin:12px 0;background:#fbfdff}
+              .ernasa-file-card .ernasa-subsection-title{font-size:14px;font-weight:750;color:#1a477e;margin:0 0 12px}
+              .ernasa-profile-header .ernasa-profile-tools{background:#ffffff13;border:1px solid #ffffff30;padding:15px;border-radius:12px;margin-top:16px}
+              .ernasa-profile-header .ernasa-profile-tools label{color:#eef6ff!important}
+              .ernasa-profile-header .ernasa-profile-tools button{border:1px solid #ffffff55;background:#edf4ff;color:#17447a;border-radius:9px;padding:9px 16px}
               .ernasa-file-card>h4{font-size:17px;color:#123765;margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid #e8edf5}
               .ernasa-file-card .saas-panel{box-shadow:none!important;border:1px solid #e4ebf5;border-radius:12px}
               .ernasa-file-card form{margin:10px 0;max-width:100%;gap:12px}
@@ -1005,24 +1021,63 @@ if (companyPortalPage) {
                         await api(appRoute(id)+"/privacy-requests","POST",fields);
                         notice("Talep inceleme için kaydedildi.");
                      }));
-            // Group existing live data and controls without replacing any functional elements.
+            // Reorganize existing controls into clearly labeled, task-based sections.
             const nodes = Array.from(root.children);
             let currentCard = null;
             const header = el("section","",{class:"ernasa-profile-header"});
+            let interviewCard = null;
+            let docsCard = null;
+            let adminActions = null;
+            const privacyCard = el("section","",{class:"ernasa-file-card"});
+            privacyCard.append(el("h4","Veri yönetimi ve gizlilik"));
+            let privacyHasContent = false;
             for (const node of nodes) {
                 if (node.tagName === "H4") {
                     currentCard = el("section","",{class:"ernasa-file-card"});
                     root.append(currentCard);
+                    if (node.textContent === "Belgeler") docsCard = currentCard;
+                    if (node.textContent === "AI mülakatlar") interviewCard = currentCard;
                 }
-                if (!currentCard) header.append(node);
-                else if (node.classList.contains("saas-actions") && node.querySelectorAll("button").length === 2 &&
+                if (!currentCard) {
+                    if (node.tagName === "FORM" || node.tagName === "BUTTON") {
+                        const tools = header.querySelector(".ernasa-profile-tools") ||
+                            el("div","",{class:"ernasa-profile-tools"});
+                        tools.append(node);
+                        if (!tools.isConnected) header.append(tools);
+                    } else header.append(node);
+                } else if (node.classList.contains("saas-actions") &&
                     [...node.querySelectorAll("button")].some(b => b.textContent.includes("Kalıcı Sil"))) {
-                    const actions = el("section","",{class:"ernasa-file-actions"});
-                    actions.append(node);
-                    root.append(actions);
+                    adminActions = el("section","",{class:"ernasa-file-actions"});
+                    adminActions.append(node);
+                } else if ((node.tagName === "A" && node.textContent.includes("Başvuru verisini dışa aktar")) ||
+                    (node.tagName === "FORM" && node.textContent.includes("Gizlilik talebi"))) {
+                    privacyCard.append(node);
+                    privacyHasContent = true;
                 } else currentCard.append(node);
             }
             root.prepend(header);
+            if (docsCard) {
+                const children = [...docsCard.children];
+                const heading = children.shift();
+                const atsSection = el("section","",{class:"ernasa-subsection"});
+                atsSection.append(el("p","ATS DEĞERLENDİRMESİ",{class:"ernasa-subsection-title"}));
+                const cvSection = el("section","",{class:"ernasa-subsection"});
+                cvSection.append(el("p","CV BELGELERİ VE ANALİZ",{class:"ernasa-subsection-title"}));
+                let cvStarted = false;
+                for (const child of children) {
+                    if (child.tagName === "SECTION" && child.querySelector("h4")?.textContent === "Otomatik ATS değerlendirmesi") {
+                        atsSection.append(child);
+                    } else {
+                        cvStarted = true;
+                        cvSection.append(child);
+                    }
+                }
+                docsCard.replaceChildren(heading);
+                if (atsSection.children.length > 1) docsCard.append(atsSection);
+                if (cvStarted) docsCard.append(cvSection);
+            }
+            if (privacyHasContent) root.append(privacyCard);
+            if (adminActions) root.append(adminActions);
         } catch(error) { notice(error.message); }
     }
 
