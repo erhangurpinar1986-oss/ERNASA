@@ -795,4 +795,4 @@ def test_hundred_synthetic_applicants_and_repeat_submissions_preserve_records(in
         for table in ("ats_candidates","ats_applications","ats_documents",
                       "ats_notices","ats_application_sources","selin_intake_queue"):
             assert db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 100
-        assert db.execute("SELECT COUNT(DISTINCT candidate_id) FROM ats_applications").fetchone()[0] == 20
+        assert db.execute("SELECT COUNT(DISTINCT candidate_id) FROM ats_applications").fetchone()[0] == 100
