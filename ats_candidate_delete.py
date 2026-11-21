@@ -79,7 +79,7 @@ def delete_candidate(actor, application_id: str, confirmation: str):
                 ('public.ats_candidates'::regclass,'public.ats_applications'::regclass,
                  'public.ats_documents'::regclass,'public.ats_evaluations'::regclass,
                  'public.ats_offers'::regclass)""")
-            allowed={table for table,_,_ in CHILDREN}
+            allowed={table for table,_,_ in CHILDREN} | {"interview_links"}  # Existing interview links are explicitly rejected above.
             unknown=[row["child"] for row in cur.fetchall()
                      if row["child"].split(".")[-1] not in allowed]
             if unknown:
