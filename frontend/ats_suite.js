@@ -585,7 +585,7 @@ if (companyPortalPage) {
             details.scrollIntoView({behavior:"smooth",block:"start"});
             details.focus({preventScroll:true});
         };
-        let offset = 0, request = 0, visible = [], nameOrder = "";
+        let offset = 0, request = 0, visible = [], nameOrder = "score_desc";
         const draw = async () => {
             const current = ++request;
             try {
@@ -594,7 +594,7 @@ if (companyPortalPage) {
                 visible = data.applications;
                 results.replaceChildren(el("h3","Başvurular"),el("p",data.total + " başvuru"),data.total === 0
                     ? el("p","Henüz aday bulunmuyor.",{class:"v5-empty"}) : table([action("Ad Soyad",()=>{nameOrder=nameOrder==="asc"?"desc":"asc";offset=0;draw();}),
-                        "E-posta","Pozisyon","Kaynak","Aşama","ATS grubu","İşlem"],
+                        "E-posta","Pozisyon","Kaynak","Aşama",action("ATS grubu · " + (nameOrder === "score_asc" ? "Düşükten yükseğe ↑" : "Yüksekten düşüğe ↓"),()=>{nameOrder=nameOrder==="score_asc"?"score_desc":"score_asc";offset=0;draw();}),"İşlem"],
                     data.applications.map(row => [row.name,row.identity_conflict_email
                         ? row.identity_conflict_email+" · İK doğrulaması gerekli" : row.email,row.position,row.source,closureLabels[row.closure] || stageLabels[row.stage],
                         (atsGroups[row.ats_classification] || "—") + (row.ats_score == null ? "" : " · " + row.ats_score),
