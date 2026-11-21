@@ -771,11 +771,11 @@ def test_public_ats_groups_and_expired_job_preserve_applications(intake,tmp_path
     assert ats.list_applications(actor,position_id=position)["total"] == 3
 
 
-def test_twenty_synthetic_applicants_and_repeat_submissions_preserve_records(intake):
-    """20 distinct synthetic applicants, followed by safe repeat attempts."""
+def test_hundred_synthetic_applicants_and_repeat_submissions_preserve_records(intake):
+    """100 distinct synthetic applicants, followed by safe repeat attempts."""
     manager,position,job,pdf,template=intake
     ids=[]
-    for index in range(20):
+    for index in range(100):
         applicant=template.model_copy(update={
             "name":f"Sentetik Basvuran {index:02d}",
             "email":f"synthetic-{index:02d}@example.test",
@@ -794,5 +794,5 @@ def test_twenty_synthetic_applicants_and_repeat_submissions_preserve_records(int
     with closing(database.get_connection()) as db:
         for table in ("ats_candidates","ats_applications","ats_documents",
                       "ats_notices","ats_application_sources","selin_intake_queue"):
-            assert db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 20
+            assert db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 100
         assert db.execute("SELECT COUNT(DISTINCT candidate_id) FROM ats_applications").fetchone()[0] == 20
