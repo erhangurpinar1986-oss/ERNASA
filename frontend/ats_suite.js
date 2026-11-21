@@ -914,8 +914,22 @@ if (companyPortalPage) {
                         await reload();
                     } catch(error) { notice(error.message,true); button.disabled=false; }
                 }));
-                const deleteButton = el("button","Kalıcı Sil (yedek doğrulaması bekleniyor)",{type:"button",disabled:"disabled"});
-                controls.append(deleteButton);
+                controls.append(action("Kalıcı Sil",async button => {
+                    if (!window.confirm("Yalnızca "+row.name+" adlı adayı ve bağlı ATS dosyalarını kalıcı silmek istiyor musunuz? Bu işlem geri alınamaz.")) return;
+                    const confirmedName = window.prompt("Onaylamak için adayın adını aynen yazın:", "");
+                    if (confirmedName !== row.name) {
+                        notice("Aday adı eşleşmedi; hiçbir kayıt silinmedi.",true);
+                        return;
+                    }
+                    button.disabled = true;
+                    try {
+                        await api("ats/candidates/"+encodeURIComponent(row.candidate_id)+"/permanent-delete","POST",
+                            {confirmed_name:confirmedName});
+                        notice("Seçilen aday kalıcı silindi.");
+                        root.replaceChildren(el("p","Aday kaydı silindi."));
+                        if (typeof onNameChanged === "function") await onNameChanged();
+                    } catch(error) { notice(error.message,true); button.disabled=false; }
+                }));
                 root.append(controls);
             }
             if (manager()) root.append(link("Başvuru verisini dışa aktar",apiRoot+appRoute(id)+"/export"),
