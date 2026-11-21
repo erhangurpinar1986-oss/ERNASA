@@ -582,7 +582,8 @@ if (companyPortalPage) {
         const revealDetails = async id => {
             details.hidden = false;
             await showApplication(details,id,draw);
-            details.focus();
+            details.scrollIntoView({behavior:"smooth",block:"start"});
+            details.focus({preventScroll:true});
         };
         let offset = 0, request = 0, visible = [], nameOrder = "";
         const draw = async () => {
