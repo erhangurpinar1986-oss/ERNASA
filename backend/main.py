@@ -1300,8 +1300,21 @@ def _dispatch_interview_email(token, actor, *, scheduled_at=None):
         cursor.execute("SELECT status, initiated_at FROM ik_invitation_email_sends WHERE token=?", (token,))
         previous = cursor.fetchone()
         if previous and previous["status"] == "sent":
+            cursor.execute("""SELECT d.delivery_status FROM ik_email_delivery_states d
+                JOIN ik_invitation_email_sends s ON s.provider_message_id=d.provider_message_id
+                WHERE s.token=?""", (token,))
+            delivery = cursor.fetchone()
+            state = delivery["delivery_status"] if delivery else "provider_accepted"
+            messages = {
+                "delivered": "E-posta alıcının posta sunucusuna teslim edildi.",
+                "bounced": "E-posta alıcı posta sunucusu tarafından geri çevrildi.",
+                "complained": "E-posta için spam şikâyeti alındı.",
+                "delayed": "E-posta teslimatı gecikiyor.",
+                "sent": "E-posta gönderim aşamasında; teslimat henüz doğrulanmadı.",
+                "provider_accepted": "E-posta sağlayıcısı daveti kabul etti; teslimat henüz doğrulanmadı.",
+            }
             return {"success": True, "already_sent": True,
-                    "delivery_status": "provider_accepted", "message": "Bu davet e-posta sağlayıcısı tarafından daha önce kabul edildi; alıcıya teslim edildiği henüz doğrulanmadı."}
+                    "delivery_status": state, "message": messages[state]}
         if previous and previous["status"] == "pending":
             try:
                 recent = (now - datetime.fromisoformat(previous["initiated_at"])).total_seconds() < 120
