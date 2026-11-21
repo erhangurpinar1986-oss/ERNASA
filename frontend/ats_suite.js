@@ -74,42 +74,14 @@ if (companyPortalPage) {
             status.classList.toggle("saas-error",error);
         }
     }
-    // Reuse simultaneous read requests instead of sending the same expensive
-    // ATS query multiple times while dashboard and panels are mounting.
-    // Cache lives only in this tab, briefly, and is invalidated on every write.
-    const readCache = new Map();
-    const readPending = new Map();
     async function api(path, method = "GET", data) {
-        const isRead = method === "GET" && data === undefined;
-        const now = Date.now();
-        if (isRead) {
-            const cached = readCache.get(path);
-            if (cached && cached.until > now) return cached.value;
-            if (readPending.has(path)) return readPending.get(path);
-        } else {
-            readCache.clear();
-        }
         const spec = {method,cache:"no-store"};
         if (data instanceof FormData) spec.body = data;
         else if (data !== undefined) {
             spec.headers = {"Content-Type":"application/json"};
             spec.body = JSON.stringify(data);
         }
-        const request = portalJson(apiRoot + path,spec,"İşlem tamamlanamadı. Alanları kontrol edip tekrar deneyin.");
-        if (!isRead) return request;
-        readPending.set(path,request);
-        try {
-            const result = await request;
-            // Only cache lightweight list/metadata endpoints. Never cache
-            // candidate files, reports, individual records, or email state.
-            if (/^(positions|assignees|ats\\/metrics|ats\\/applications\\?)/.test(path)) {
-                readCache.set(path,{value:result,until:Date.now()+8000});
-                if (readCache.size > 30) readCache.delete(readCache.keys().next().value);
-            }
-            return result;
-        } finally {
-            readPending.delete(path);
-        }
+        return portalJson(apiRoot + path,spec,"İşlem tamamlanamadı. Alanları kontrol edip tekrar deneyin.");
     }
     function table(headers, rows) {
         if (!rows.length) return el("p","Bu listede henüz kayıt yok.",{class:"v5-empty"});
