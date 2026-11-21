@@ -709,13 +709,23 @@ if (companyPortalPage) {
                     } catch(error) { notice(error.message,true); }
                     finally { button.disabled = false; }
                 });
-                const deleteButton = action("Kalıcı Sil",() => {
-                    notice("Kalıcı silme güvenli tam yedek ve sunucu silme işlemi tamamlanana kadar kapalı.",true);
+                const deleteButton = action("Kalıcı Sil",async button => {
+                    if (!window.confirm(row.name+" adlı adayın TÜM ATS başvuruları ve CV kayıtları kalıcı olarak silinecek. Devam edilsin mi?")) return;
+                    const typed = window.prompt("Son onay: KALICI SIL yazın.");
+                    if (typed !== "KALICI SIL") { notice("Silme iptal edildi."); return; }
+                    button.disabled = true;
+                    try {
+                        await api(appRoute(id)+"/permanent-delete","POST",{confirmation:typed});
+                        root.replaceChildren(el("p","Aday kalıcı olarak silindi."));
+                        notice("Aday silindi. Liste yenileniyor.");
+                        await onNameChanged();
+                    } catch(error) { notice(error.message,true); }
+                    finally { button.disabled = false; }
                 });
                 archiveButton.title = "Aday bilgilerini bilgisayara JSON dosyası olarak indirir; CV dosyalarını içermez.";
-                deleteButton.title = "Güvenli sunucu silme işlemi henüz tamamlanmadı.";
+                deleteButton.title = "İki aşamalı onayla adayı ve ilişkili ATS kayıtlarını kalıcı siler.";
                 candidateActions.append(archiveButton,deleteButton);
-                root.append(candidateActions,el("p","Arşivle / İndir aday bilgilerini bilgisayarına kaydeder; CV dosyalarını içermez. Kalıcı Sil henüz etkin değil.",{class:"saas-warning"}));
+                root.append(candidateActions,el("p","Arşivle / İndir aday bilgilerini bilgisayarına kaydeder; CV dosyalarını içermez. Kalıcı Sil iki aşamalı onay gerektirir.",{class:"saas-warning"}));
                 const {users} = await api("assignees");
                 const assigned = select("assignee",[["","Atanmadı"],...users.map(user => [user.id,user.name])],row.assigned_user_id || "");
                 root.append(form([field("İK sorumlusu",assigned)],"Ata",async data => {
