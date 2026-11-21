@@ -1345,6 +1345,8 @@ def _dispatch_interview_email(token, actor, *, scheduled_at=None):
             SET status='sent',sent_at=?,provider_message_id=?
             WHERE token=? AND status='pending'""",
             (datetime.now(timezone.utc).isoformat(),provider_id,token))
+        # A signed webhook can arrive before this provider id is committed.
+        email_delivery_webhook.reconcile_provider_events(cursor, provider_id)
         if actor.company_id is not None:
             recruitment.record(cursor, actor, "interview_invitation_email_sent", token)
     return {"success":True, "already_sent":False,
