@@ -108,11 +108,12 @@ def test_invalid_consent_source_document_and_duplicate_are_rejected(intake):
         ats_public_cv.submit(manager.company_id,job,wrong,"cv.pdf",pdf,"direct","203.0.113.14")
     assert err.value.status_code==400
     ats_public_cv.submit(manager.company_id,job,applicant,"cv.pdf",pdf,"direct","203.0.113.14")
-    with pytest.raises(HTTPException) as err:
-        ats_public_cv.submit(manager.company_id,job,applicant,"cv.pdf",pdf,"direct","203.0.113.14")
-    assert err.value.status_code==409
+    repeated=ats_public_cv.submit(manager.company_id,job,applicant,"cv.pdf",pdf,"direct","203.0.113.14")
+    assert repeated["already_applied"] is True
+    assert repeated["document_id"] is None
     with closing(database.get_connection()) as db:
         assert db.execute("SELECT COUNT(*) FROM ats_documents").fetchone()[0]==1
+        assert db.execute("SELECT COUNT(*) FROM ats_applications").fetchone()[0]==1
 
 
 def test_cross_tenant_and_disabled_public_cv_fail_closed(intake,monkeypatch):
