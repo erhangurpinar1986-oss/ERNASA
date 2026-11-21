@@ -211,7 +211,7 @@ def signal_patterns(signal):
     for group in BUSINESS_EQUIVALENTS:
         if signal in group:
             alternatives.update(group)
-    return [r"(?<!\\w)" + re.escape(term) + r"(?!\\w)" for term in sorted(alternatives, key=len, reverse=True)]
+    return [r"(?<!\w)" + re.escape(term) + r"(?!\w)" for term in sorted(alternatives, key=len, reverse=True)]
 
 
 def compare(criteria, lines):
@@ -229,8 +229,8 @@ def compare(criteria, lines):
                 for pattern in signal_patterns(signal):
                     if not re.search(pattern, normal):
                         continue
-                    negative = re.compile(r"(?:\\b(?:no|not|never|without)\\s+"+pattern+
-                        r"|"+pattern+r"\\s+(?:deneyimim\\s+|bilgim\\s+|sertifikam\\s+)?(?:yok|bilmiyorum|kullanmadim|degil)\\b)")
+                    negative = re.compile(r"(?:\b(?:no|not|never|without)\s+"+pattern+
+                        r"|"+pattern+r"\s+(?:deneyimim\s+|bilgim\s+|sertifikam\s+)?(?:yok|bilmiyorum|kullanmadim|degil)\b)")
                     matches.append((bool(negative.search(normal)),line,page))
                     break
             if not matches:
