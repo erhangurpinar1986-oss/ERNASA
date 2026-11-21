@@ -680,20 +680,42 @@ if (companyPortalPage) {
                 });
                 editButton.setAttribute("aria-expanded","false");
                 root.append(editButton,editName);
-                // Visible preview only: no destructive action until backup verification.
+                // Browser-managed local export: never sends private candidate data to third parties.
                 const candidateActions = el("div","",{class:"ats-candidate-admin-actions"});
-                const archiveButton = action("Arşivle",() => {
-                    notice("Arşivleme henüz etkin değil. Aday kaydı değiştirilmedi.");
+                const archiveButton = action("Arşivle / İndir",async button => {
+                    button.disabled = true;
+                    try {
+                        const current = await api(appRoute(id));
+                        const payload = {
+                            format:"ERNASA ATS aday bilgi arşivi v1",
+                            exported_at:new Date().toISOString(),
+                            warning:"Bu JSON arşivi CV dosyalarının ikili içeriklerini içermez. Kalıcı silme öncesi tam yedek değildir.",
+                            application:current.application,
+                            notes:current.notes,
+                            history:current.history,
+                            documents:current.documents,
+                            interviews:current.interviews || []
+                        };
+                        const blob = new Blob([JSON.stringify(payload,null,2)],{type:"application/json;charset=utf-8"});
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = "ERNASA_aday_"+String(id).replace(/[^a-zA-Z0-9_-]/g,"")+"_bilgi_arsivi.json";
+                        document.body.append(a);
+                        a.click();
+                        a.remove();
+                        setTimeout(()=>URL.revokeObjectURL(url),60000);
+                        notice("Aday bilgileri indirildi. CV dosyaları bu arşive dahil değildir.");
+                    } catch(error) { notice(error.message,true); }
+                    finally { button.disabled = false; }
                 });
                 const deleteButton = action("Kalıcı Sil",() => {
-                    notice("Kalıcı silme henüz etkin değil. Aday kaydı değiştirilmedi.");
+                    notice("Kalıcı silme güvenli tam yedek ve sunucu silme işlemi tamamlanana kadar kapalı.",true);
                 });
-                archiveButton.setAttribute("type","button");
-                deleteButton.setAttribute("type","button");
-                archiveButton.title = "Arşivleme işlevi hazırlanıyor; kayıt değiştirilmeyecek.";
-                deleteButton.title = "Kalıcı silme işlevi hazırlanıyor; kayıt değiştirilmeyecek.";
+                archiveButton.title = "Aday bilgilerini bilgisayara JSON dosyası olarak indirir; CV dosyalarını içermez.";
+                deleteButton.title = "Güvenli sunucu silme işlemi henüz tamamlanmadı.";
                 candidateActions.append(archiveButton,deleteButton);
-                root.append(candidateActions,el("p","Arşivle ve Kalıcı Sil işlemleri henüz etkin değil; şu an hiçbir veri silinmez.",{class:"saas-warning"}));
+                root.append(candidateActions,el("p","Arşivle / İndir aday bilgilerini bilgisayarına kaydeder; CV dosyalarını içermez. Kalıcı Sil henüz etkin değil.",{class:"saas-warning"}));
                 const {users} = await api("assignees");
                 const assigned = select("assignee",[["","Atanmadı"],...users.map(user => [user.id,user.name])],row.assigned_user_id || "");
                 root.append(form([field("İK sorumlusu",assigned)],"Ata",async data => {
