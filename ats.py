@@ -135,7 +135,9 @@ def list_applications(actor, search='', position_id='', stage='', limit=25, offs
             WHERE a.company_id=? {staff} {suffix}"""
         cursor.execute('SELECT COUNT(*) AS total ' + query, args)
         total = cursor.fetchone()['total']
-        order = {"asc":"lower(c.name) ASC,a.id", "desc":"lower(c.name) DESC,a.id"}.get(
+        order = {"asc":"lower(c.name) ASC,a.id", "desc":"lower(c.name) DESC,a.id",
+                 "score_desc":"(s.match_score IS NULL) ASC,s.match_score DESC,a.id",
+                 "score_asc":"(s.match_score IS NULL) ASC,s.match_score ASC,a.id"}.get(
             name_order, "a.created_at DESC,a.id")
         cursor.execute("""SELECT a.*, c.name,COALESCE(c.email,e.reported_email) AS email,
             e.reported_email AS identity_conflict_email,c.phone,c.source,c.tags,p.name AS position,

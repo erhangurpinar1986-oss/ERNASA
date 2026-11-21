@@ -1,0 +1,28 @@
+name: ERNASA HR FLOW PR56 regression checks
+
+on:
+  pull_request:
+    paths:
+      - 'ats.py'
+      - 'ats_matching.py'
+      - 'ats_public_cv.py'
+      - 'interview_assessments.py'
+      - 'services/email_delivery_webhook.py'
+      - 'tests/test_hr_flow_regression_guards.py'
+      - 'tests/test_email_delivery_webhook.py'
+      - '.github/workflows/hr-flow-pr56-regressions.yml'
+  workflow_dispatch:
+
+jobs:
+  regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt pytest
+      - name: Interview scoring and bilingual ATS regression
+        run: python -m pytest tests/test_hr_flow_regression_guards.py -q
+      - name: Resend webhook signature and replay regression
+        run: python -m pytest tests/test_email_delivery_webhook.py -q

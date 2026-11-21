@@ -166,8 +166,14 @@ def submit(tenant, job_id, fields, filename, content, source, client_ip):
             raise HTTPException(400,"Güncel aday aydınlatma metnini okuyup onaylayın.")
         applicant=ats.record_application(
             c,tenant,job["position_id"],fields,None,
-            "İlan / "+source,job_id=job_id,review_identity_conflict=True
+            "İlan / "+source,job_id=job_id,review_identity_conflict=True,
+            reuse_application=True
         )
+        # Idempotent public re-submission: do not overwrite the existing CV,
+        # consent, intake queue, stage or interview history.
+        if applicant.get("existing_application"):
+            return {"application_id":applicant["id"],"document_id":None,
+                    "company_id":tenant,"source":source,"already_applied":True}
         app_id=applicant["id"]
         doc_id=ats.uid()
         actor=SimpleNamespace(company_id=tenant,user_id=0)

@@ -12,6 +12,7 @@ import ats
 import ats_cv_import
 import ik_cv_invites
 from services import invite_email
+from services import email_delivery_webhook
 import interview_assessments
 import selin_workflow
 import hr_flow_evidence
@@ -558,7 +559,7 @@ def evaluate_candidate(token: str, fields: recruitment.Evaluation, actor: portal
 def list_ats_applications(search: str = Query("", max_length=160), position_id: str = Query("", max_length=64),
                           stage: str = Query("", max_length=30), limit: int = Query(25, ge=1, le=100),
                           offset: int = Query(0, ge=0), assignee: str = Query("",max_length=18),
-                          name_order: str = Query("",pattern="^(|asc|desc)$"),
+                          name_order: str = Query("",pattern="^(|asc|desc|score_asc|score_desc)$"),
                           classification: str = Query("",pattern="^(|suitable|development|review)$"),
                           actor: portal_access.Actor = Depends(require_ats)):
     return ats.list_applications(actor, search, position_id, stage, limit, offset, assignee, name_order, classification)
@@ -644,6 +645,19 @@ def change_position_member(position_id: str, user_id: int, enabled: bool,
 def get_position_members(position_id: str, actor: portal_access.Actor = Depends(require_ats_manager)):
     return {"users":eligible_assignees(actor)['users'], "members":ats.position_members(actor,position_id)}
 
+
+
+
+@app.post("/api/webhooks/resend", include_in_schema=False)
+async def receive_resend_delivery_event(request: Request):
+    body = await request.body()
+    if len(body) > 65536:
+        raise HTTPException(413, "Webhook payload too large")
+    try:
+        outcome = email_delivery_webhook.accept_event(body, request.headers)
+    except ValueError:
+        raise HTTPException(401, "Invalid webhook") from None
+    return {"status": outcome}
 
 @app.post("/api/ik/ats/applications/{application_id}/notes", status_code=201)
 def add_ats_note(application_id: str, fields: ats.Note, actor: portal_access.Actor = Depends(require_ats)):
@@ -1286,8 +1300,21 @@ def _dispatch_interview_email(token, actor, *, scheduled_at=None):
         cursor.execute("SELECT status, initiated_at FROM ik_invitation_email_sends WHERE token=?", (token,))
         previous = cursor.fetchone()
         if previous and previous["status"] == "sent":
+            cursor.execute("""SELECT d.delivery_status FROM ik_email_delivery_states d
+                JOIN ik_invitation_email_sends s ON s.provider_message_id=d.provider_message_id
+                WHERE s.token=?""", (token,))
+            delivery = cursor.fetchone()
+            state = delivery["delivery_status"] if delivery else "provider_accepted"
+            messages = {
+                "delivered": "E-posta alıcının posta sunucusuna teslim edildi.",
+                "bounced": "E-posta alıcı posta sunucusu tarafından geri çevrildi.",
+                "complained": "E-posta için spam şikâyeti alındı.",
+                "delayed": "E-posta teslimatı gecikiyor.",
+                "sent": "E-posta gönderim aşamasında; teslimat henüz doğrulanmadı.",
+                "provider_accepted": "E-posta sağlayıcısı daveti kabul etti; teslimat henüz doğrulanmadı.",
+            }
             return {"success": True, "already_sent": True,
-                    "message": "Bu davet daha önce kurumsal e-postadan gönderildi."}
+                    "delivery_status": state, "message": messages[state]}
         if previous and previous["status"] == "pending":
             try:
                 recent = (now - datetime.fromisoformat(previous["initiated_at"])).total_seconds() < 120
@@ -1318,10 +1345,12 @@ def _dispatch_interview_email(token, actor, *, scheduled_at=None):
             SET status='sent',sent_at=?,provider_message_id=?
             WHERE token=? AND status='pending'""",
             (datetime.now(timezone.utc).isoformat(),provider_id,token))
+        # A signed webhook can arrive before this provider id is committed.
+        email_delivery_webhook.reconcile_provider_events(cursor, provider_id)
         if actor.company_id is not None:
             recruitment.record(cursor, actor, "interview_invitation_email_sent", token)
     return {"success":True, "already_sent":False,
-            "message":"Mülakat daveti kurumsal e-posta servisine teslim edildi."}
+            "delivery_status":"provider_accepted", "message":"Mülakat daveti e-posta sağlayıcısı tarafından kabul edildi. Alıcıya teslim edildiği henüz doğrulanmadı."}
 
 
 @app.post("/api/ik/ats/applications/{application_id}/ai-interview", status_code=201)

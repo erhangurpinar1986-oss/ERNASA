@@ -193,6 +193,27 @@ def cv_lines(path):
     return [(line, None) for line in relevant_text(extract_text(str(path))).splitlines() if line.strip()]
 
 
+# Lexical alternatives only: a CV excerpt is still required as evidence.
+BUSINESS_EQUIVALENTS = (
+    ("b2b", "business to business", "kurumsal satis", "corporate sales"),
+    ("musteri kazanimi", "yeni musteri", "customer acquisition", "client acquisition"),
+    ("is gelistirme", "business development", "commercial development"),
+    ("musteri iliskileri", "customer relations", "customer relationship", "client management", "account management", "musteri yonetimi"),
+    ("muzakere", "negotiation", "negotiations", "commercial negotiations"),
+    ("pazar arastirmasi", "market research", "market analysis", "pazar analizi"),
+    ("raporlama", "reporting", "report preparation", "rapor hazirlama"),
+    ("sunum", "presentation", "presentations"),
+)
+
+
+def signal_patterns(signal):
+    alternatives = {signal}
+    for group in BUSINESS_EQUIVALENTS:
+        if signal in group:
+            alternatives.update(group)
+    return [r"(?<!\w)" + re.escape(term) + r"(?!\w)" for term in sorted(alternatives, key=len, reverse=True)]
+
+
 def compare(criteria, lines):
     normalized = [(line,page," ".join(plain(line).split())) for line,page in lines if safe_line(line)]
     results = []
@@ -203,10 +224,15 @@ def compare(criteria, lines):
         denied = False
         evidence = []
         for signal in signals:
-            pattern = r"(?<!\w)"+re.escape(signal)+r"(?!\w)"
-            negative = re.compile(r"(?:\b(?:no|not|never)\s+"+pattern+
-                r"|"+pattern+r"\s+(?:deneyimim\s+|bilgim\s+|sertifikam\s+)?(?:yok|bilmiyorum|kullanmadim|degil)\b)")
-            matches = [(bool(negative.search(normal)),line,page) for line,page,normal in normalized if re.search(pattern,normal)]
+            matches = []
+            for line, page, normal in normalized:
+                for pattern in signal_patterns(signal):
+                    if not re.search(pattern, normal):
+                        continue
+                    negative = re.compile(r"(?:\b(?:no|not|never|without)\s+"+pattern+
+                        r"|"+pattern+r"\s+(?:deneyimim\s+|bilgim\s+|sertifikam\s+)?(?:yok|bilmiyorum|kullanmadim|degil)\b)")
+                    matches.append((bool(negative.search(normal)),line,page))
+                    break
             if not matches:
                 continue
             opposite = next((item for item in matches if item[0]),None)
