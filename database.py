@@ -188,6 +188,14 @@ def initialize_database():
             provider_message_id TEXT
         )
     """)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS ik_email_delivery_events (
+        event_id TEXT PRIMARY KEY, provider_message_id TEXT NOT NULL,
+        event_type TEXT NOT NULL, received_at TEXT NOT NULL
+    )""")
+    cursor.execute("""CREATE TABLE IF NOT EXISTS ik_email_delivery_states (
+        provider_message_id TEXT PRIMARY KEY, delivery_status TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS interview_questions (
             token TEXT NOT NULL REFERENCES interview_links(token),
