@@ -579,10 +579,38 @@ if (companyPortalPage) {
         const editor = el("section","",{class:"saas-panel",hidden:""});
         const importer = el("section","",{class:"saas-panel",hidden:""});
         const reveal = () => { editor.hidden = false; editor.querySelector("[name=name]")?.focus(); };
+        // Open the candidate file immediately in a separate overlay, rather than
+        // loading below the long applications list and scrolling several seconds later.
+        const fileOverlay = el("div","",{role:"dialog","aria-modal":"true","aria-label":"Aday dosyası"});
+        fileOverlay.style.cssText = "position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.58);display:none;align-items:center;justify-content:center;padding:16px;";
+        const fileWindow = el("div","",{class:"saas-panel"});
+        fileWindow.style.cssText = "background:var(--surface,#fff);color:var(--text,#18212f);width:min(1100px,100%);height:min(92vh,100%);overflow:auto;border-radius:14px;padding:20px;box-shadow:0 18px 60px rgba(0,0,0,.35);";
+        const fileTop = el("div","",{class:"saas-actions"});
+        const closeFile = action("← Aday listesine dön",() => {
+            fileOverlay.style.display = "none";
+            details.hidden = true;
+            document.body.style.overflow = fileOverlay.dataset.previousOverflow || "";
+        });
+        fileTop.append(closeFile);
+        fileWindow.append(fileTop,details);
+        fileOverlay.append(fileWindow);
+        document.body.append(fileOverlay);
+        fileOverlay.addEventListener("click",event => { if(event.target === fileOverlay) closeFile.click(); });
+        fileOverlay.addEventListener("keydown",event => {
+            if(event.key === "Escape") { event.preventDefault(); closeFile.click(); }
+        });
+        let fileRequest = 0;
         const revealDetails = async id => {
+            const current = ++fileRequest;
+            fileOverlay.dataset.previousOverflow = document.body.style.overflow;
+            document.body.style.overflow = "hidden";
+            fileOverlay.style.display = "flex";
+            fileWindow.scrollTop = 0;
             details.hidden = false;
+            details.replaceChildren(el("p","Aday dosyası yükleniyor…"));
+            closeFile.focus();
             await showApplication(details,id,draw);
-            details.focus();
+            if(current === fileRequest) fileWindow.scrollTop = 0;
         };
         let offset = 0, request = 0, visible = [], nameOrder = "";
         const draw = async () => {
