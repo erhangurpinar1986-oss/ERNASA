@@ -569,6 +569,13 @@ def create_ats_application(fields: ats.ApplicationCreate, actor: portal_access.A
     return ats.create_application(actor, fields)
 
 
+@app.get("/api/ik/ats/candidates/{candidate_id}/removal-preflight")
+def ats_candidate_removal_preflight(candidate_id: str,
+                                   actor: portal_access.Actor = Depends(require_ats_manager)):
+    import ats_candidate_admin
+    return ats_candidate_admin.candidate_removal_preflight(actor, candidate_id)
+
+
 @app.get("/api/ik/ats/applications/{application_id}")
 def get_ats_application(application_id: str, actor: portal_access.Actor = Depends(require_ats)):
     return ats.details(actor, application_id)
