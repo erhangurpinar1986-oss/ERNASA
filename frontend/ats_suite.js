@@ -695,6 +695,28 @@ if (companyPortalPage) {
 
               .ernasa-profile-header .ernasa-profile-tools label{color:#eef6ff!important}
               .ernasa-profile-header .ernasa-profile-tools button{border:1px solid #ffffff55;background:#edf4ff;color:#17447a;border-radius:9px;padding:9px 16px}
+              /* Compact, consistent dossier controls: no oversized action columns. */
+              .ernasa-candidate-body .ernasa-file-card{padding:18px 20px}
+              .ernasa-candidate-body .ernasa-file-card button{width:auto!important;min-width:0!important;max-width:100%;min-height:34px;padding:7px 14px;font-size:12px;line-height:1.35;white-space:normal;justify-self:start;align-self:end}
+              .ernasa-candidate-body .ernasa-file-card input,.ernasa-candidate-body .ernasa-file-card select{min-height:36px;font-size:13px}
+              .ernasa-candidate-body .ernasa-file-card form{display:grid!important;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:12px!important;margin:10px 0!important}
+              .ernasa-candidate-body .ernasa-file-card form>button{margin:0!important}
+              .ernasa-candidate-body .ernasa-file-card form>label{min-width:0;max-width:100%}
+              .ernasa-candidate-body .ernasa-file-card form>label input,.ernasa-candidate-body .ernasa-file-card form>label select{width:100%;box-sizing:border-box}
+              .ernasa-candidate-body .ernasa-file-card.ernasa-interview-card form{grid-template-columns:minmax(170px,1fr) minmax(180px,1fr) auto;align-items:end}
+              .ernasa-candidate-body .ernasa-file-card.ernasa-interview-card form>p{margin:0;align-self:center;font-size:13px}
+              .ernasa-candidate-body .ernasa-file-card.ernasa-privacy-card form{grid-template-columns:minmax(190px,320px) auto;justify-content:start}
+              .ernasa-candidate-body .ernasa-file-card.ernasa-documents-card .saas-form{display:flex!important;flex-wrap:wrap;align-items:center;gap:12px}
+              .ernasa-candidate-body .ernasa-file-card.ernasa-documents-card .saas-form p{margin:0;flex:1 1 250px;overflow-wrap:anywhere}
+              .ernasa-candidate-body .ernasa-file-card.ernasa-documents-card .saas-form button{flex:none}
+              .ernasa-candidate-body .ernasa-file-card.ernasa-documents-card form{grid-template-columns:minmax(220px,370px) auto;justify-content:start}
+              .ernasa-candidate-body .ernasa-file-card.ernasa-documents-card form input[type=file]{font-size:12px;width:100%;box-sizing:border-box}
+              .ernasa-candidate-body .ernasa-file-card.ernasa-documents-card .ernasa-subsection{padding:14px}
+              .ernasa-candidate-body .ernasa-file-card.ernasa-notes-card form{grid-template-columns:minmax(0,1fr) auto;align-items:end}
+              .ernasa-candidate-body .ernasa-file-card.ernasa-notes-card form button{min-width:110px!important}
+              .ernasa-file-actions{align-items:center;padding:12px 18px!important}
+              .ernasa-file-actions button{min-height:34px!important;padding:7px 14px!important;font-size:12px!important}
+              @media(max-width:720px){.ernasa-candidate-body .ernasa-file-card form,.ernasa-candidate-body .ernasa-file-card.ernasa-interview-card form,.ernasa-candidate-body .ernasa-file-card.ernasa-privacy-card form,.ernasa-candidate-body .ernasa-file-card.ernasa-documents-card form{grid-template-columns:1fr!important}.ernasa-candidate-body .ernasa-file-card form>button{justify-self:stretch;width:100%!important}}
               .ernasa-file-card>h4{font-size:17px;color:#123765;margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid #e8edf5}
               .ernasa-file-card .saas-panel{box-shadow:none!important;border:1px solid #e4ebf5;border-radius:12px}
               .ernasa-file-card form{margin:10px 0;max-width:100%;gap:12px}
@@ -1104,7 +1126,7 @@ if (companyPortalPage) {
             let interviewCard = null;
             let docsCard = null;
             let adminActions = null;
-            const privacyCard = el("section","",{class:"ernasa-file-card"});
+            const privacyCard = el("section","",{class:"ernasa-file-card ernasa-privacy-card"});
             privacyCard.append(el("h4","Veri yönetimi ve gizlilik"));
             let privacyHasContent = false;
             for (const node of nodes) {
@@ -1112,6 +1134,8 @@ if (companyPortalPage) {
                     currentCard = el("section","",{class:"ernasa-file-card"});
                     root.append(currentCard);
                     if (node.textContent === "Notlar") currentCard.classList.add("ernasa-notes-card");
+                    if (node.textContent === "Belgeler") currentCard.classList.add("ernasa-documents-card");
+                    if (node.textContent === "AI mülakatlar") currentCard.classList.add("ernasa-interview-card");
                     if (node.textContent === "Belgeler") docsCard = currentCard;
                     if (node.textContent === "AI mülakatlar") interviewCard = currentCard;
                 }
