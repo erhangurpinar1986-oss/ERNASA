@@ -300,12 +300,61 @@ if (companyPortalPage) {
                     donutCenter.append(el("strong",score.toFixed(1)),el("span","ATS UYUM PUANI"));
                     donut.append(donutCenter);
                     const coverage = result.coverage == null ? "Hesaplanmadı" : "%"+result.coverage;
-                    const metrics = el("div","",{class:"ernasa-ats-metrics"});
-                    metrics.append(el("div","Kanıt kapsamı: "+coverage),
-                        el("div","Sonuç: İnsan değerlendirmesi gereklidir"));
+                    const evidenceGroups = [
+                        {label:"Güçlü kanıt",color:"#17a673",count:0},
+                        {label:"Kısmi eşleşme",color:"#f59e0b",count:0},
+                        {label:"Kanıt bulunamadı",color:"#f05266",count:0},
+                        {label:"Diğer / doğrulanacak",color:"#7b91ae",count:0}
+                    ];
+                    const criteria = [...(result.strengths || []),...(result.development || [])];
+                    for (const item of criteria) {
+                        const status = String(item.status || "").toLocaleLowerCase("tr-TR");
+                        const evidence = String(item.evidence || "").toLocaleLowerCase("tr-TR");
+                        if (/kanıt bulunamad|kanıt yok|eşleşme yok|doğrulanamad|not found|missing/.test(status+" "+evidence))
+                            evidenceGroups[2].count++;
+                        else if (/kısmi|partial|geliştirilmeli|sınırlı/.test(status))
+                            evidenceGroups[1].count++;
+                        else if (/güçlü|doğrulan|kanıtlı|tam eşleş|strong|matched/.test(status))
+                            evidenceGroups[0].count++;
+                        else evidenceGroups[3].count++;
+                    }
+                    const evidenceTotal = criteria.length;
+                    const evidenceChart = el("div","",{class:"ernasa-evidence-chart"});
+                    const evidenceRing = el("div","",{class:"ernasa-evidence-ring",role:"img",
+                        "aria-label":"Kanıt dağılımı, toplam "+evidenceTotal+" kriter"});
+                    const evidenceCenter = el("div","",{class:"ernasa-evidence-center"});
+                    evidenceCenter.append(el("strong",String(evidenceTotal)),el("span","KRİTER"));
+                    evidenceRing.append(evidenceCenter);
+                    if (evidenceTotal) {
+                        let angle = 0;
+                        const segments = [];
+                        for (const group of evidenceGroups) {
+                            if (!group.count) continue;
+                            const nextAngle = angle + 100*group.count/evidenceTotal;
+                            segments.push(group.color+" "+angle+"% "+nextAngle+"%");
+                            angle = nextAngle;
+                        }
+                        evidenceRing.style.background = "conic-gradient("+segments.join(",")+")";
+                    }
+                    const legend = el("div","",{class:"ernasa-evidence-legend"});
+                    for (const group of evidenceGroups) {
+                        const line = el("div","",{class:"ernasa-evidence-legend-row"});
+                        const dot = el("span","",{class:"ernasa-evidence-dot"});
+                        dot.style.background = group.color;
+                        line.append(dot,el("span",group.label),el("strong",String(group.count)));
+                        legend.append(line);
+                    }
+                    evidenceChart.append(evidenceRing,legend);
+                    const scoreChart = el("div","",{class:"ernasa-score-chart"});
+                    scoreChart.append(el("h5","ATS uyum puanı"),donut,
+                        el("p","Kanıt kapsamı: "+coverage));
+                    const evidencePanel = el("div","",{class:"ernasa-evidence-panel"});
+                    evidencePanel.append(el("h5","Kanıt dağılımı"),evidenceChart);
                     const summary = el("div","",{class:"ernasa-ats-summary"});
-                    summary.append(donut,metrics);
+                    summary.append(scoreChart,evidencePanel);
                     container.append(summary);
+                    container.append(el("p","Bu grafik CV'deki kriter kanıtlarını gösterir; işe alım kararı değildir.",
+                        {class:"ernasa-ats-caption"}));
                 }
                 if (result.state !== "pending" && result.classification)
                     container.append(el("p",atsGroups[result.classification]));
@@ -608,7 +657,23 @@ if (companyPortalPage) {
               .ernasa-profile-header h3{color:white!important;font-size:22px!important;margin:0 0 12px!important;line-height:1.3}
               .ernasa-profile-header p{color:#dce9fa!important;margin:5px 0!important}
               .ernasa-file-card{background:#fff;border:1px solid #e0e8f3;border-radius:14px;padding:20px 22px;box-shadow:0 4px 15px #1536570b;min-width:0}
-              .ernasa-ats-summary{display:flex;align-items:center;gap:28px;flex-wrap:wrap;padding:18px 0}
+              .ernasa-ats-summary{display:grid;grid-template-columns:minmax(190px,1fr) minmax(320px,2fr);gap:18px;padding:18px 0;align-items:stretch}
+              .ernasa-score-chart,.ernasa-evidence-panel{background:#f8fbff;border:1px solid #e1eaf6;border-radius:14px;padding:18px;min-width:0}
+              .ernasa-score-chart{display:flex;flex-direction:column;align-items:center;gap:12px}
+              .ernasa-score-chart h5,.ernasa-evidence-panel h5{font-size:15px;color:#173c6a;margin:0 0 12px}
+              .ernasa-score-chart p{margin:0;color:#647a93;font-size:13px}
+              .ernasa-evidence-chart{display:flex;align-items:center;justify-content:space-around;gap:24px;flex-wrap:wrap}
+              .ernasa-evidence-ring{width:174px;height:174px;border-radius:50%;background:#e5ebf4;display:grid;place-items:center;flex:none}
+              .ernasa-evidence-center{width:133px;height:133px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-direction:column}
+              .ernasa-evidence-center strong{font-size:38px;color:#173b68;line-height:1}
+              .ernasa-evidence-center span{font-size:11px;font-weight:700;color:#7287a1;letter-spacing:.06em}
+              .ernasa-evidence-legend{display:grid;gap:12px;min-width:190px;flex:1}
+              .ernasa-evidence-legend-row{display:grid;grid-template-columns:12px 1fr auto;gap:10px;align-items:center;color:#304f70;font-size:13px}
+              .ernasa-evidence-dot{width:11px;height:11px;border-radius:50%}
+              .ernasa-evidence-legend-row strong{font-size:14px;color:#183a65}
+              .ernasa-ats-caption{font-size:12px;color:#60768e;margin:0 0 12px}
+              @media(max-width:740px){.ernasa-ats-summary{grid-template-columns:1fr}}
+
               .ernasa-ats-donut{width:176px;height:176px;flex:none;border-radius:50%;background:conic-gradient(#2265b2 var(--ats-score),#e5ebf4 0);display:grid;place-items:center}
               .ernasa-ats-donut-center{width:137px;height:137px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
               .ernasa-ats-donut-center strong{font-size:38px;line-height:1;color:#173b68}
