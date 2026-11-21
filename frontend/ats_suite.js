@@ -680,6 +680,20 @@ if (companyPortalPage) {
                 });
                 editButton.setAttribute("aria-expanded","false");
                 root.append(editButton,editName);
+                // Visible preview only: no destructive action until backup verification.
+                const candidateActions = el("div","",{class:"ats-candidate-admin-actions"});
+                const archiveButton = action("Arşivle",() => {
+                    notice("Arşivleme henüz etkin değil. Aday kaydı değiştirilmedi.");
+                });
+                const deleteButton = action("Kalıcı Sil",() => {
+                    notice("Kalıcı silme henüz etkin değil. Aday kaydı değiştirilmedi.");
+                });
+                archiveButton.setAttribute("type","button");
+                deleteButton.setAttribute("type","button");
+                archiveButton.title = "Arşivleme işlevi hazırlanıyor; kayıt değiştirilmeyecek.";
+                deleteButton.title = "Kalıcı silme işlevi hazırlanıyor; kayıt değiştirilmeyecek.";
+                candidateActions.append(archiveButton,deleteButton);
+                root.append(candidateActions,el("p","Arşivle ve Kalıcı Sil işlemleri henüz etkin değil; şu an hiçbir veri silinmez.",{class:"saas-warning"}));
                 const {users} = await api("assignees");
                 const assigned = select("assignee",[["","Atanmadı"],...users.map(user => [user.id,user.name])],row.assigned_user_id || "");
                 root.append(form([field("İK sorumlusu",assigned)],"Ata",async data => {
