@@ -291,6 +291,17 @@ if (companyPortalPage) {
                     ? "ATS değerlendirmesi sırada."
                     : "ATS puanı · " + (result.score ?? "Kanıtlı puan yok") +
                       (result.coverage == null ? "" : " · Kanıt kapsamı %" + result.coverage)));
+                if (result.state !== "pending" && Number.isFinite(Number(result.score)) && result.score !== null) {
+                    const score = Math.max(0,Math.min(100,Number(result.score)));
+                    const track = el("div","",{role:"progressbar","aria-label":"ATS uyum puanı",
+                        "aria-valuemin":"0","aria-valuemax":"100","aria-valuenow":String(score)});
+                    track.style.cssText = "width:100%;height:16px;border-radius:10px;background:#e5eaf2;overflow:hidden;margin:12px 0;";
+                    const fill = el("div");
+                    fill.style.cssText = "height:100%;width:"+score+"%;background:"+
+                        (score>=75?"#17835c":score>=50?"#d69a24":"#a45d48")+";border-radius:10px;";
+                    track.append(fill);
+                    container.append(track);
+                }
                 if (result.state !== "pending" && result.classification)
                     container.append(el("p",atsGroups[result.classification]));
                 if (result.reason) container.append(el("p",result.reason));
@@ -658,7 +669,7 @@ if (companyPortalPage) {
         }));
         root.append(actions,form([field("Ad veya e-posta",search),field("Pozisyon",target),field("Aşama",stage),
                                   field("İK sorumlusu",assignee),field("ATS grubu",classification)],
-                         "Filtrele",() => {offset=0;return draw();}),flowResults,importer,results,editor,details);
+                         "Filtrele",() => {offset=0;return draw();}),flowResults,importer,results,editor);
         if (openPositions.length) editor.append(el("h3","Manuel başvuru"),form([
             field("Ad soyad",input("name","text","",{required:"",maxlength:160})),
             field("E-posta",input("email","email","",{required:"",maxlength:254})),
