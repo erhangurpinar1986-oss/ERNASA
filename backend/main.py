@@ -590,6 +590,17 @@ def restore_ats_candidate(candidate_id: str,
     return ats_candidate_admin.set_candidate_archive(actor, candidate_id, False)
 
 
+class CandidateDeleteConfirmation(BaseModel):
+    confirmed_name: str = Field(min_length=1, max_length=200)
+
+
+@app.post("/api/ik/ats/candidates/{candidate_id}/permanent-delete")
+def delete_ats_candidate(candidate_id: str, fields: CandidateDeleteConfirmation,
+                         actor: portal_access.Actor = Depends(require_ats_manager)):
+    import ats_candidate_admin
+    return ats_candidate_admin.permanently_delete_candidate(actor, candidate_id, fields.confirmed_name)
+
+
 @app.get("/api/ik/ats/applications/{application_id}")
 def get_ats_application(application_id: str, actor: portal_access.Actor = Depends(require_ats)):
     return ats.details(actor, application_id)
