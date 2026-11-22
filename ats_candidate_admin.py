@@ -141,6 +141,8 @@ def permanently_delete_candidate(actor, candidate_id: str, confirmed_name: str) 
                     "ats_notes", "ats_notices", "ats_offers", "ats_privacy_requests",
                     "ats_schedules", "ats_stage_events", "ats_upload_jobs",
                     "flow_screening_results", "flow_booking_jobs",
+                    "flow_candidate_events", "flow_hr_decisions", "flow_candidate_notices",
+                    "flow_candidate_tracking", "flow_candidate_requests", "flow_automation_reviews",
                 ):
                     cur.execute(f"DELETE FROM {table} WHERE application_id=? AND company_id=?",
                                 (app_id, actor.company_id))

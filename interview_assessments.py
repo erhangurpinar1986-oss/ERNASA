@@ -84,15 +84,19 @@ Problem Çözme: Değerlendirilemedi
 Takım Çalışması: Değerlendirilemedi
 
 GÜÇLÜ YÖNLER:
-Mülakat cevaplarından doğrulanmış güçlü yön tespit edilemedi.
+Bu alanda doğrulanmış bulgu bulunmuyor.
 
-GELİŞTİRİLMESİ GEREKEN ALANLAR:
-Yeterli kanıt bulunmadığı için yetkinlik eksikliği çıkarımı yapılamaz.
+ZAYIF YÖNLER:
+Bu alanda doğrulanmış bulgu bulunmuyor.
 
-DİKKAT EDİLMESİ GEREKEN NOKTALAR:
-Mülakat cevapları anlamlı bir değerlendirmeyi desteklemiyor. CV beyanları mülakat kanıtı olarak kullanılmadı.
+GELİŞTİRİLMESİ GEREKEN YÖNLER:
+Bu alanda doğrulanmış bulgu bulunmuyor.
 
-İK DEĞERLENDİRME ÖZETİ:
+DİKKAT EDİLMESİ GEREKENLER:
+- Mülakat cevapları anlamlı bir değerlendirmeyi desteklemiyor; yetkinlik eksikliği çıkarımı yapılmadı.
+- CV beyanları mülakat kanıtı olarak kullanılmadı.
+
+GENEL İK DEĞERLENDİRME ÖZETİ:
 Otomatik kabul veya ret kararı verilmedi. İK incelemesi ve gerekirse yeniden mülakat önerilir.
 """
 

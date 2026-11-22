@@ -167,6 +167,17 @@ def process_one(cv_root):
             c.execute("""DELETE FROM flow_screening_jobs
                 WHERE company_id=? AND application_id=? AND document_id=?""",
                 (tenant, app_id, doc_id))
+        # Issue #65: pozisyonda otomasyon açıksa aday bazında İK onayı istenmeden davet akışı başlar.
+        import hr_flow_automation
+        try:
+            hr_flow_automation.on_screened(tenant, app_id, doc_id)
+        except Exception as error:
+            logging.getLogger(__name__).warning("FLOW automation needs review (%s)", type(error).__name__)
+            try:
+                with write(tenant) as c:
+                    hr_flow_automation._review(c, tenant, app_id, "automation_error")
+            except Exception:
+                pass
     return True
 
 

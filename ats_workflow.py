@@ -68,8 +68,10 @@ def position(cursor, actor, position_id):
         raise HTTPException(404,'Pozisyon bulunamadı.')
 
 
-def move(actor, app_id, fields):
-    with write(actor.company_id) as cursor:
+def move(actor, app_id, fields, *, active_cursor=None):
+    # active_cursor: aynı işlem içinde çağrı (ör. İK Karar Merkezi); davranış değişmez.
+    transaction = write(actor.company_id) if active_cursor is None else nullcontext(active_cursor)
+    with transaction as cursor:
         row = application(cursor,actor,app_id)
         if actor.role not in MANAGERS:
             require_staff_position(cursor,actor,row['position_id'])
