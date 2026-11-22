@@ -347,6 +347,19 @@ def text_suggestions(request: Request, fields: ManualText):
 @router.post("/api/egitim/ik/atama",status_code=201)
 def create_assignment(request: Request, body: AssignmentRequest):
     company_id, user_id = _actor(request, write=True)
+    with closing(get_connection()) as db:
+        result = record_assignment(db.cursor(), company_id, user_id, body)
+        db.commit()
+    result.pop("token_hash", None)  # mevcut API yanıtı aynen korunur
+    return result
+
+
+def record_assignment(cur, company_id, user_id, body):
+    """Validate and store one Academy assignment using the caller's open cursor.
+
+    Shared by the HR assignment page and the HR FLOW decision center so both
+    use the same tables, rules and token format. Never sends an email.
+    """
     if body.program_id not in PROGRAMS:
         raise HTTPException(422,"Eğitim programı geçersiz.")
     if body.program_id != "ernasa_v9" and len(body.module_ids) > 16:
@@ -369,20 +382,17 @@ def create_assignment(request: Request, body: AssignmentRequest):
     now=datetime.now(timezone.utc)
     expires=(now+timedelta(days=body.days)).isoformat()
     modules=sorted(body.module_ids,key=list(MODULE_TITLES).index)
-    with closing(get_connection()) as db:
-        cur=db.cursor()
-        cur.execute("""INSERT INTO ernasa_training_invites
-            (token_hash,recipient,email,created_at,expires_at,revoked)
-            VALUES(?,?,?,?,?,0)""",
-            (digest,body.recipient.strip(),email,now.isoformat(),expires))
-        cur.execute("""INSERT INTO ernasa_training_assignments
-            (token_hash,company_id,assigned_by,program_id,modules_json,created_at,video_allowed)
-            VALUES(?,?,?,?,?,?,?)""",
-            (digest,company_id,user_id,body.program_id,json.dumps(modules,ensure_ascii=False),now.isoformat(),int(body.video_allowed)))
-        db.commit()
+    cur.execute("""INSERT INTO ernasa_training_invites
+        (token_hash,recipient,email,created_at,expires_at,revoked)
+        VALUES(?,?,?,?,?,0)""",
+        (digest,body.recipient.strip(),email,now.isoformat(),expires))
+    cur.execute("""INSERT INTO ernasa_training_assignments
+        (token_hash,company_id,assigned_by,program_id,modules_json,created_at,video_allowed)
+        VALUES(?,?,?,?,?,?,?)""",
+        (digest,company_id,user_id,body.program_id,json.dumps(modules,ensure_ascii=False),now.isoformat(),int(body.video_allowed)))
     return {"recipient":body.recipient.strip(),"program_id":body.program_id,
             "module_ids":modules,"video_allowed":body.video_allowed,"expires_at":expires,
-            "link":base+"/egitim/"+token,"sent":False}
+            "link":base+"/egitim/"+token,"sent":False,"token_hash":digest}
 
 
 @router.get("/api/egitim/ik/eposta-durumu")

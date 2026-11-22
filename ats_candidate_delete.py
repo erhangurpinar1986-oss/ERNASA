@@ -23,6 +23,8 @@ CHILDREN = (
     ("flow_screening_results","application_id","application"),
     ("flow_screening_jobs","document_id","document"),
     ("flow_booking_jobs","application_id","application"),
+    ("flow_candidate_events","application_id","application"),
+    ("flow_hr_decisions","application_id","application"),
     ("ats_evaluations","application_id","application"),
     ("ats_notes","application_id","application"),
     ("ats_notices","application_id","application"),

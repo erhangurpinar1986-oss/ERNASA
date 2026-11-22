@@ -99,6 +99,8 @@ def confirm(token, slug, local_start):
             updated_at=excluded.updated_at""", (app_id,tenant,confirmed,confirmed,stamp,stamp))
         cursor.execute("""UPDATE flow_booking_jobs SET status='booked',schedule_id=?,updated_at=?
             WHERE company_id=? AND application_id=?""", (schedule["id"],stamp,tenant,app_id))
+        import hr_flow_decisions
+        hr_flow_decisions.record_candidate_event(cursor, tenant, app_id, token, "appointment_selected")
 
 
 def process_one(create_case, send_availability=invite_email.send_availability):

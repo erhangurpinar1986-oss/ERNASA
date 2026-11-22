@@ -163,6 +163,8 @@ def start(token, tenant, deadline_passed, intro, generate):
             expired = True
         elif status in ('waiting','created','opened'):
             cursor.execute("UPDATE interview_links SET status='started' WHERE token=?", (token,))
+            import hr_flow_decisions
+            hr_flow_decisions.interview_event(cursor, token, tenant, "interview_started")
         elif status != 'started':
             raise HTTPException(409, 'Mülakat durumu geçersiz.')
         recorded = answers(cursor, token, interview['question_count'])
@@ -222,6 +224,8 @@ def submit(token, tenant, payload, intro, generate):
             recorded = answers(cursor, token, total)
             if len(recorded) == total:
                 cursor.execute("UPDATE interview_links SET status='completed' WHERE token=?", (token,))
+                import hr_flow_decisions
+                hr_flow_decisions.interview_event(cursor, token, tenant, "interview_completed")
                 if total >= 10:
                     enqueue(cursor,tenant,token)
     return current_question(interview, recorded, intro, generate)

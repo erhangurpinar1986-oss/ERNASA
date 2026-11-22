@@ -19,6 +19,7 @@ import hr_flow_evidence
 import hr_flow_contacts
 import hr_flow_booking
 import hr_flow_screening
+import hr_flow_decisions
 import ats_public_cv
 import ats_workflow
 import ats_upload_queue
@@ -129,6 +130,7 @@ async def lifespan(_app):
     ats_public_cv.initialize_schema()
     hr_flow_contacts.initialize_schema()
     hr_flow_screening.initialize_schema()
+    hr_flow_decisions.initialize_schema()
     # Explicit, one-time ERNASA education demo cleanup. Never enabled by default.
     if os.getenv("ERNASA_TRAINING_DEMO_CLEANUP") == "keep-merve-20261120":
         import training_demo_cleanup_20261120
@@ -1475,6 +1477,25 @@ def booking_page(message, *, form=False, status=200):
         status_code=status, headers={"Cache-Control":"no-store","Referrer-Policy":"no-referrer"})
 
 
+# ERNASA HR FLOW · İK Karar Merkezi. Mevcut ATS, takvim ve Akademi V9 kayıtlarını kullanır.
+# Bu uçlar adaya e-posta göndermez; nihai karar yalnızca firma yöneticisine aittir.
+@app.get("/api/ik/flow/decision-center")
+def flow_decision_center(actor: portal_access.Actor = Depends(require_combined)):
+    return hr_flow_decisions.list_center(actor)
+
+
+@app.get("/api/ik/flow/decision-center/{application_id}")
+def flow_decision_center_detail(application_id: str, actor: portal_access.Actor = Depends(require_combined)):
+    return hr_flow_decisions.detail(actor, application_id)
+
+
+@app.post("/api/ik/flow/decision-center/{application_id}/decision")
+def flow_decision_center_decide(application_id: str, body: hr_flow_decisions.Decision,
+                                actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return hr_flow_decisions.decide(actor, application_id, body)
+
+
 @app.get("/mulakat-uygunluk/{token}")
 def flow_booking_page(token: str, request: Request):
     portal = portal_access.portal_for(request)
@@ -1483,6 +1504,9 @@ def flow_booking_page(token: str, request: Request):
     job = hr_flow_booking.booking(token,portal.slug)
     if job["status"] != "waiting":
         return booking_page("Görüşme saatiniz kaydedildi. Davet e-postası hazırlandığında gönderilecek.")
+    # HR FLOW İK Karar Merkezi: adayın bağlantıyı ilk açtığı an (en iyi çaba, sayfayı bozmaz).
+    hr_flow_decisions.record_candidate_event_now(job["company_id"],job["application_id"],token,
+                                                 "availability_link_opened")
     return booking_page("Önümüzdeki 30 gün içinde 30 dakikalık görüşme için uygun bir saat seçin.",form=True)
 
 
@@ -1893,10 +1917,16 @@ def mark_interview_opened(token: str, company_id: int | None = Depends(portal_ac
         if status == "expired" or (pending and
                 (window["state"] == "expired" if window else _link_deadline_passed(interview))):
             raise HTTPException(status_code=410, detail="Mülakata başlama süresi dolmuş.")
+        # HR FLOW İK Karar Merkezi: adayın bağlantıyı ilk açtığı an (yalnızca firma portalı).
+        opened_event = pending and hr_flow_decisions.interview_event(cursor, token, company_id, "interview_link_opened")
         if window and window["state"] != "available":
+            if opened_event:
+                connection.commit()
             return {"success":True,"can_start":False}
         if status in ("waiting", "created"):
             cursor.execute("UPDATE interview_links SET status = ? WHERE token = ? AND status = ?", ("opened", token, status))
+            connection.commit()
+        elif opened_event:
             connection.commit()
         return {"success": True}
     finally:

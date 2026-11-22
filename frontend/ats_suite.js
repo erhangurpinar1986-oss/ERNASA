@@ -1570,8 +1570,26 @@ if (companyPortalPage) {
 
     // Native IK V5 dashboard for HR FLOW: observe operations, prioritize
     // manager-only decisions. Never imply an email was delivered when prepared.
+    // İK Karar Merkezi (3 panel): solda adaylar, ortada sekmeli aday dosyası, sağda İK kararı.
+    // Önceki kuyruk ve kanıt listeleri aynen korunur; yalnızca katlanır bölüme taşındı.
     async function flow(root) {
         root.append(el("p","İK onayından sonra FLOW adaydan uygun görüşme saatini ister ve teyit edilen randevu için davet gönderir."));
+        const centerArea=el("div","",{class:"flow-decision-center"});
+        root.append(centerArea);
+        if (window.ErnasaDecisionCenter) window.ErnasaDecisionCenter.mount(centerArea);
+        else centerArea.append(el("p","İK Karar Merkezi bileşeni yüklenemedi. Sayfayı yenileyin.",{role:"alert"}));
+        const legacy=el("details","",{class:"saas-panel flow-legacy-queue"});
+        legacy.append(el("summary","İlk aşama kuyruğu, teknik müdahale ve FLOW işlem kanıtları"));
+        root.append(legacy);
+        let loaded=false;
+        legacy.addEventListener("toggle",()=>{
+            if(!legacy.open||loaded) return;
+            loaded=true;
+            flowQueues(legacy).catch(error=>legacy.append(el("p",error.message,{role:"alert"})));
+        });
+    }
+
+    async function flowQueues(root) {
         const overview=el("section","",{class:"saas-panel"});
         const decisions=el("section","",{class:"saas-panel"});
         const casesArea=el("section","",{class:"saas-panel"});
@@ -1593,7 +1611,7 @@ if (companyPortalPage) {
             stats.append(card);
         }
         overview.append(el("h3","HR FLOW Operasyon Merkezi"),stats);
-        decisions.append(el("h3","İK Karar Merkezi"));
+        decisions.append(el("h3","İlk aşama ve teknik müdahale kuyruğu"));
         if(!pending.length&&!exceptions.length)
             decisions.append(el("p","İlk aşamada bekleyen veya teknik müdahale gerektiren kayıt yok."));
         for(const item of [...exceptions,...pending].slice(0,80)){

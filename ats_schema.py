@@ -154,6 +154,24 @@ DDL = (
     """CREATE TABLE IF NOT EXISTS ats_privacy_requests (
         id TEXT PRIMARY KEY, company_id BIGINT NOT NULL, application_id TEXT NOT NULL REFERENCES ats_applications,
         requested_by BIGINT NOT NULL, kind TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL)""",
+    # ERNASA HR FLOW · İK Karar Merkezi (yalnızca ekleme). Adayın kendi işlemleri ve İK kararı.
+    """CREATE TABLE IF NOT EXISTS flow_candidate_events (
+        id TEXT PRIMARY KEY, company_id BIGINT NOT NULL, application_id TEXT,
+        subject TEXT NOT NULL,
+        event TEXT NOT NULL CHECK(event IN ('availability_link_opened','appointment_selected',
+            'interview_link_opened','interview_started','interview_completed')),
+        occurred_at TEXT NOT NULL, UNIQUE(company_id,subject,event))""",
+    """CREATE INDEX IF NOT EXISTS flow_candidate_events_application
+        ON flow_candidate_events(company_id,application_id,occurred_at)""",
+    """CREATE TABLE IF NOT EXISTS flow_hr_decisions (
+        id TEXT PRIMARY KEY, company_id BIGINT NOT NULL, application_id TEXT NOT NULL,
+        previous_decision_id TEXT NOT NULL,
+        decision TEXT NOT NULL CHECK(decision IN ('approve','reject','second_interview','assign_training')),
+        reason TEXT NOT NULL, decided_by BIGINT NOT NULL, decided_at TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL, interview_token_ref TEXT, schedule_id TEXT, training_token_hash TEXT,
+        UNIQUE(company_id,application_id,previous_decision_id), UNIQUE(company_id,idempotency_key))""",
+    """CREATE INDEX IF NOT EXISTS flow_hr_decisions_application
+        ON flow_hr_decisions(company_id,application_id,decided_at)""",
     "CREATE INDEX IF NOT EXISTS ats_applications_company_position ON ats_applications(company_id,position_id)",
     "CREATE INDEX IF NOT EXISTS ats_applications_assignment ON ats_applications(company_id,assigned_user_id,created_by)",
     "CREATE INDEX IF NOT EXISTS ats_schedules_company_date ON ats_schedules(company_id,starts_at)",
