@@ -285,7 +285,7 @@ def _collect(cursor, actor, app_rows):
     ids = [row["id"] for row in app_rows]
     screenings = _latest_screening(cursor, tenant, ids)
     interviews = _latest_interviews(cursor, tenant, ids)
-    permissions = _by_application(cursor, """SELECT application_id,status,requested_at,decided_at,decided_by
+    permissions = _by_application(cursor, """SELECT application_id,status,requested_at,decided_at,decided_by,decision_note
         FROM flow_interview_permissions WHERE company_id=? AND application_id IN ({ids})""", tenant, ids)
     bookings = _by_application(cursor, """SELECT application_id,status,expires_at,updated_at,error_code
         FROM flow_booking_jobs WHERE company_id=? AND application_id IN ({ids})""", tenant, ids)
@@ -296,6 +296,47 @@ def _collect(cursor, actor, app_rows):
         AND application_id IN ({ids})""", tenant, ids)
     decisions = _latest_decisions(cursor, tenant, ids)
     return screenings, interviews, permissions, bookings, appointments, outbox, decisions
+
+
+def state_for(cursor, actor, app_id):
+    """Tek başvuru için durum (aday takip sayfası); yalnızca var olan kayıtlardan türetilir."""
+    cursor.execute("""SELECT a.id,a.stage,a.closure,a.revision FROM ats_applications a
+        WHERE a.company_id=? AND a.id=?""", (actor.company_id, app_id))
+    app = cursor.fetchone()
+    if not app:
+        raise HTTPException(404, "Başvuru bulunamadı.")
+    app = dict(app)
+    screenings, interviews, permissions, bookings, appointments, outbox, decisions = _collect(cursor, actor, [app])
+    return derive_state(app, screenings.get(app_id), permissions.get(app_id), bookings.get(app_id),
+                        appointments.get(app_id), outbox.get(app_id), interviews.get(app_id), None,
+                        decisions.get(app_id))
+
+
+NOTICE_LABELS = {"prepared": "Hazırlandı (gönderilmedi)", "sending": "Gönderiliyor",
+                 "provider_accepted": "Sağlayıcı kabul etti", "delivered": "Teslim edildi",
+                 "retry": "Yeniden denenecek", "failed": "Başarısız", "unconfirmed": "Sonuç doğrulanamadı (İK kontrolü)",
+                 "cancelled": "İptal edildi (gerek kalmadı)"}
+DECISION_NOTICE = {"approve": "hr_approved", "reject": "hr_rejected",
+                   "second_interview": "second_interview", "assign_training": "training_assigned"}
+
+
+def _notices(cursor, tenant, app_id):
+    try:
+        cursor.execute("SAVEPOINT flow_notice_read")
+        cursor.execute("""SELECT id,event,status,attempts,provider_message_id,error_code,created_at,updated_at
+            FROM flow_candidate_notices WHERE company_id=? AND application_id=? ORDER BY created_at""",
+            (tenant, app_id))
+        rows = [dict(r) for r in cursor.fetchall()]
+        cursor.execute("RELEASE SAVEPOINT flow_notice_read")
+    except Exception:
+        cursor.execute("ROLLBACK TO SAVEPOINT flow_notice_read")
+        return []
+    import flow_candidate_notifications as planner
+    return [{"event": r["event"], "title": planner.EVENTS.get(r["event"], (r["event"],))[0],
+             "status": r["status"], "status_label": NOTICE_LABELS.get(r["status"], r["status"]),
+             "attempts": r["attempts"], "has_provider_id": bool(r["provider_message_id"]),
+             "error_code": r["error_code"], "created_at": r["created_at"], "updated_at": r["updated_at"]}
+            for r in rows]
 
 
 def list_center(actor, limit=300):
@@ -359,7 +400,11 @@ def _timeline(app, documents, screening, permission, booking, appointment, outbo
         state = {"approved": "done", "declined": "failed"}.get(permission["status"], "waiting")
         detail = {"approved": "Yönetici mülakat iznini onayladı.", "declined": "Yönetici mülakat izni vermedi.",
                   "pending": "Mülakat izni yönetici onayı bekliyor."}[permission["status"]]
-        steps.append(_step("permission", "Mülakat izni (İK yönetici onayı)", state, detail,
+        automatic = str(permission.get("decision_note") or "").startswith("Otomatik akış")
+        if automatic:
+            detail = "Pozisyonda otomatik süreç açık: aday bazında İK onayı istenmedi (ayarı açan yönetici adına kaydedildi)."
+        steps.append(_step("permission", "Mülakat daveti izni (otomatik süreç)" if automatic else "Mülakat izni (İK yönetici onayı)",
+                           state, detail,
                            permission["decided_at"] or permission["requested_at"], "flow_interview_permissions"))
     else:
         steps.append(_step("permission", "Mülakat izni (İK yönetici onayı)", "missing", "Mülakat izni talebi kaydı yok."))
@@ -506,6 +551,16 @@ def detail(actor, app_id):
         trainings = _training_for(cursor, tenant, [d["training_token_hash"] for d in decisions if d["training_token_hash"]])
         cursor.execute("SELECT id,status FROM selin_cases WHERE company_id=? AND application_id=?", (tenant, app_id))
         case = cursor.fetchone()
+        candidate_notices = _notices(cursor, tenant, app_id)
+        cursor.execute("""SELECT pa.enabled FROM flow_position_automation pa WHERE pa.company_id=?
+            AND pa.position_id=?""", (tenant, app["position_id"]))
+        automation = cursor.fetchone()
+        cursor.execute("""SELECT reason_code,created_at FROM flow_automation_reviews WHERE company_id=?
+            AND application_id=? ORDER BY created_at""", (tenant, app_id))
+        reviews = [dict(r) for r in cursor.fetchall()]
+        cursor.execute("""SELECT kind,message,status,created_at FROM flow_candidate_requests WHERE company_id=?
+            AND application_id=? ORDER BY created_at""", (tenant, app_id))
+        requests = [dict(r) for r in cursor.fetchall()]
     schedules = ats_workflow.list_schedules(actor, app_id)
     latest = decisions[-1] if decisions else None
     state = derive_state(app, screening, permission, booking, appointment, availability, interview, events, latest)
@@ -554,7 +609,12 @@ def detail(actor, app_id):
         "decision_help": None if can_decide else (
             "Karar yalnızca firma yöneticisi tarafından verilir." if actor.role not in MANAGERS else
             "Karar için tamamlanmış mülakat ve AI raporu gerekir (şu an: " + STATE_LABELS[state] + ")."),
-        "notice": "Bu karar ekranı adaya e-posta göndermez. Eğitim daveti mevcut Eğitim Atama gönderimiyle ayrıca gönderilir.",
+        "candidate_notices": candidate_notices,
+        "automation": bool(automation and automation["enabled"]),
+        "reviews": reviews, "requests": requests,
+        "notice": "Kararınız kaydedildiğinde adaya ilgili bilgilendirme e-postası kuyruğa alınır ve mevcut "
+                  "e-posta altyapısıyla gönderilir. Ret gerekçesi adaya iletilmez; yalnızca dosyada saklanır. "
+                  "Eğitim daveti mevcut Eğitim Atama gönderimiyle ayrıca gönderilir.",
     }
 
 
@@ -653,10 +713,14 @@ def decide(actor, app_id, fields: Decision):
              actor.user_id, now(), fields.idempotency_key,
              subject_ref(interview["token"]) if interview else None, schedule_id, training_hash))
         record(cursor, actor, "hr_decision_" + fields.decision, app_id)
+        import hr_flow_automation
+        queued = hr_flow_automation.stage_notice(cursor, tenant, app_id, DECISION_NOTICE[fields.decision],
+                                                 decision_id, require_automation=False)
         cursor.execute("SELECT * FROM flow_hr_decisions WHERE id=?", (decision_id,))
         saved = dict(cursor.fetchone())
     return {"decision": _public(saved), "replayed": False, "training_link": training_link,
-            "notice": "Karar kaydedildi. Bu işlem adaya e-posta göndermedi."}
+            "notice": "Karar kaydedildi. Aday bilgilendirme e-postası kuyruğa alındı; gönderim durumu "
+                      "Bildirimler sekmesinde izlenir." if queued else "Karar kaydedildi."}
 
 
 def _public(row):

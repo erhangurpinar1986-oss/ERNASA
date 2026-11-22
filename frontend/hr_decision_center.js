@@ -2,7 +2,7 @@
 /* ERNASA HR FLOW · İK Karar Merkezi (3 panel)
  * Sol: adaylar · Orta: sekmeli aday dosyası · Sağ: İK kararı.
  * Veriler mevcut ATS / HR FLOW / takvim / Akademi kayıtlarından gelir.
- * Nihai karar yalnızca firma yöneticisine aittir; bu ekran adaya e-posta göndermez.
+ * Nihai karar yalnızca firma yöneticisine aittir. Karar sonrası aday bilgilendirmesi mevcut e-posta kuyruğuyla yapılır.
  */
 (function () {
     const API = "/api/ik/";
@@ -279,9 +279,19 @@
             }
             if (id === "notifications") {
                 const rows = d.timeline.filter(s => ["availability_email", "interview_email"].includes(s.code));
-                return [el("p", {class: "hdc-muted", text: "“Gerçekleşti”, e-posta servisinin isteği kabul ettiğini gösterir; alıcıya teslim ayrıca kanıtlanmaz. Bu ekran e-posta göndermez."}),
+                const notices = d.candidate_notices || [];
+                const reviews = (d.reviews || []).map(r => el("li", {text: r.reason_code + " · " + when(r.created_at)}));
+                return [el("p", {class: "hdc-muted", text: "“Sağlayıcı kabul etti”, e-posta servisinin isteği aldığını gösterir; alıcıya teslim ayrıca kanıtlanmaz. “Hazırlandı” durumundaki ileti henüz gönderilmemiştir."}),
+                    el("h4", {text: "Davet ve mülakat e-postaları"}),
                     table(["Bildirim", "Durum", "Zaman", "Açıklama"], rows.map(s => [s.title, (STEP_STATE[s.state] || [s.state])[0], when(s.at), s.detail])),
-                    el("p", {class: "hdc-muted", text: d.notice})];
+                    el("h4", {text: "Aday bilgilendirmeleri" + (d.automation ? " (otomatik akış)" : "")}),
+                    notices.length ? table(["Bildirim", "Durum", "Deneme", "Son güncelleme"],
+                        notices.map(n => [n.title, n.status_label, String(n.attempts), when(n.updated_at)]))
+                        : el("p", {class: "hdc-muted", text: "Bu aday için bilgilendirme kaydı yok."}),
+                    reviews.length ? el("div", {class: "hdc-card"}, el("h4", {text: "İnceleme gerektiren durumlar"}), el("ul", {}, ...reviews)) : null,
+                    (d.requests || []).length ? el("div", {class: "hdc-card"}, el("h4", {text: "Aday talepleri"}),
+                        el("ul", {}, ...d.requests.map(r => el("li", {text: r.kind + " · " + (r.status === "open" ? "açık" : "kapalı") + " · " + when(r.created_at) + (r.message ? " · " + r.message : "")})))) : null,
+                    el("p", {class: "hdc-muted", text: d.notice})].filter(Boolean);
             }
             return [];
         }
@@ -439,7 +449,7 @@
         async function openDecision(kind) {
             const d = state.detail;
             const intro = el("p", {class: "hdc-intro"}, el("b", {text: d.application.name}), " · " + d.application.position,
-                el("br"), "Karar sizin adınıza ve şu anki zamanla kaydedilir. Bu işlem adaya e-posta göndermez.");
+                el("br"), "Karar sizin adınıza ve şu anki zamanla kaydedilir. Adaya ilgili bilgilendirme e-postası kuyruğa alınır.");
             const base = {decision: kind, expected_revision: d.application.revision,
                 expected_last_decision_id: d.last_decision_id, idempotency_key: newKey()};
             const send = async extra => {
@@ -457,7 +467,7 @@
             } else if (kind === "reject") {
                 dialog("Adayı reddet", el("div", {}, intro,
                     reason(true, "Gerekçe aday dosyasının ATS notlarına kaydedilir. ATS veya AI puanı tek başına gerekçe olmamalıdır."),
-                    el("p", {class: "hdc-muted", text: "Başvuru “Olumsuz” olarak kapatılır. Mevcut sistemde otomatik ret e-postası yoktur."})),
+                    el("p", {class: "hdc-muted", text: "Başvuru “Olumsuz” olarak kapatılır. Adaya nazik bir sonuç e-postası gider; gerekçe adaya iletilmez, yalnızca dosyada saklanır."})),
                     "Reddet", "hdc-reject", f => send({reason: f.get("reason")}));
             } else if (kind === "second_interview") {
                 if (!state.assignees) state.assignees = await request("assignees").catch(() => ({users: []}));
@@ -513,5 +523,82 @@
         return {reload: () => load(true)};
     }
 
-    window.ErnasaDecisionCenter = {mount};
+    // ---------------------------------------------------------- otomatik süreç ayarı (pozisyon bazında)
+    async function json(path, options = {}) {
+        if (typeof window.portalJson === "function")
+            return window.portalJson(path, {cache: "no-store", ...options}, "İşlem tamamlanamadı.");
+        const response = await fetch(path, {cache: "no-store", ...options});
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(typeof body.detail === "string" ? body.detail : "İşlem tamamlanamadı.");
+        return body;
+    }
+    const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+
+    async function mountAutomation(root) {
+        root.replaceChildren(el("p", {class: "hdc-muted", text: "Ayarlar yükleniyor…"}));
+        const {positions = []} = await json("/api/ik/positions");
+        const select = el("select", {id: "hdc-auto-position", "aria-label": "Pozisyon"},
+            ...positions.map(p => el("option", {value: p.id, text: p.name})));
+        const form = el("form", {class: "hdc-autoform"});
+        const status = el("p", {role: "status", class: "hdc-muted"});
+        async function load() {
+            const cfg = await json("/api/ik/flow/positions/" + encodeURIComponent(select.value) + "/automation");
+            const input = (name, value, attrs = {}) => el("input", {name, value: String(value), ...attrs});
+            form.replaceChildren(
+                el("label", {class: "hdc-check"}, el("input", {type: "checkbox", name: "enabled", ...(cfg.enabled ? {checked: ""} : {})}),
+                    " Bu pozisyonda başvurudan mülakat raporuna kadar süreci otomatik yürüt (aday bazında İK onayı istenmez)"),
+                el("fieldset", {}, el("legend", {text: "Adayların seçebileceği günler"}),
+                    ...DAYS.map((d, i) => el("label", {class: "hdc-day"}, el("input", {type: "checkbox", name: "day", value: String(i + 1),
+                        ...(cfg.slot_weekdays.includes(i + 1) ? {checked: ""} : {})}), " " + d))),
+                el("div", {class: "hdc-autogrid"},
+                    el("label", {}, "Başlangıç saati", input("slot_start", cfg.slot_start, {type: "time"})),
+                    el("label", {}, "Bitiş saati", input("slot_end", cfg.slot_end, {type: "time"})),
+                    el("label", {}, "Aralık (dk)", input("slot_minutes", cfg.slot_minutes, {type: "number", min: "15", max: "240"})),
+                    el("label", {}, "Adaya durum bilgisi (gün)", input("notice_days", cfg.notice_days, {type: "number", min: "1", max: "90"})),
+                    el("label", {}, "İK hatırlatması (gün)", input("hr_reminder_days", cfg.hr_reminder_days, {type: "number", min: "1", max: "90"}))),
+                el("p", {class: "hdc-muted", text: "Mülakat bağlantısı adayın seçtiği saatte açılır ve 8 saat geçerlidir. Yapay zekâ işe alım veya ret kararı vermez; nihai karar İK Karar Merkezi'ndedir."}),
+                el("button", {type: "submit", class: "hdc-btn hdc-approve", text: "Ayarları kaydet"}));
+        }
+        form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const data = new FormData(form);
+            try {
+                await json("/api/ik/flow/positions/" + encodeURIComponent(select.value) + "/automation", {
+                    method: "PUT", headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({enabled: data.get("enabled") === "on", slot_weekdays: data.getAll("day").map(Number),
+                        slot_start: data.get("slot_start"), slot_end: data.get("slot_end"),
+                        slot_minutes: Number(data.get("slot_minutes")), notice_days: Number(data.get("notice_days")),
+                        hr_reminder_days: Number(data.get("hr_reminder_days"))})});
+                status.textContent = "Kaydedildi.";
+            } catch (error) { status.textContent = error.message; }
+        });
+        select.addEventListener("change", () => load().catch(error => { status.textContent = error.message; }));
+        root.replaceChildren(el("label", {for: "hdc-auto-position", text: "Pozisyon"}), select, form, status);
+        if (positions.length) await load(); else status.textContent = "Önce bir pozisyon oluşturun.";
+    }
+
+    async function mountReports(root) {
+        const r = await json("/api/ik/flow/reports");
+        const kv = (label, value) => el("div", {class: "hdc-kpi"}, el("b", {text: String(value ?? "—")}), el("span", {text: label}));
+        const labels = {prepared: "Hazırlandı", provider_accepted: "Sağlayıcı kabul etti", delivered: "Teslim edildi",
+            retry: "Yeniden denenecek", failed: "Başarısız", unconfirmed: "Doğrulanamadı", cancelled: "İptal", sending: "Gönderiliyor"};
+        root.replaceChildren(
+            el("div", {class: "hdc-kpis"}, kv("Başvuru", r.applications), kv("Tamamlanan mülakat", r.interviews_completed),
+                kv("İK kararı bekleyen", r.states.awaiting_hr), kv("Ort. İK bekleme (gün)", r.average_hr_wait_days),
+                kv("Onaylanan", r.states.approved), kv("Reddedilen", r.states.rejected)),
+            el("h4", {text: "Aday bildirimleri"}),
+            el("ul", {}, ...Object.entries(r.notices).map(([k, v]) => el("li", {text: (labels[k] || k) + ": " + v}))),
+            el("p", {class: "hdc-muted", text: r.note}),
+            el("h4", {text: "Süresi aşılan İK kararları"}),
+            r.hr_overdue.length ? el("ul", {}, ...r.hr_overdue.map(o => el("li", {text: o.name + " · " + o.days + " gün"})))
+                : el("p", {class: "hdc-muted", text: "Hatırlatma süresini aşan aday yok."}),
+            el("h4", {text: "İnceleme kuyruğu (teknik istisnalar)"}),
+            r.reviews.length ? el("ul", {}, ...r.reviews.map(v => el("li", {text: v.label + " · " + when(v.created_at)})))
+                : el("p", {class: "hdc-muted", text: "İnceleme bekleyen istisna yok."}),
+            el("h4", {text: "Aday talepleri (itiraz, düzeltme, teknik sorun)"}),
+            r.requests.length ? el("ul", {}, ...r.requests.map(q => el("li", {text: q.label + " · " + when(q.created_at) + (q.message ? " · " + q.message : "")})))
+                : el("p", {class: "hdc-muted", text: "Açık talep yok. KVKK silme/erişim talepleri ATS Gizlilik ekranında listelenir."}));
+    }
+
+    window.ErnasaDecisionCenter = {mount, mountAutomation, mountReports};
 })();

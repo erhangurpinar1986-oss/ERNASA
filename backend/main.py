@@ -20,6 +20,7 @@ import hr_flow_contacts
 import hr_flow_booking
 import hr_flow_screening
 import hr_flow_decisions
+import hr_flow_automation
 import ats_public_cv
 import ats_workflow
 import ats_upload_queue
@@ -131,6 +132,7 @@ async def lifespan(_app):
     hr_flow_contacts.initialize_schema()
     hr_flow_screening.initialize_schema()
     hr_flow_decisions.initialize_schema()
+    hr_flow_automation.initialize_schema()
     # Explicit, one-time ERNASA education demo cleanup. Never enabled by default.
     if os.getenv("ERNASA_TRAINING_DEMO_CLEANUP") == "keep-merve-20261120":
         import training_demo_cleanup_20261120
@@ -163,6 +165,7 @@ async def lifespan(_app):
             asyncio.create_task(hr_flow_booking.worker(start_booked_flow,stop)),
             asyncio.create_task(interview_assessments.worker(generate_job_fit_analysis,stop)),
             asyncio.create_task(selin_workflow.worker(stop)),
+            asyncio.create_task(hr_flow_automation.worker(stop)),
         ]
         try:
             yield
@@ -1462,7 +1465,77 @@ def start_booked_flow(actor, application_id, document_id):
                                 create, send, booked=True)
 
 
-def booking_page(message, *, form=False, status=200):
+WINDOW_NOTICE = (
+    '<section class="info" aria-labelledby="window-title"><h2 id="window-title">Mülakatınız Hakkında Önemli Bilgi</h2>'
+    '<p>Seçeceğiniz gün ve saatten itibaren mülakat bağlantınız <strong>8 saat</strong> boyunca kullanıma açık olacaktır.</p>'
+    '<p>Bu 8 saatlik süre içerisinde size uygun olan herhangi bir zamanda mülakatınızı başlatabilirsiniz.</p>'
+    '<p>Lütfen mülakatınızı tamamlayabileceğiniz bir gün ve saat seçiniz. Süre dolduğunda mülakat bağlantınız '
+    'otomatik olarak kapanacaktır.</p></section>')
+CANDIDATE_PAGE_CSS = (
+    "body{margin:0;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1d2733;background:#f4f7fb}"
+    "main{max-width:640px;margin:0 auto;padding:20px 16px 48px}h1{font-size:1.45rem;color:#0b2e73;margin:.2em 0 .6em}"
+    "h2{font-size:1.1rem;color:#0b2e73;margin:0 0 .4em}.card,.info{background:#fff;border:1px solid #d9e1ea;"
+    "border-radius:12px;padding:14px 16px;margin:12px 0}.info{border-color:#f2c94c;background:#fffaeb}"
+    "label{display:block;font-weight:600;margin:.4em 0}select,input,textarea,button{font:inherit;width:100%;"
+    "box-sizing:border-box;min-height:44px;border-radius:8px;border:1px solid #9aa9bb;padding:8px 10px}"
+    "button{background:#0b2e73;color:#fff;border:0;font-weight:700;cursor:pointer;margin-top:10px}"
+    "button.secondary{background:#fff;color:#b42318;border:1px solid #b42318}"
+    ":focus-visible{outline:3px solid #f59e0b;outline-offset:2px}.muted{color:#5f6b7a;font-size:.92rem}"
+    "ul{padding-left:1.1em}.ok{color:#1f7a45;font-weight:700}.wait{color:#92400e;font-weight:700}")
+
+
+def _local(value):
+    return datetime.fromisoformat(value).astimezone(hr_flow_automation.LOCAL_ZONE) if isinstance(value, str) \
+        else value.astimezone(hr_flow_automation.LOCAL_ZONE)
+
+
+def candidate_page(title, body, *, status=200):
+    return HTMLResponse(
+        '<!doctype html><html lang="tr"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f'<title>ERNASA · {escape(title)}</title><style>{CANDIDATE_PAGE_CSS}</style></head>'
+        f'<body><main id="main"><h1>{escape(title)}</h1>{body}</main></body></html>',
+        status_code=status, headers={"Cache-Control":"no-store","Referrer-Policy":"no-referrer"})
+
+
+TR_DAYS = ("Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar")
+
+
+def _slot_label(slot):
+    value = datetime.strptime(slot, "%Y-%m-%dT%H:%M")
+    return f"{value:%d.%m.%Y} {TR_DAYS[value.weekday()]} {value:%H:%M}"
+
+
+def _slot_select(slots, name="starts_at", keep=None):
+    if not slots:
+        return '<p class="wait">Şu anda uygun saat kalmadı. Lütfen daha sonra tekrar deneyin.</p>'
+    options = "".join(
+        f'<option value="{escape(slot)}"{" selected" if slot == keep else ""}>'
+        f'{_slot_label(slot)}'
+        '</option>' for slot in slots)
+    return (f'<label for="{name}">Gün ve saat (Türkiye saati)</label>'
+            f'<select id="{name}" name="{name}" required>{options}</select>')
+
+
+def booking_page(message, *, form=False, status=200, view=None):
+    if view and view["automated"]:
+        parts = [f'<p role="status">{escape(message)}</p>']
+        current = view.get("current")
+        if current:
+            begin, end = hr_flow_automation.window_for(current)
+            parts.append('<section class="card" aria-labelledby="current-title"><h2 id="current-title">Mevcut randevunuz</h2>'
+                         f'<p>Mülakat bağlantısı erişim başlangıcı: <strong>{_local(begin):%d.%m.%Y %H:%M}</strong><br>'
+                         f'Erişim bitişi: <strong>{_local(end):%d.%m.%Y %H:%M}</strong> (8 saat, Türkiye saati)</p></section>')
+        parts.append(WINDOW_NOTICE)
+        if form or (view["changeable"] and current):
+            action = "Randevuyu değiştir" if current else "Gün ve saati onayla"
+            parts.append('<form method="post" class="card">' + _slot_select(view["slots"], keep=view.get("keep"))
+                         + f'<button type="submit">{action}</button></form>')
+            if current:
+                parts.append('<form method="post" class="card"><input type="hidden" name="cancel" value="1">'
+                             '<p class="muted">Randevunuzu iptal ederseniz, bağlantınız geçerli olduğu sürece yeni bir saat seçebilirsiniz.</p>'
+                             '<button type="submit" class="secondary">Randevuyu iptal et</button></form>')
+        return candidate_page("Mülakat için gün ve saat seçimi", "".join(parts), status=status)
     fields = (
         '<form method="post"><label>Görüşme saati (Türkiye saati) '
         '<input type="datetime-local" name="starts_at" required></label>'
@@ -1501,25 +1574,98 @@ def flow_booking_page(token: str, request: Request):
     portal = portal_access.portal_for(request)
     if not portal or not __import__("re").fullmatch(r"[A-Za-z0-9_-]{43}",token):
         raise HTTPException(404)
-    job = hr_flow_booking.booking(token,portal.slug)
+    view = hr_flow_automation.booking_view(token,portal.slug)
+    job = view["job"]
     if job["status"] != "waiting":
+        if view["automated"]:
+            return booking_page("Randevunuz kaydedildi. Mülakat bağlantınız e-postayla iletilir ve seçtiğiniz saatte "
+                                "erişime açılır." if view["changeable"] else
+                                "Mülakatınız başladığı veya tamamlandığı için randevu değiştirilemez.", view=view)
         return booking_page("Görüşme saatiniz kaydedildi. Davet e-postası hazırlandığında gönderilecek.")
     # HR FLOW İK Karar Merkezi: adayın bağlantıyı ilk açtığı an (en iyi çaba, sayfayı bozmaz).
     hr_flow_decisions.record_candidate_event_now(job["company_id"],job["application_id"],token,
                                                  "availability_link_opened")
+    if view["automated"]:
+        return booking_page("Şirketin sunduğu uygun gün ve saatlerden birini seçin.", form=True, view=view)
     return booking_page("Önümüzdeki 30 gün içinde 30 dakikalık görüşme için uygun bir saat seçin.",form=True)
 
 
 @app.post("/mulakat-uygunluk/{token}")
-def flow_confirm_booking(token: str, request: Request, starts_at: str = Form(..., max_length=16)):
+def flow_confirm_booking(token: str, request: Request, starts_at: str = Form("", max_length=16),
+                         cancel: str = Form("", max_length=1)):
     portal = portal_access.portal_for(request)
     if not portal or not __import__("re").fullmatch(r"[A-Za-z0-9_-]{43}",token):
         raise HTTPException(404)
     try:
-        hr_flow_booking.confirm(token,portal.slug,starts_at)
+        if cancel == "1":
+            hr_flow_automation.change(token,portal.slug,cancel=True)
+        elif not starts_at:
+            raise HTTPException(422,"Geçerli bir gün ve saat seçin.")
+        else:
+            hr_flow_automation.change(token,portal.slug,starts_at)
     except HTTPException as error:
-        return booking_page(str(error.detail),form=error.status_code in (409,422),status=error.status_code)
+        try:
+            view = hr_flow_automation.booking_view(token,portal.slug)
+        except HTTPException:
+            view = None
+        return booking_page(str(error.detail),form=error.status_code in (409,422),status=error.status_code,view=view)
     return RedirectResponse(url=request.url.path,status_code=303,headers={"Referrer-Policy":"no-referrer"})
+
+
+@app.get("/basvuru-takip/{token}")
+def flow_tracking_page(token: str):
+    if not __import__("re").fullmatch(r"[A-Za-z0-9_-]{43}",token):
+        raise HTTPException(404)
+    data = hr_flow_automation.tracking(token)
+    parts = [f'<section class="card" aria-labelledby="st"><h2 id="st">Güncel durum</h2>'
+             f'<p><strong>{escape(data["position"])}</strong></p><p class="ok" role="status">{escape(data["label"])}</p></section>']
+    if data["window"]:
+        parts.append('<section class="card"><h2>Mülakat erişim penceresi</h2>'
+                     f'<p>Başlangıç: <strong>{_local(data["window"]["starts_at"]):%d.%m.%Y %H:%M}</strong><br>'
+                     f'Bitiş: <strong>{_local(data["window"]["ends_at"]):%d.%m.%Y %H:%M}</strong> (8 saat, Türkiye saati)</p></section>')
+    items = "".join(f'<li>{escape(m["title"])} — '
+                    f'{"gönderildi" if m["sent"] else "henüz gönderilmedi" if m["status"] in ("prepared","retry","sending") else "gönderilemedi"}'
+                    f' <span class="muted">({_local(m["created_at"]):%d.%m.%Y %H:%M})</span></li>' for m in data["messages"])
+    parts.append(f'<section class="card"><h2>Bilgilendirmeler</h2><ul>{items or "<li>Henüz bilgilendirme yok.</li>"}</ul></section>')
+    options = "".join(f'<option value="{k}">{escape(v)}</option>' for k, v in hr_flow_automation.REQUEST_KINDS.items())
+    parts.append('<form method="post" class="card" aria-labelledby="rq"><h2 id="rq">Talep, KVKK başvurusu veya teknik sorun</h2>'
+                 f'<label for="kind">Talep türü</label><select id="kind" name="kind">{options}</select>'
+                 '<label for="message">Açıklama (isteğe bağlı)</label><textarea id="message" name="message" maxlength="1000" rows="3"></textarea>'
+                 '<button type="submit">Talebi gönder</button>'
+                 '<p class="muted">Teknik bir sorun yaşarsanız alternatif katılım için bu formu kullanabilirsiniz. '
+                 'Talepleriniz işe alım kararını etkilemez. İşe alım kararlarını yapay zekâ vermez.</p></form>')
+    return candidate_page("Başvuru takibi", "".join(parts))
+
+
+@app.post("/basvuru-takip/{token}")
+def flow_tracking_request(token: str, request: Request, kind: str = Form(..., max_length=20),
+                          message: str = Form("", max_length=1000)):
+    if not __import__("re").fullmatch(r"[A-Za-z0-9_-]{43}",token):
+        raise HTTPException(404)
+    try:
+        result = hr_flow_automation.submit_request(token, hr_flow_automation.CandidateRequest(kind=kind, message=message))
+    except HTTPException as error:
+        return candidate_page("Başvuru takibi", f'<p role="alert">{escape(str(error.detail))}</p>', status=error.status_code)
+    return candidate_page("Başvuru takibi", f'<p role="status" class="ok">{escape(result["notice"])}</p>'
+                          f'<p><a href="/basvuru-takip/{escape(token)}">Takip sayfasına dön</a></p>')
+
+
+@app.get("/api/ik/flow/positions/{position_id}/automation")
+def flow_position_automation(position_id: str, actor: portal_access.Actor = Depends(require_combined)):
+    return hr_flow_automation.get_config(actor, position_id)
+
+
+@app.put("/api/ik/flow/positions/{position_id}/automation")
+def flow_position_automation_set(position_id: str, body: hr_flow_automation.AutomationConfig,
+                                 actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return hr_flow_automation.configure(actor, position_id, body)
+
+
+@app.get("/api/ik/flow/reports")
+def flow_reports(actor: portal_access.Actor = Depends(require_combined)):
+    require_manager(actor)
+    return hr_flow_automation.reports(actor)
 
 
 @app.get("/api/ik/selin/intake/{application_id}/contact-status")

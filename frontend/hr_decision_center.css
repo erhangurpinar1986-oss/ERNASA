@@ -91,7 +91,8 @@
 .hdc-qa small{padding:0 10px}
 .hdc-table-wrap{overflow-x:auto}
 .hdc-table{width:100%;border-collapse:collapse;font-size:13px}
-.hdc-table th,.hdc-table td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--hdc-line);vertical-align:top;overflow-wrap:anywhere}
+.hdc-table th,.hdc-table td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--hdc-line);vertical-align:top;overflow-wrap:break-word;hyphens:auto}
+.hdc-table th,.hdc-table td:not(:last-child){min-width:6.5em}
 .hdc-table th{font-size:12px;color:var(--hdc-muted);font-weight:normal}
 .hdc-timeline{list-style:none;margin:0;padding:0 0 0 12px;border-left:2px solid var(--hdc-border)}
 .hdc-step{position:relative;padding:0 0 10px 12px;display:flex;flex-direction:column;gap:1px}
@@ -178,3 +179,15 @@
     .hdc-cand{flex-direction:column}
     .hdc-cv-frame{height:60vh}
 }
+
+/* otomatik süreç ayarı ve raporlar (Karar Merkezi altında, ayrı katlanır bölümler) */
+.flow-automation .hdc,.flow-reports .hdc{display:block;height:auto;min-height:0;max-height:none;padding:12px 4px}
+.hdc-autoform{display:grid;gap:10px;margin-top:10px}
+.hdc-autoform fieldset{border:1px solid var(--hdc-border);border-radius:8px;padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px 14px}
+.hdc-autogrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.hdc-autogrid label,.hdc-check{display:flex;flex-direction:column;gap:4px;font-weight:600;font-size:13px}
+.hdc-check{flex-direction:row;align-items:flex-start;gap:8px}
+.hdc-autoform input[type=time],.hdc-autoform input[type=number],.flow-automation select{min-height:38px;border:1px solid #9aa9bb;border-radius:8px;padding:4px 8px;font:inherit}
+.hdc-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:10px}
+.hdc-kpi{border:1px solid var(--hdc-border);border-radius:10px;padding:8px 10px;background:#fff;display:flex;flex-direction:column}
+.hdc-kpi b{font-size:22px;color:var(--hdc-navy)}.hdc-kpi span{font-size:12px;color:var(--hdc-muted)}

@@ -1573,11 +1573,23 @@ if (companyPortalPage) {
     // İK Karar Merkezi (3 panel): solda adaylar, ortada sekmeli aday dosyası, sağda İK kararı.
     // Önceki kuyruk ve kanıt listeleri aynen korunur; yalnızca katlanır bölüme taşındı.
     async function flow(root) {
-        root.append(el("p","İK onayından sonra FLOW adaydan uygun görüşme saatini ister ve teyit edilen randevu için davet gönderir."));
+        root.append(el("p","Otomatik süreç açık pozisyonlarda FLOW başvurudan mülakat raporuna kadar süreci yürütür; İK yalnızca nihai kararı verir."));
         const centerArea=el("div","",{class:"flow-decision-center"});
         root.append(centerArea);
         if (window.ErnasaDecisionCenter) window.ErnasaDecisionCenter.mount(centerArea);
         else centerArea.append(el("p","İK Karar Merkezi bileşeni yüklenemedi. Sayfayı yenileyin.",{role:"alert"}));
+        for (const [title,cls,fn] of [["Otomatik süreç ayarları (pozisyon bazında)","flow-automation","mountAutomation"],
+                                      ["Raporlar, İK hatırlatmaları ve aday talepleri","flow-reports","mountReports"]]) {
+            const box=el("details","",{class:"saas-panel "+cls});
+            box.append(el("summary",title));
+            const body=el("div","",{class:"hdc"});
+            box.append(body);
+            root.append(box);
+            box.addEventListener("toggle",()=>{
+                if(box.open&&window.ErnasaDecisionCenter&&window.ErnasaDecisionCenter[fn])
+                    window.ErnasaDecisionCenter[fn](body).catch(error=>body.replaceChildren(el("p",error.message,{role:"alert"})));
+            });
+        }
         const legacy=el("details","",{class:"saas-panel flow-legacy-queue"});
         legacy.append(el("summary","İlk aşama kuyruğu, teknik müdahale ve FLOW işlem kanıtları"));
         root.append(legacy);

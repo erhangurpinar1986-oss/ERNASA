@@ -84,6 +84,8 @@ def confirm(token, slug, local_start):
         if job["status"] != "waiting":
             return
         hr_flow_contacts.require_fresh_approval(cursor, tenant, app_id, job["document_id"])
+        import hr_flow_automation
+        hr_flow_automation.require_offered(cursor, tenant, app_id, local_start)
         fields = ats_workflow.Schedule(
             interviewer_id=job["manager_id"], starts_at=start.isoformat(),
             ends_at=(start + timedelta(minutes=30)).isoformat(), kind="video",
@@ -101,6 +103,10 @@ def confirm(token, slug, local_start):
             WHERE company_id=? AND application_id=?""", (schedule["id"],stamp,tenant,app_id))
         import hr_flow_decisions
         hr_flow_decisions.record_candidate_event(cursor, tenant, app_id, token, "appointment_selected")
+        # Randevu onayı bildirimi; iptal sonrası yeniden seçimde mevcut mülakat jetonu yeni pencereye taşınır.
+        if hr_flow_automation.after_confirm(cursor, tenant, app_id, schedule["id"], start):
+            cursor.execute("""UPDATE flow_booking_jobs SET status='finished',updated_at=?
+                WHERE company_id=? AND application_id=?""", (stamp,tenant,app_id))
 
 
 def process_one(create_case, send_availability=invite_email.send_availability):

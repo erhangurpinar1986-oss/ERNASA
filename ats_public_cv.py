@@ -184,6 +184,9 @@ def submit(tenant, job_id, fields, filename, content, source, client_ip):
             (app_id,tenant,job_id,doc_id,source,now.isoformat()))
         # Prepare the availability-contact record but NEVER send an email in the public request.
         hr_flow_contacts.stage_availability_message(c,tenant,app_id)
+        # Issue #65: otomasyonlu pozisyonda "başvuru alındı" bildirimi kuyruğa alınır (bu istek e-posta göndermez).
+        import hr_flow_automation
+        hr_flow_automation.stage_notice(c,tenant,app_id,"application_received",app_id)
     # Return IDs to trusted server caller only; HTTP route must not expose them.
     return {"application_id":app_id,"document_id":doc_id,"company_id":tenant,
             "source":source}

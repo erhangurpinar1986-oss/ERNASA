@@ -226,6 +226,10 @@ def submit(token, tenant, payload, intro, generate):
                 cursor.execute("UPDATE interview_links SET status='completed' WHERE token=?", (token,))
                 import hr_flow_decisions
                 hr_flow_decisions.interview_event(cursor, token, tenant, "interview_completed")
+                if interview.get("application_id") and tenant is not None:
+                    import hr_flow_automation
+                    hr_flow_automation.stage_notice(cursor, tenant, interview["application_id"],
+                                                    "interview_completed", token[:16], {"survey_token": token})
                 if total >= 10:
                     enqueue(cursor,tenant,token)
     return current_question(interview, recorded, intro, generate)

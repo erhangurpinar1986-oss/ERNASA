@@ -177,6 +177,40 @@ DDL = (
     "CREATE INDEX IF NOT EXISTS ats_schedules_company_date ON ats_schedules(company_id,starts_at)",
     "CREATE INDEX IF NOT EXISTS ats_history_application ON ats_stage_events(company_id,application_id,occurred_at)",
 )
+# ERNASA HR FLOW otomasyonu (Issue #65): yalnızca ek tablolar.
+FLOW_AUTOMATION_DDL = (
+    """CREATE TABLE IF NOT EXISTS flow_position_automation (
+        company_id BIGINT NOT NULL, position_id TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 0, manager_id BIGINT NOT NULL,
+        access_version TEXT NOT NULL, slug TEXT NOT NULL, origin TEXT NOT NULL,
+        slot_weekdays TEXT NOT NULL, slot_start TEXT NOT NULL, slot_end TEXT NOT NULL,
+        slot_minutes INTEGER NOT NULL, notice_days INTEGER NOT NULL,
+        hr_reminder_days INTEGER NOT NULL, updated_at TEXT NOT NULL,
+        PRIMARY KEY(company_id, position_id))""",
+    """CREATE TABLE IF NOT EXISTS flow_candidate_notices (
+        id TEXT PRIMARY KEY, company_id BIGINT NOT NULL, application_id TEXT NOT NULL,
+        event TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN
+            ('prepared','sending','provider_accepted','delivered','retry','failed','unconfirmed','cancelled')),
+        attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL,
+        provider_message_id TEXT, error_code TEXT, details_json TEXT NOT NULL,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""",
+    """CREATE INDEX IF NOT EXISTS flow_candidate_notices_ready
+        ON flow_candidate_notices(status, next_attempt_at)""",
+    """CREATE INDEX IF NOT EXISTS flow_candidate_notices_application
+        ON flow_candidate_notices(company_id, application_id, created_at)""",
+    """CREATE TABLE IF NOT EXISTS flow_candidate_tracking (
+        token_hash TEXT PRIMARY KEY, company_id BIGINT NOT NULL, application_id TEXT NOT NULL,
+        created_at TEXT NOT NULL, UNIQUE(company_id, application_id))""",
+    """CREATE TABLE IF NOT EXISTS flow_candidate_requests (
+        id TEXT PRIMARY KEY, company_id BIGINT NOT NULL, application_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK(kind IN ('correction','objection','technical_issue')),
+        message TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('open','closed')),
+        created_at TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS flow_automation_reviews (
+        company_id BIGINT NOT NULL, application_id TEXT NOT NULL, reason_code TEXT NOT NULL,
+        created_at TEXT NOT NULL, PRIMARY KEY(company_id, application_id, reason_code))""",
+)
+DDL = DDL + FLOW_AUTOMATION_DDL
 
 
 def initialize(cursor):

@@ -79,6 +79,8 @@ def _email_provider():
 
 
 def configured_sender():
+    if os.getenv("ERNASA_EMAIL_SANDBOX_DIR"):  # yalnız yerel test: e-posta dosyaya yazılır, dışarı çıkmaz
+        return "sandbox", "uat-sender@example.test"
     provider = _email_provider()
     key_name = "ERNASA_BREVO_API_KEY" if provider == "brevo" else "ERNASA_RESEND_API_KEY"
     key = os.getenv(key_name, "").strip()
@@ -191,7 +193,29 @@ def send_availability(candidate, url, *, idempotency_key):
     return _send_text(address, subject, body, idempotency_key)
 
 
+def send_notice(recipient, subject, body, *, idempotency_key):
+    """HR FLOW aday bildirimi: mevcut sağlayıcı yapılandırmasıyla düz metin gönderim."""
+    return _send_text(validate_recipient(recipient), subject, body, idempotency_key)
+
+
+def _sandbox_send(recipient, subject, body, idempotency_key):
+    """Yalnızca yerel test: ERNASA_EMAIL_SANDBOX_DIR tanımlıysa e-posta dosyaya yazılır, dışarı çıkmaz."""
+    import pathlib
+    import uuid
+    folder = pathlib.Path(os.environ["ERNASA_EMAIL_SANDBOX_DIR"])
+    folder.mkdir(parents=True, exist_ok=True)
+    if os.getenv("ERNASA_EMAIL_SANDBOX_FAIL") == "1":
+        raise EmailDeliveryError("Test sağlayıcısı: simüle edilmiş gönderim hatası.")
+    message_id = "sandbox-" + uuid.uuid4().hex
+    (folder / (message_id + ".json")).write_text(json.dumps(
+        {"to": recipient, "subject": subject, "body": body, "idempotency_key": idempotency_key},
+        ensure_ascii=False, indent=1), encoding="utf-8")
+    return message_id
+
+
 def _send_text(recipient, subject, body, idempotency_key):
+    if os.getenv("ERNASA_EMAIL_SANDBOX_DIR"):
+        return _sandbox_send(recipient, subject, body, idempotency_key)
     api_key, sender = configured_sender()
     if _email_provider() == "brevo":
         return _send_brevo(api_key=api_key, sender=sender, recipient=recipient,
@@ -230,13 +254,16 @@ def send_training_invitation(*, recipient, name, url, expires_at, idempotency_ke
     The target email, full invitation URL and deadline come from a validated
     stored training invite, not from arbitrary client-controlled HTML.
     """
-    api_key, sender = configured_sender()
     email_address = validate_recipient(recipient)
     if not isinstance(url, str) or not re.fullmatch(
         r"https://(?:www\.)?ernasa\.com/egitim/[A-Za-z0-9_-]{43}", url
     ):
         raise ValueError("Eğitim bağlantısı geçersiz.")
     deadline = datetime.fromisoformat(expires_at)
+    if os.getenv("ERNASA_EMAIL_SANDBOX_DIR"):
+        return _sandbox_send(email_address, "ERNASA Akademi eğitim daveti",
+                             f"Merhaba {name},\n\nEğitim bağlantınız: {url}\nSon tarih: {expires_at}", idempotency_key)
+    api_key, sender = configured_sender()
     from zoneinfo import ZoneInfo
     deadline_local = deadline.astimezone(ZoneInfo("Europe/Istanbul")).strftime("%d.%m.%Y %H:%M")
     name = str(name or "Katılımcı").strip().replace("\n", " ").replace("\r", " ")[:120]
@@ -310,6 +337,8 @@ def inspect_sender_domain():
     domain IDs, DNS records or names of unrelated domains. No email is sent.
     A 401 on GET /domains often means the production key is send-only.
     """
+    if os.getenv("ERNASA_EMAIL_SANDBOX_DIR"):
+        return {"result": "sandbox_only"}
     try:
         if _email_provider() == "brevo":
             configured_sender()
