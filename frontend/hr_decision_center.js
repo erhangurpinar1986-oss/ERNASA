@@ -63,6 +63,35 @@
         return items && items.length ? el("ul", {class: "hdc-bullets"}, items.map(item => el("li", {text: item})))
             : el("p", {class: "hdc-muted", text: empty});
     }
+    // AI mülakat raporu: dört ayrı değerlendirme alanı + Genel İK Değerlendirme Özeti
+    const REPORT_CARDS = [["strengths", "Güçlü Yönler", "hdc-rc-strength"], ["weaknesses", "Zayıf Yönler", "hdc-rc-weak"],
+        ["development", "Geliştirilmesi Gereken Yönler", "hdc-rc-develop"], ["attention", "Dikkat Edilmesi Gerekenler", "hdc-rc-attention"]];
+    function findings(items, none) {
+        if (!items || !items.length) return el("p", {class: "hdc-muted hdc-none", text: none});
+        return el("ul", {class: "hdc-bullets"}, items.map(item => {
+            const match = /^(.*?)\s*\((Kanıt:[^)]*)\)\s*\.?$/.exec(item);
+            return match ? el("li", {}, match[1], el("span", {class: "hdc-evidence", text: match[2]}))
+                : el("li", {text: item});
+        }));
+    }
+    function reportBlock(r, interviewStatus) {
+        if (!r || !r.ready) {
+            const why = !r ? "Mülakat bağlantısı oluşturulmadı."
+                : interviewStatus !== "completed" ? "Mülakat henüz tamamlanmadı (durum: " + (interviewStatus || "—") + ")."
+                : "Mülakat tamamlandı; AI raporu hazırlanıyor" + (r.assessment_status ? " (durum: " + r.assessment_status + ")." : ".");
+            return el("div", {class: "hdc-report-pending", role: "status"},
+                el("b", {text: "AI mülakat raporu henüz hazır değil."}), el("p", {class: "hdc-muted", text: why}));
+        }
+        const none = r.no_finding || "Bu alanda doğrulanmış bulgu bulunmuyor.";
+        return el("section", {class: "hdc-report-block", "aria-label": "AI mülakat raporu değerlendirmesi"},
+            r.legacy_notice ? el("p", {class: "hdc-legacy", text: r.legacy_notice}) : null,
+            el("div", {class: "hdc-report-cards"}, ...REPORT_CARDS.map(([key, title, cls]) =>
+                el("div", {class: "hdc-card hdc-rc " + cls, "data-section": key},
+                    el("h4", {text: title}), findings(r[key], none)))),
+            el("div", {class: "hdc-card hdc-rc hdc-rc-summary", "data-section": "summary"},
+                el("h4", {text: "Genel İK Değerlendirme Özeti"}), findings(r.summary, none)),
+            el("p", {class: "hdc-muted hdc-small", text: "AI raporu karar desteğidir; işe alım veya ret kararı vermez. Nihai karar yetkili İK personeline aittir."}));
+    }
     function table(head, rows) {
         if (!rows.length) return el("p", {class: "hdc-muted", text: "Kayıt yok."});
         return el("div", {class: "hdc-table-wrap"}, el("table", {class: "hdc-table"},
@@ -190,13 +219,11 @@
                     el("div", {class: "hdc-card"}, el("h4", {text: "ATS özeti"}), d.ats
                         ? el("p", {}, atsLine(d.ats), el("br"), el("span", {class: "hdc-muted", text: d.ats.reason || "Analiz tamamlandı."}))
                         : el("p", {class: "hdc-muted", text: "ATS ön değerlendirme kaydı yok."})),
-                    el("div", {class: "hdc-card"}, el("h4", {text: "Mülakat özeti"}), r && r.text
-                        ? list(r.summary, "Raporda özet bölümü yok.") : el("p", {class: "hdc-muted", text: "AI mülakat raporu henüz yok."})),
-                    el("div", {class: "hdc-card"}, el("h4", {text: "Güçlü yönler"}), list(r?.strengths)),
-                    el("div", {class: "hdc-card"}, el("h4", {text: "Gelişim alanları"}), list(r?.development))),
-                    el("h4", {text: "Eksik bilgi ve doğrulanması gereken alanlar"}),
-                    r?.attention?.length ? el("div", {class: "hdc-warnbox"}, list(r.attention))
-                        : el("p", {class: "hdc-muted", text: "Raporda belirtilmiş eksik veya doğrulanamayan alan yok."}),
+                    el("div", {class: "hdc-card"}, el("h4", {text: "Mülakat durumu"}),
+                        el("p", {text: d.interview ? (d.interview.status === "completed" ? "Mülakat tamamlandı." : "Durum: " + d.interview.status)
+                            : "Mülakat bağlantısı oluşturulmadı."}))),
+                    el("h4", {text: "AI mülakat değerlendirmesi"}),
+                    reportBlock(r, d.interview?.status),
                     el("h4", {text: "Son İK kararı"}), last
                         ? el("p", {}, el("b", {text: last.label}), " · Kullanıcı #" + last.decided_by + " · " + when(last.decided_at),
                             last.reason ? el("br") : null, last.reason || null)
@@ -220,14 +247,10 @@
                     el("p", {class: "hdc-muted", text: "Eksik kanıt düşük yetkinlik anlamına gelmez; ATS puanı adayı otomatik elemez."})];
             }
             if (id === "report") {
-                if (!r || !r.text) return [el("p", {class: "hdc-muted", text: "AI mülakat raporu henüz yok" +
-                    (r?.assessment_status ? " (değerlendirme durumu: " + r.assessment_status + ")." : ".")})];
-                return [el("div", {class: "hdc-cards"},
-                    el("div", {class: "hdc-card"}, el("h4", {text: "Güçlü yönler"}), list(r.strengths)),
-                    el("div", {class: "hdc-card"}, el("h4", {text: "Gelişim alanları"}), list(r.development)),
-                    el("div", {class: "hdc-card"}, el("h4", {text: "Dikkat edilmesi gerekenler"}), list(r.attention)),
-                    el("div", {class: "hdc-card"}, el("h4", {text: "İK değerlendirme özeti"}), list(r.summary))),
-                    el("h4", {text: "Tam rapor · " + when(r.created_at)}), el("pre", {class: "hdc-report", text: r.text})];
+                if (!r || !r.ready) return [reportBlock(r, d.interview?.status)];
+                return [reportBlock(r, d.interview?.status),
+                    el("details", {class: "hdc-fullreport"}, el("summary", {text: "Tam rapor metni · " + when(r.created_at)}),
+                        el("pre", {class: "hdc-report", text: r.text}))];
             }
             if (id === "qa") {
                 return d.answers.length ? d.answers.map(a => el("div", {class: "hdc-qa"},

@@ -191,3 +191,21 @@
 .hdc-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:10px}
 .hdc-kpi{border:1px solid var(--hdc-border);border-radius:10px;padding:8px 10px;background:#fff;display:flex;flex-direction:column}
 .hdc-kpi b{font-size:22px;color:var(--hdc-navy)}.hdc-kpi span{font-size:12px;color:var(--hdc-muted)}
+
+/* AI mülakat raporu: dört ayrı değerlendirme kartı + özet (mevcut kart stiliyle) */
+.hdc-report-block{display:grid;gap:10px;margin:6px 0 12px}
+.hdc-report-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.hdc-rc{border-left-width:4px}
+.hdc-rc h4{font-size:13px;letter-spacing:.02em}
+.hdc-rc-strength{border-left-color:var(--hdc-ok)}.hdc-rc-strength h4{color:var(--hdc-ok)}
+.hdc-rc-weak{border-left-color:var(--hdc-fail)}.hdc-rc-weak h4{color:var(--hdc-fail)}
+.hdc-rc-develop{border-left-color:var(--hdc-info)}.hdc-rc-develop h4{color:var(--hdc-info)}
+.hdc-rc-attention{border-left-color:#d97706;background:#fffbf3}.hdc-rc-attention h4{color:var(--hdc-warn)}
+.hdc-rc-summary{border-left-color:var(--hdc-navy);background:var(--hdc-soft)}
+.hdc-rc .hdc-bullets li{overflow-wrap:break-word}
+.hdc-evidence{display:block;font-size:12px;color:var(--hdc-muted);margin-top:2px}
+.hdc-none{font-style:italic}
+.hdc-report-pending{border:1px dashed var(--hdc-border);border-radius:10px;padding:10px 12px;background:#fafbfd}
+.hdc-legacy{font-size:12.5px;background:#f1f5f9;border-radius:8px;padding:6px 10px;margin:0;color:#334155}
+.hdc-fullreport summary{cursor:pointer;font-weight:bold;color:var(--hdc-navy)}
+@media (max-width:820px){.hdc-report-cards{grid-template-columns:1fr}}

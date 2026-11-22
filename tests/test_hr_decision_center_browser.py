@@ -135,7 +135,7 @@ def test_three_panel_decision_center_desktop(browser_app):
 
         # Sekmeler: yalnızca ilgili içerik görünür; uzun içerik kendi alanında kayar, sayfa uzamaz
         height_before = page.evaluate("document.documentElement.scrollHeight")
-        expectations = {"cv": ".hdc-cv-tools", "ats": "p", "report": ".hdc-report", "qa": ".hdc-qa",
+        expectations = {"cv": ".hdc-cv-tools", "ats": "p", "report": ".hdc-rc-weak", "qa": ".hdc-qa",
                         "history": ".hdc-timeline", "training": "p", "notifications": ".hdc-table"}
         for tab, selector in expectations.items():
             page.click(f"#hdc-tab-{tab}")

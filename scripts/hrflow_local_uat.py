@@ -30,16 +30,25 @@ COMPANY_ID, MANAGER_ID = 1234, 21
 FORBIDDEN = ("DATABASE_URL", "RENDER", "ERNASA_BREVO_API_KEY", "ERNASA_RESEND_API_KEY", "BREVO_API_KEY",
              "RESEND_API_KEY", "ERNASA_CONTROL_DATABASE_URL", "ERNASA_CONTROL_PUBLIC_ORIGIN",
              "ERNASA_CONTROL_DB_PATH", "ERNASA_IK_CONTROL_KEY", "OPENAI_API_KEY")
-REPORT = """Genel Pozisyon Uyumu: %74
+REPORT = """[SENTETİK UAT RAPORU — gerçek bir AI değerlendirmesi değildir; yalnızca yerel test içindir]
+Genel Pozisyon Uyumu: %74
 Mesleki Deneyim Uyumu: %70
+
 GÜÇLÜ YÖNLER:
-- Depo düzeni ve stok sayımı konusunda somut örnekler verdi.
-GELİŞTİRİLMESİ GEREKEN ALANLAR:
-- Vardiya planlama deneyimi sınırlı.
-DİKKAT EDİLMESİ GEREKEN NOKTALAR:
-- Forklift belgesi CV'de var; mülakatta doğrulanmadı.
-İK DEĞERLENDİRME ÖZETİ:
-- SENTETİK UAT RAPORU. Nihai karar yetkili İK personeline aittir.
+- Stok sayımını planlı yaptığını adım adım anlattı (Kanıt: Soru 2 — "sayımı vardiya sonunda planlı yaparım")
+- WMS ile giriş-çıkış işlemlerini açıkladı (Kanıt: Soru 4 — "barkodla giriş yaparım")
+
+ZAYIF YÖNLER:
+- FIFO uygulamasını sorulduğunda yanlış tanımladı (Kanıt: Soru 6 — "en yeni ürün önce çıkar")
+
+GELİŞTİRİLMESİ GEREKEN YÖNLER:
+- Vardiya planlama deneyimi mentorlukla geliştirilebilir (Kanıt: Soru 8 — "planlamayı şef yapıyordu")
+
+DİKKAT EDİLMESİ GEREKENLER:
+- Forklift belgesi CV'de var; mülakatta doğrulanmadı (Kanıt: CV beyanı — "forklift ehliyeti")
+
+GENEL İK DEĞERLENDİRME ÖZETİ:
+- SENTETİK UAT RAPORU. Depo operasyonunun temel uygulamalarında kanıt var; FIFO bilgisi ve belge doğrulanmalı. Nihai karar yetkili İK personeline aittir.
 """
 
 

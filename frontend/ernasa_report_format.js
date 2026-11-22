@@ -13,8 +13,12 @@ function renderJobFitAnalysisHtml(raw) {
     let current = null;
     const headings = [
         "GÜÇLÜ YÖNLER",
+        "ZAYIF YÖNLER",
+        "GELİŞTİRİLMESİ GEREKEN YÖNLER",
         "GELİŞTİRİLMESİ GEREKEN ALANLAR",
+        "DİKKAT EDİLMESİ GEREKENLER",
         "DİKKAT EDİLMESİ GEREKEN NOKTALAR",
+        "GENEL İK DEĞERLENDİRME ÖZETİ",
         "İK DEĞERLENDİRME ÖZETİ"
     ];
 

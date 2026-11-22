@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 
+import hr_flow_report
+
 LOCAL_PREVIEW = os.getenv("ERNASA_IK_LOCAL_PREVIEW") == "1"
 if LOCAL_PREVIEW:
     client = None
@@ -176,27 +178,36 @@ Aşağıdaki başlıklarda yalnızca yeterli ve konuya uygun kanıt varsa 0-100 
 - İletişim
 - Takım Çalışması
 
-Ardından kısa şekilde:
+Ardından aşağıdaki beş başlığı TAM OLARAK bu yazımla, bu sırayla ve her biri ayrı satırda yaz.
+Her maddeyi "- " ile başlat. Mümkün olan her maddenin sonuna kanıtını ekle:
+"(Kanıt: Soru N — kısa ifade)" veya CV'den geliyorsa "(Kanıt: CV beyanı — kısa ifade)".
+Bir başlık için kanıt yoksa yalnızca şu cümleyi yaz: Bu alanda doğrulanmış bulgu bulunmuyor.
 
 GÜÇLÜ YÖNLER:
-Adayın CV ve mülakat cevaplarıyla desteklenen güçlü yönlerini yaz.
+Adayın mülakat cevaplarıyla (ve ilgili CV bilgisiyle) kanıtlanan bilgi, beceri ve yetkinlikler.
 
-GELİŞTİRİLMESİ GEREKEN ALANLAR:
-Pozisyon açısından geliştirilmesi gereken noktaları yaz.
+ZAYIF YÖNLER:
+Yalnızca pozisyonun gerekliliklerine göre mülakat cevaplarıyla SOMUT biçimde doğrulanmış eksiklikler.
+Eksik veya belirsiz bilgi zayıf yön DEĞİLDİR; onu "DİKKAT EDİLMESİ GEREKENLER" başlığına yaz.
+Kanıtı olmayan zayıf yön uydurma. Anlamsız/boş cevaptan yetkinlik eksikliği çıkarma.
 
-DİKKAT EDİLMESİ GEREKEN NOKTALAR:
-Eksik, belirsiz veya doğrulanması gereken bilgiler varsa belirt.
+GELİŞTİRİLMESİ GEREKEN YÖNLER:
+Eğitim, deneyim veya mentorlukla geliştirilebilecek mesleki alanlar.
+
+DİKKAT EDİLMESİ GEREKENLER:
+İK'nın ayrıca doğrulaması gereken belirsizlikler, eksik bilgiler ve mülakatta doğrulanmamış CV beyanları.
 Kanıt yoksa varsayım yapma.
 
-İK DEĞERLENDİRME ÖZETİ:
-Adayın pozisyonla hangi yönlerden örtüştüğünü ve hangi alanların
-İK tarafından ayrıca değerlendirilmesi gerektiğini kısa ve profesyonel şekilde açıkla.
+GENEL İK DEĞERLENDİRME ÖZETİ:
+Adayın pozisyonla hangi yönlerden örtüştüğünü ve hangi alanların İK tarafından
+ayrıca değerlendirilmesi gerektiğini kısa ve profesyonel şekilde açıkla. Karar önerisi verme.
 
 KURALLAR:
 - Türkçe yaz.
-- İşe alınmalı veya işe alınmamalı şeklinde karar verme.
-- Yaş, cinsiyet, medeni durum ve benzeri kişisel özellikleri değerlendirmeye katma.
-- Yalnızca işle ilgili bilgi ve cevapları kullan.
+- İşe alınmalı veya işe alınmamalı şeklinde karar verme; nihai karar yetkili İK personeline aittir.
+- Yaş, cinsiyet, sağlık durumu, engellilik, medeni durum, din, etnik köken, görünüm ve işle ilgisiz
+  kişisel özellikler üzerinden olumlu veya olumsuz değerlendirme yapma.
+- Yalnızca işle ilgili CV bilgisi ve mülakat cevaplarını kullan.
 - CV'de veya cevaplarda bulunmayan bilgileri uydurma.
 - Her yüzdeyi mevcut kanıtlara göre ver.
 - Kısa, anlaşılır ve profesyonel yaz.
@@ -207,4 +218,4 @@ KURALLAR:
         input=prompt
     )
 
-    return response.output_text.strip()
+    return hr_flow_report.normalize(response.output_text.strip())

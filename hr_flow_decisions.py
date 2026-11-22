@@ -38,6 +38,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 import academy_assignments
+import hr_flow_report
 import ats
 import ats_workflow
 from database import get_connection
@@ -178,6 +179,26 @@ def report_sections(text):
         if current and line.strip():
             sections[current].append(re.sub(r"^[-•*\s]+", "", line).strip())
     return sections
+
+
+def _report_view(interview, text, assessment):
+    """Dört ayrı değerlendirme alanı + özet. Rapor yalnızca tamamlanmış mülakatta 'hazır' sayılır."""
+    if not interview:
+        return None
+    ready = bool(text and str(text).strip()) and interview.get("status") == "completed"
+    parsed = hr_flow_report.parse(text if ready else "")
+    view = {"ready": ready, "text": text if ready else None,
+            "created_at": interview.get("report_at") if ready else None,
+            "format": parsed["format"] if ready else None,
+            "missing_sections": parsed["missing"] if ready else [],
+            "assessment_status": assessment, "no_finding": hr_flow_report.NO_FINDING,
+            "labels": {key: label for key, _, label in hr_flow_report.SECTIONS}}
+    for key, _, _ in hr_flow_report.SECTIONS:
+        view[key] = parsed[key] if ready else []
+    if ready and parsed["format"] == "legacy":
+        view["legacy_notice"] = ("Bu rapor dört başlıklı biçimden önce üretildi ve “Zayıf Yönler” başlığı içermiyor. "
+                                 "Eski “Gelişim alanları” maddeleri zayıf yön olarak yeniden sınıflandırılmadı.")
+    return view
 
 
 def report_score(text):
@@ -565,7 +586,6 @@ def detail(actor, app_id):
     latest = decisions[-1] if decisions else None
     state = derive_state(app, screening, permission, booking, appointment, availability, interview, events, latest)
     report_text = interview.get("job_fit_analysis") if interview else None
-    sections = report_sections(report_text)
     ats_details = json.loads(screening["details_json"]) if screening and screening.get("details_json") else {}
     can_decide = actor.role in MANAGERS and state in DECIDABLE_STATES
     return {
@@ -587,12 +607,7 @@ def detail(actor, app_id):
                 "match_score": ats_details.get("match_score"), "coverage": ats_details.get("evidence_coverage"),
                 "requirements": ats_details.get("requirements", []), "reason": ats_details.get("reason"),
                 "source": ats_details.get("source")} if screening else None,
-        "report": {"text": report_text, "created_at": interview.get("report_at") if interview else None,
-                   "strengths": sections.get("GÜÇLÜ YÖNLER", []),
-                   "development": sections.get("GELİŞTİRİLMESİ GEREKEN ALANLAR", []),
-                   "attention": sections.get("DİKKAT EDİLMESİ GEREKEN NOKTALAR", []),
-                   "summary": sections.get("İK DEĞERLENDİRME ÖZETİ", []),
-                   "assessment_status": assessment} if interview else None,
+        "report": _report_view(interview, report_text, assessment),
         "interview": {"status": interview["status"], "created_at": interview["created_at"],
                       "expires_at": interview["expires_at"], "reference": subject_ref(interview["token"])} if interview else None,
         "answers": answers,
