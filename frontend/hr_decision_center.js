@@ -585,15 +585,32 @@
         form.addEventListener("submit", async event => {
             event.preventDefault();
             const data = new FormData(form);
+            const button = form.querySelector('button[type="submit"]');
+            const enabled = data.get("enabled") === "on";
+            if (button) { button.disabled = true; button.textContent = "Kaydediliyor…"; }
+            status.textContent = "Ayarlar sunucuya kaydediliyor…";
+            status.setAttribute("aria-live", "polite");
             try {
-                await json("/api/ik/flow/positions/" + encodeURIComponent(select.value) + "/automation", {
+                const result = await json("/api/ik/flow/positions/" + encodeURIComponent(select.value) + "/automation", {
                     method: "PUT", headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({enabled: data.get("enabled") === "on", slot_weekdays: data.getAll("day").map(Number),
+                    body: JSON.stringify({enabled, slot_weekdays: data.getAll("day").map(Number),
                         slot_start: data.get("slot_start"), slot_end: data.get("slot_end"),
                         slot_minutes: Number(data.get("slot_minutes")), notice_days: Number(data.get("notice_days")),
                         hr_reminder_days: Number(data.get("hr_reminder_days"))})});
-                status.textContent = "Kaydedildi.";
-            } catch (error) { status.textContent = error.message; }
+                const saved = !!result.enabled;
+                status.textContent = "✓ Ayarlar kaydedildi. Otomatik akış: " + (saved ? "AÇIK" : "KAPALI") + ".";
+                status.style.color = "#08765c";
+                status.style.fontWeight = "700";
+                if (button) button.textContent = "✓ Kaydedildi — " + (saved ? "AÇIK" : "KAPALI");
+            } catch (error) {
+                status.textContent = "Kaydedilemedi: " + error.message;
+                status.style.color = "#ad3434";
+                status.style.fontWeight = "700";
+                if (button) button.textContent = "Tekrar dene";
+            } finally {
+                if (button) button.disabled = false;
+                status.scrollIntoView({block:"nearest", behavior:"smooth"});
+            }
         });
         select.addEventListener("change", () => load().catch(error => { status.textContent = error.message; }));
         root.replaceChildren(el("label", {for: "hdc-auto-position", text: "Pozisyon"}), select, form, status);
