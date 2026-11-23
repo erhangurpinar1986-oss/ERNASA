@@ -233,6 +233,15 @@ def on_screened(company_id, application_id, document_id):
         if state not in PROCEED_STATES:
             _review(cursor, company_id, application_id,
                     "criteria_missing" if state == "criteria_missing" else "cv_unreadable")
+            # An unreadable document is a technical exception, never a low score
+            # or an automatic rejection. Notify once per original document.
+            try:
+                details = json.loads(result["details_json"] or "{}")
+            except (ValueError, TypeError):
+                details = {}
+            if (state == "review_required" and details.get("text_extraction_status") == "unreadable"
+                    and not app["conflict"]):
+                stage_notice(cursor, company_id, application_id, "cv_unreadable", document_id)
             return "review"
         if app["conflict"]:
             _review(cursor, company_id, application_id, "identity_conflict")
@@ -586,6 +595,32 @@ def sweep(now=None):
                 AND pa.enabled=1
             WHERE i.status='completed' GROUP BY i.company_id,i.application_id,pa.notice_days""")
         waiting = [dict(r) for r in cursor.fetchall()]
+        # Include candidates who applied before automation was enabled.
+        # Only genuine PDF extraction failures qualify; never use score/coverage.
+        # Closed applications and already-invited candidates are excluded.
+        cursor.execute("""SELECT a.company_id,a.id AS application_id,s.document_id
+            FROM ats_applications a
+            JOIN flow_position_automation pa ON pa.company_id=a.company_id
+                AND pa.position_id=a.position_id AND pa.enabled=1
+            JOIN flow_screening_results s ON s.company_id=a.company_id
+                AND s.application_id=a.id AND s.position_id=a.position_id
+            LEFT JOIN flow_interview_permissions p ON p.company_id=a.company_id
+                AND p.application_id=a.id
+            LEFT JOIN ats_candidate_email_conflicts e ON e.company_id=a.company_id
+                AND e.candidate_id=a.candidate_id
+            WHERE a.closure IS NULL AND p.id IS NULL AND e.candidate_id IS NULL
+                AND a.created_at >= ?
+                AND s.analysis_state='review_required'
+                AND s.details_json LIKE '%"unreadable"%'
+            ORDER BY a.created_at DESC LIMIT 30""",
+            (stamp(now - timedelta(days=7)),))
+        unreadable = [dict(r) for r in cursor.fetchall()]
+    for item in unreadable:
+        with write(item["company_id"]) as cursor:
+            if not _final_decision(cursor, item["company_id"], item["application_id"]):
+                if stage_notice(cursor, item["company_id"], item["application_id"],
+                                "cv_unreadable", item["document_id"]):
+                    staged += 1
     for item in reminders:
         try:
             start = datetime.fromisoformat(item["confirmed_at"])
