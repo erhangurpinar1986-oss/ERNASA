@@ -1730,6 +1730,61 @@ def match_ats_document(application_id: str, document_id: str,
                        actor: portal_access.Actor = Depends(require_ats)):
     return ats_matching.evidence_match(UPLOAD_DIRECTORY, actor, application_id, document_id)
 
+def _ocr_service_extract(pdf_bytes: bytes):
+    """Call a separate authenticated Render OCR process; never log CV contents."""
+    import httpx
+    from urllib.parse import urlparse
+
+    url = os.getenv("ERNASA_OCR_SERVICE_URL", "").strip().rstrip("/")
+    key = os.getenv("ERNASA_OCR_SHARED_KEY", "")
+    if not url or len(key) < 32:
+        raise HTTPException(503, "OCR servisi henüz yapılandırılmadı.")
+    endpoint = urlparse(url)
+    if (endpoint.scheme != "https" or not endpoint.hostname or
+            not endpoint.hostname.endswith(".onrender.com") or endpoint.username or
+            endpoint.password or endpoint.query or endpoint.fragment or endpoint.path not in ("", "/")):
+        raise HTTPException(503, "OCR servis adresi güvenli yapılandırılmadı.")
+    try:
+        with httpx.Client(timeout=httpx.Timeout(80.0, connect=8.0), follow_redirects=False) as client:
+            response = client.post(url + "/extract", content=pdf_bytes,
+                headers={"content-type": "application/pdf", "x-ernasa-ocr-key": key})
+        if response.status_code != 200:
+            raise HTTPException(422, "PDF OCR ile okunamadı. Manuel inceleme veya yeni dosya gerekli.")
+        result = response.json()
+        text = str(result.get("text") or "")[:16000]
+        if len(text.strip()) < 35 or not result.get("review_required"):
+            raise HTTPException(422, "OCR yeterli metin çıkaramadı; manuel inceleme gerekiyor.")
+        return {"text": text, "pages_read": int(result.get("pages_read") or 0),
+                "review_required": True,
+                "notice": "OCR çıktısı hatalı olabilir. Yalnızca CV'deki mesleki bilgileri doğruladıktan sonra ATS karşılaştırmasını başlatın."}
+    except httpx.TimeoutException:
+        raise HTTPException(504, "OCR süresi doldu. Lütfen daha sonra tekrar deneyin.") from None
+    except httpx.HTTPError:
+        raise HTTPException(503, "OCR servisine ulaşılamadı. Başvurunun mevcut durumu korundu.") from None
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(502, "OCR servisinden geçerli sonuç alınamadı.") from None
+
+
+@app.post("/api/ik/ats/applications/{application_id}/documents/{document_id}/ocr-preview")
+def ocr_ats_document_preview(application_id: str, document_id: str,
+                             actor: portal_access.Actor = Depends(require_ats_manager)):
+    """Private, on-demand extraction. No ATS writes, automatic mails or hiring decisions."""
+    from pathlib import Path
+    from ats import get_document
+
+    path, _, _ = get_document(UPLOAD_DIRECTORY, actor, application_id, document_id)
+    if Path(path).suffix.lower() != ".pdf":
+        raise HTTPException(422, "OCR yalnızca PDF belgelerine uygulanabilir.")
+    if Path(path).stat().st_size > 8 * 1024 * 1024:
+        raise HTTPException(413, "OCR için PDF en fazla 8 MB olabilir.")
+    with Path(path).open("rb") as source:
+        pdf_bytes = source.read(8 * 1024 * 1024 + 1)
+    if len(pdf_bytes) > 8 * 1024 * 1024 or not pdf_bytes.startswith(b"%PDF-"):
+        raise HTTPException(422, "Geçerli PDF belgesi bulunamadı.")
+    response = _ocr_service_extract(pdf_bytes)
+    return JSONResponse(response, headers={"Cache-Control": "no-store"})
+
+
 class ATSManualCVText(BaseModel):
     text: str = Field(min_length=10,max_length=40000)
 
