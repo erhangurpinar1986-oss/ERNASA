@@ -11,6 +11,7 @@ from hashlib import sha256
 EVENTS = {
     "application_received": ("Başvurunuz Alındı", "Başvurunuzu başarıyla aldık. Başvurunuz ilgili pozisyonun değerlendirme sürecine dâhil edilmiştir. Sonraki aşamalara ilişkin gelişmeleri sizinle paylaşacağız."),
     "screening_completed": ("Başvurunuzun Ön İncelemesi Tamamlandı", "Özgeçmişinizin ön incelemesi tamamlandı. Başvurunuz değerlendirme sürecinde ilerlemektedir. Bu bilgilendirme bir işe alım veya ret kararı anlamına gelmez."),
+    "cv_unreadable": ("Başvurunuz İçin CV Dosyası Hakkında Bilgilendirme", "Özgeçmişinizin PDF dosyası sistemimizde teknik olarak okunamadı. Bu durum başvurunuzun reddedildiği anlamına gelmez. Mülakat aşamasının sağlıklı ilerleyebilmesi için metni seçilebilir bir PDF veya Word kopyasını iletisim@ernasa.com adresine başvurunuzdaki adınız ve pozisyonunuzla birlikte iletmenizi rica ederiz. Başvurunuz inceleme aşamasında korunmaktadır."),
     "availability_invitation": ("Mülakat İçin Görüşme Zamanı Seçimi", "Başvurunuz kapsamında mülakat aşamasına ilişkin uygun görüşme zamanını seçmeniz beklenmektedir. Gün ve saat seçim bağlantınız ayrı bir e-postada paylaşılır."),
     "appointment_confirmed": ("Mülakat Randevunuz Kaydedildi", "Seçtiğiniz mülakat tarihi ve saati sistemimize kaydedilmiştir. Mülakata erişim bilgileriniz ilgili aşamada ayrıca paylaşılacaktır."),
     "interview_link_ready": ("Çevrim İçi Mülakat Erişim Bilgileri", "Çevrim içi mülakatınıza ilişkin erişim bilgileri hazırlandı. Katılım bağlantınızı içeren ayrı davet e-postasını kontrol edebilirsiniz."),
