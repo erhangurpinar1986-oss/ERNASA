@@ -1749,7 +1749,31 @@ def _ocr_service_extract(pdf_bytes: bytes):
             response = client.post(url + "/extract", content=pdf_bytes,
                 headers={"content-type": "application/pdf", "x-ernasa-ocr-key": key})
         if response.status_code != 200:
-            raise HTTPException(422, "PDF OCR ile okunamadı. Manuel inceleme veya yeni dosya gerekli.")
+            # Map only allowlisted machine error codes; never forward raw provider
+            # responses or disclose document text to the candidate-facing UI.
+            error_codes = {
+                "encrypted_pdf": "PDF şifreli; şifresiz belge gereklidir.",
+                "unsupported_pdf": "PDF sayfa sayısı desteklenen sınırın dışında.",
+                "invalid_pdf": "PDF yapısı okunamadı; belgeyi yeniden PDF olarak kaydedin.",
+                "invalid_page_dimensions": "PDF sayfa boyutları OCR için uygun değil.",
+                "image_too_large": "PDF sayfası OCR sınırını aşıyor.",
+                "ocr_engine_failed": "OCR motoru bu PDF sayfasını işleyemedi.",
+                "no_text_detected": "OCR görüntüde yeterli okunabilir metin bulamadı.",
+                "ocr_timeout": "OCR zaman aşımına uğradı; daha sade PDF ile tekrar deneyin.",
+            }
+            try:
+                code = str(response.json().get("detail") or "")
+            except (ValueError, TypeError, AttributeError):
+                code = ""
+            import logging
+            logging.getLogger(__name__).warning(
+                "ATS OCR service returned status=%d reason=%s",
+                response.status_code, code if code in error_codes else "unknown"
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(503, "OCR servisi yetkilendirme hatası; sistem yöneticisi kontrol etmeli.")
+            raise HTTPException(422, error_codes.get(
+                code, "OCR bu PDF'yi işleyemedi; orijinal belgeyi kontrol edin."))
         result = response.json()
         text = str(result.get("text") or "")[:16000]
         if len(text.strip()) < 35 or not result.get("review_required"):
