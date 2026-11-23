@@ -1589,10 +1589,21 @@ if (companyPortalPage) {
                 body.append(el("p","Buradan pozisyonun otomatik davet akışını açabilirsiniz. İK yönetici yetkisi gerekir.",{class:"hdc-muted"}));
             }
             root.append(box);
-            box.addEventListener("toggle",()=>{
-                if(box.open&&window.ErnasaDecisionCenter&&window.ErnasaDecisionCenter[fn])
-                    window.ErnasaDecisionCenter[fn](body).catch(error=>body.replaceChildren(el("p",error.message,{role:"alert"})));
-            });
+            let initialized=false;
+            const mountSettings=()=>{
+                if(!box.open||initialized) return;
+                if(window.ErnasaDecisionCenter&&window.ErnasaDecisionCenter[fn]){
+                    initialized=true;
+                    window.ErnasaDecisionCenter[fn](body).catch(error=>{
+                        initialized=false;
+                        body.replaceChildren(el("p",error.message,{role:"alert"}));
+                    });
+                } else {
+                    body.replaceChildren(el("p","Ayarlar bileşeni yüklenemedi. Lütfen sayfayı yenileyin.",{role:"alert"}));
+                }
+            };
+            box.addEventListener("toggle",mountSettings);
+            if(fn==="mountAutomation") mountSettings();
         }
         const legacy=el("details","",{class:"saas-panel flow-legacy-queue"});
         legacy.append(el("summary","İlk aşama kuyruğu, teknik müdahale ve FLOW işlem kanıtları"));
