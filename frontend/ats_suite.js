@@ -924,6 +924,22 @@ if (companyPortalPage) {
                                 await analyzeCvMatch(doc,anchor,button,provided);
                             });
                         evidence.append(manualForm);
+                        if (/\\.pdf$/i.test(doc.filename || "") && manager()) {
+                            const ocrStatus=el("p","OCR sonucunu almak için butona basın; orijinal dosya değişmez.",{role:"status"});
+                            const ocrButton=action("OCR ile metni çıkar (İK kontrolü gerekir)",async btn=>{
+                                btn.disabled=true;
+                                ocrStatus.textContent="PDF ayrı OCR servisinde okunuyor. Lütfen bekleyin…";
+                                try{
+                                    const ocr=await api(route+"/ocr-preview","POST");
+                                    manual.value=ocr.text||"";
+                                    ocrStatus.textContent="OCR "+ocr.pages_read+" sayfadan metin çıkardı. Metni orijinal CV ile karşılaştırıp gerekirse düzeltin; ardından ‘Bu metinle analiz et’ düğmesine basın.";
+                                    manual.focus();
+                                }catch(error){
+                                    ocrStatus.textContent="OCR işlemi tamamlanamadı: "+error.message+" Manuel metin girişi kullanılabilir.";
+                                }finally{btn.disabled=false;}
+                            });
+                            evidence.append(ocrButton,ocrStatus);
+                        }
                     }
                     if (matching.match_score === null) {
                         evidence.append(el("p","CV–pozisyon uyum yüzdesi hesaplanamadı."));
