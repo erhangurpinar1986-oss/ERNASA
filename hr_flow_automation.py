@@ -154,7 +154,38 @@ def configure(actor, position_id, body: AutomationConfig):
                            position_id)
         cursor.execute("SELECT * FROM flow_position_automation WHERE company_id=? AND position_id=?",
                        (actor.company_id, position_id))
-        return _config_out(cursor.fetchone())
+        result = _config_out(cursor.fetchone())
+        # Replay only recent analyzed applications when a manager explicitly enables
+        # this position's automation. Existing permissions/deliveries are preserved.
+        # Unreadable/review-required documents must never be silently passed.
+        pending = []
+        if result["enabled"]:
+            cursor.execute("""SELECT a.id AS application_id, s.document_id
+                FROM ats_applications a
+                JOIN flow_screening_results s ON s.company_id=a.company_id
+                    AND s.application_id=a.id AND s.position_id=a.position_id
+                LEFT JOIN flow_interview_permissions p ON p.company_id=a.company_id
+                    AND p.application_id=a.id
+                WHERE a.company_id=? AND a.position_id=?
+                    AND a.closure IS NULL AND s.analysis_state='analyzed'
+                    AND a.created_at >= ? AND p.id IS NULL
+                ORDER BY a.created_at DESC LIMIT 20""",
+                (actor.company_id, position_id,
+                 stamp(now_utc() - timedelta(days=7))))
+            pending = [(row["application_id"], row["document_id"]) for row in cursor.fetchall()]
+    # Do not call on_screened() inside the configuration transaction: it opens
+    # its own tenant-scoped transaction and enqueues a unique invitation job.
+    for application_id, document_id in pending:
+        try:
+            on_screened(actor.company_id, application_id, document_id)
+        except Exception as error:
+            LOG.warning("FLOW automatic backlog replay needs review (%s)", type(error).__name__)
+            try:
+                with write(actor.company_id) as review_cursor:
+                    _review(review_cursor, actor.company_id, application_id, "automation_error")
+            except Exception:
+                pass
+    return result
 
 
 def automation_for_application(cursor, company_id, application_id):
