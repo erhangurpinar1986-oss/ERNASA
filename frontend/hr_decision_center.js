@@ -240,11 +240,66 @@
             }
             if (id === "ats") {
                 if (!d.ats) return [el("p", {class: "hdc-muted", text: "ATS ön değerlendirme kaydı yok."})];
-                return [el("p", {}, atsLine(d.ats), " · " + when(d.ats.analyzed_at)),
+                const parts = [el("p", {}, atsLine(d.ats), " · " + when(d.ats.analyzed_at)),
                     d.ats.reason ? el("p", {class: "hdc-muted", text: d.ats.reason}) : null,
                     table(["Kriter", "Ağırlık", "Sonuç", "CV'deki kanıt"], (d.ats.requirements || []).map(q =>
                         [q.requirement, String(q.weight ?? "—"), q.status, q.evidence || "—"])),
                     el("p", {class: "hdc-muted", text: "Eksik kanıt düşük yetkinlik anlamına gelmez; ATS puanı adayı otomatik elemez."})];
+                const doc = (d.documents || []).find(x => x.id === d.ats.document_id);
+                const unreadable = d.ats.state === "review_required" &&
+                    /metin katmanı okunamadı|OCR gerekli|unreadable/i.test(d.ats.reason || "");
+                if (doc && /\\.pdf$/i.test(doc.filename || "") && unreadable) {
+                    const zone = el("section", {class: "hdc-card", "aria-label": "Okunamayan CV OCR kurtarma"});
+                    const label = el("h4", {text: "PDF okunamadı — OCR ile kurtarma"});
+                    const info = el("p", {class: "hdc-muted",
+                        text: "OCR PDF'nin ilk 3 sayfasını ayrı serviste okuyacak. Orijinal CV değişmez. OCR sonucu İK onayından önce ATS kaydını veya mülakat davetini değiştirmez."});
+                    const status = el("p", {role: "status", "aria-live": "polite", class: "hdc-muted"});
+                    const txt = el("textarea", {class: "hdc-input", rows: "9", maxlength: "16000",
+                        "aria-label": "OCR ile çıkarılan CV metni"});
+                    txt.style.width = "100%";
+                    const review = el("div", {class: "hdc-card"});
+                    review.hidden = true;
+                    const runOcr = el("button", {type: "button", class: "hdc-btn hdc-approve",
+                        onclick: async e => {
+                            const btn=e.currentTarget;
+                            btn.disabled=true;
+                            status.textContent="OCR ile PDF okunuyor, lütfen bekleyin…";
+                            try {
+                                const r=await request("ats/applications/"+encodeURIComponent(state.selected)+
+                                    "/documents/"+encodeURIComponent(doc.id)+"/ocr-preview",{method:"POST"});
+                                txt.value=r.text || "";
+                                review.hidden=false;
+                                status.textContent="OCR metni hazır. Metni orijinal CV ile kontrol edip gerekirse düzeltin. Sonra aşağıdaki analiz butonuna basın.";
+                            } catch(error) {
+                                status.textContent="OCR başarısız: "+error.message;
+                            } finally {btn.disabled=false;}
+                        }}, "OCR ile metni çıkar");
+                    const resultBox = el("div", {role:"status", "aria-live":"polite"});
+                    const analyze = el("button", {type:"button", class:"hdc-btn", onclick: async e => {
+                        const btn=e.currentTarget;
+                        const value=txt.value.trim();
+                        if (value.length<35) {resultBox.textContent="Karşılaştırma için en az 35 karakterlik doğrulanmış CV metni gerekir.";return;}
+                        btn.disabled=true;
+                        resultBox.textContent="Kanıta dayalı ATS karşılaştırması yapılıyor…";
+                        try {
+                            const r=await request("ats/applications/"+encodeURIComponent(state.selected)+
+                                "/documents/"+encodeURIComponent(doc.id)+"/match-text",{
+                                method:"POST",headers:{"Content-Type":"application/json"},
+                                body:JSON.stringify({text:value})});
+                            const scoreText=r.match_score==null?"Puan hesaplanamadı":("Puan: "+r.match_score+" / 100");
+                            const coverageText=r.evidence_coverage==null?"":(" · Kanıt kapsamı: %"+r.evidence_coverage);
+                            resultBox.replaceChildren(el("p", {text:scoreText+coverageText}),
+                                table(["Kriter","Sonuç","CV kanıtı"],(r.requirements||[]).map(x=>
+                                    [x.requirement,x.status,(x.evidence_items||[]).map(v=>v.text).join(" · ")||"—"])),
+                                el("p",{class:"hdc-muted",text:"Bu sonuç sadece ekrandaki geçici karşılaştırmadır; ATS kaydını güncellemez ve otomatik davet göndermez."}));
+                        }catch(error){resultBox.textContent="Analiz yapılamadı: "+error.message;}
+                        finally{btn.disabled=false;}
+                    }}, "Doğruladığım metinle ATS analizi yap");
+                    review.append(el("p",{class:"hdc-muted",text:"OCR hatalı kelimeler üretebilir. Metni orijinal belgeyle mutlaka karşılaştırın."}),txt,analyze,resultBox);
+                    zone.append(label,info,runOcr,status,review);
+                    parts.push(zone);
+                }
+                return parts;
             }
             if (id === "report") {
                 if (!r || !r.ready) return [reportBlock(r, d.interview?.status)];
