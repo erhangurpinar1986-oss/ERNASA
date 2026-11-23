@@ -9,17 +9,17 @@ from datetime import datetime, timedelta
 from hashlib import sha256
 
 EVENTS = {
-    "application_received": ("Başvurunuz alındı", "Başvurunuz bize ulaştı. Sürecinizi takip etmeye devam edeceğiz."),
-    "screening_completed": ("Başvurunuz değerlendiriliyor", "Ön inceleme tamamlandı. Bu bir işe alım veya ret kararı değildir."),
-    "availability_invitation": ("Mülakat gün ve saat seçimi", "Mülakat için size sunulan uygun zamanlardan birini seçebilirsiniz."),
-    "appointment_confirmed": ("Mülakat randevunuz", "Seçtiğiniz mülakat randevusu kaydedildi."),
-    "interview_link_ready": ("Mülakat bağlantınız hazır", "Mülakat bağlantınız ve katılım bilgileri hazır."),
-    "interview_completed": ("Mülakatınız tamamlandı", "Mülakatınız tamamlandı. Başvurunuz İK değerlendirmesini bekliyor."),
-    "awaiting_hr_update": ("Başvurunuz hakkında güncelleme", "Başvurunuz hâlâ değerlendirme aşamasında. Henüz nihai karar verilmedi."),
-    "hr_approved": ("Başvurunuzda yeni aşama", "Başvurunuz bir sonraki aşamaya ilerledi. Bu mesaj kesin işe alım teklifi değildir."),
-    "hr_rejected": ("Başvurunuzun sonucu", "Başvurunuz değerlendirilmiş ve bu pozisyon için olumsuz sonuçlanmıştır."),
-    "second_interview": ("İkinci görüşme daveti", "Başvurunuz için ikinci görüşme aşaması planlanmaktadır."),
-    "training_assigned": ("Eğitim ataması", "Başvurunuz kapsamında size bir eğitim atanmıştır. Katılım bilgileri ayrıca iletilecektir."),
+    "application_received": ("Başvurunuz Alındı", "Başvurunuzu başarıyla aldık. Başvurunuz ilgili pozisyonun değerlendirme sürecine dâhil edilmiştir. Sonraki aşamalara ilişkin gelişmeleri sizinle paylaşacağız."),
+    "screening_completed": ("Başvurunuzun Ön İncelemesi Tamamlandı", "Özgeçmişinizin ön incelemesi tamamlandı. Başvurunuz değerlendirme sürecinde ilerlemektedir. Bu bilgilendirme bir işe alım veya ret kararı anlamına gelmez."),
+    "availability_invitation": ("Mülakat İçin Görüşme Zamanı Seçimi", "Başvurunuz kapsamında mülakat aşamasına ilişkin uygun görüşme zamanını seçmeniz beklenmektedir. Gün ve saat seçim bağlantınız ayrı bir e-postada paylaşılır."),
+    "appointment_confirmed": ("Mülakat Randevunuz Kaydedildi", "Seçtiğiniz mülakat tarihi ve saati sistemimize kaydedilmiştir. Mülakata erişim bilgileriniz ilgili aşamada ayrıca paylaşılacaktır."),
+    "interview_link_ready": ("Çevrim İçi Mülakat Erişim Bilgileri", "Çevrim içi mülakatınıza ilişkin erişim bilgileri hazırlandı. Katılım bağlantınızı içeren ayrı davet e-postasını kontrol edebilirsiniz."),
+    "interview_completed": ("Mülakatınız Tamamlandı", "Mülakatınız başarıyla tamamlandı. Değerlendirme raporunuz yetkili İK ekibinin incelemesine sunulacaktır. Nihai karar henüz verilmemiştir."),
+    "awaiting_hr_update": ("Başvurunuz Hakkında Bilgilendirme", "Başvurunuzun değerlendirme süreci devam etmektedir. Sonuçla ilgili kesin bir karar oluştuğunda sizi bilgilendireceğiz. Gösterdiğiniz sabır için teşekkür ederiz."),
+    "hr_approved": ("Başvurunuzda Yeni Aşama", "Başvurunuzun bir sonraki aşamaya ilerlemesi uygun görülmüştür. Bu bilgilendirme tek başına kesin iş teklifi veya işe alım onayı değildir. İlgili ayrıntılar ayrıca paylaşılacaktır."),
+    "hr_rejected": ("Başvuru Sonucunuz Hakkında", "Başvurunuza ayırdığınız zaman ve ERNASA'ya gösterdiğiniz ilgi için teşekkür ederiz. Yapılan değerlendirme sonucunda bu pozisyon için sürecinizi ilerletemiyoruz. Gelecek başvurularınızda başarılar dileriz."),
+    "second_interview": ("İkinci Görüşme Süreciniz", "Başvurunuz için ikinci bir görüşme yapılması planlanmaktadır. Görüşmenin takvimi ve katılım bilgileri kesinleştiğinde ayrıca iletilecektir."),
+    "training_assigned": ("Eğitim Süreciniz Hakkında", "Başvurunuz kapsamında bir eğitim aşaması tanımlanmıştır. Eğitim bağlantısı ve katılım koşulları ayrı bir davet mesajında paylaşılacaktır."),
 }
 TERMINAL = {"hr_approved", "hr_rejected"}
 
