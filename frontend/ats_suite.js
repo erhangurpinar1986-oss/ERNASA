@@ -1578,12 +1578,16 @@ if (companyPortalPage) {
         root.append(centerArea);
         if (window.ErnasaDecisionCenter) window.ErnasaDecisionCenter.mount(centerArea);
         else centerArea.append(el("p","İK Karar Merkezi bileşeni yüklenemedi. Sayfayı yenileyin.",{role:"alert"}));
-        for (const [title,cls,fn] of [["Otomatik süreç ayarları (pozisyon bazında)","flow-automation","mountAutomation"],
+        for (const [title,cls,fn] of [["⚙ Otomatik Akış Ayarları — Pozisyon Bazında Aç/Kapat","flow-automation","mountAutomation"],
                                       ["Raporlar, İK hatırlatmaları ve aday talepleri","flow-reports","mountReports"]]) {
             const box=el("details","",{class:"saas-panel "+cls});
             box.append(el("summary",title));
             const body=el("div","",{class:"hdc"});
             box.append(body);
+            if(fn==="mountAutomation"){
+                box.open=true;
+                body.append(el("p","Buradan pozisyonun otomatik davet akışını açabilirsiniz. İK yönetici yetkisi gerekir.",{class:"hdc-muted"}));
+            }
             root.append(box);
             box.addEventListener("toggle",()=>{
                 if(box.open&&window.ErnasaDecisionCenter&&window.ErnasaDecisionCenter[fn])
