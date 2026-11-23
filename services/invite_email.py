@@ -107,20 +107,25 @@ def invitation_message(candidate, url):
     name = str(candidate.get("name") or "Aday").strip().replace("\r", " ").replace("\n", " ")[:160]
     company = str(candidate.get("company") or "ERNASA").strip().replace("\r", " ").replace("\n", " ")[:160]
     position = str(candidate.get("position") or "Mülakat").strip().replace("\r", " ").replace("\n", " ")[:160]
-    subject = f"{company} · {position} mülakat daveti"
+    subject = f"{company} | {position} — Mülakat Davetiniz"
     scheduled = candidate.get("scheduled_at")
     appointment = ""
     if scheduled:
         local = datetime.fromisoformat(scheduled).astimezone(__import__("zoneinfo").ZoneInfo("Europe/Istanbul"))
-        appointment = (f"Görüşme başlangıcı: {local:%d.%m.%Y %H:%M} (Türkiye saati).\n"
-                       "Mülakatı planlanan başlangıçtan itibaren 8 saat içinde başlatabilirsiniz.\n\n")
+        appointment = (f"Planlanan görüşme başlangıcı: {local:%d.%m.%Y %H:%M} (Türkiye saati)\n"
+                       "Mülakat erişimi planlanan başlangıçtan itibaren 8 saat boyunca açıktır.\n\n")
     body = (
         f"Merhaba {name},\n\n"
-        f"{company} bünyesindeki {position} pozisyonu için mülakat bağlantınız:\n{url}\n\n"
+        f"{company} bünyesindeki {position} pozisyonuna yönelik başvurunuz kapsamında "
+        "çevrim içi mülakat bağlantınız hazırlanmıştır.\n\n"
         f"{appointment}"
-        f"Bağlantının son geçerlilik zamanı: {deadline} (Türkiye saati).\n"
-        "Mülakatı bu süre içinde başlatmanız gerekmektedir.\n\n"
-        "İyi çalışmalar,\nERNASA Yazılım Sistemleri\n"
+        f"Mülakat bağlantınız:\n{url}\n\n"
+        f"Son erişim tarihi: {deadline} (Türkiye saati)\n\n"
+        "Katılım öncesinde bağlantıyı açarak yönlendirmeleri inceleyebilirsiniz. "
+        "Bağlantı size özeldir; üçüncü kişilerle paylaşmamanızı rica ederiz.\n\n"
+        "Teknik bir sorun yaşamanız hâlinde iletisim@ernasa.com adresinden bize ulaşabilirsiniz.\n"
+        "Başvurunuzla ilgili nihai değerlendirme yetkili İK ekibince yapılacaktır.\n\n"
+        "İyi günler dileriz,\nERNASA Yazılım Sistemleri\n"
     )
     return recipient, subject, body
 
@@ -187,9 +192,18 @@ def send_invitation(candidate, url, *, idempotency_key):
 
 def send_availability(candidate, url, *, idempotency_key):
     address = validate_recipient(candidate["email"])
-    subject = "ERNASA · Mülakat için uygun gün ve saat"
-    body = ("Merhaba,\n\nBaşvurunuz için bir görüşme saati seçmenizi rica ediyoruz.\n"
-            f"{url}\n\nBu saat seçme bağlantısı size özeldir ve 7 gün geçerlidir. Mülakat bağlantısı saat seçiminizden sonra ayrı bir e-postayla gönderilir.\nERNASA")
+    name = str(candidate.get("name") or "Aday").strip().replace("\r", " ").replace("\n", " ")[:120]
+    position = str(candidate.get("position") or "ilgili pozisyon").strip().replace("\r", " ").replace("\n", " ")[:160]
+    subject = "ERNASA Yazılım Sistemleri | Mülakat Gün ve Saat Seçimi"
+    body = (f"Merhaba {name},\n\n"
+            f"{position} pozisyonuna yönelik başvurunuz için teşekkür ederiz. "
+            "Mülakat sürecinizin bir sonraki aşamasında, size uygun görüşme zamanını seçmenizi rica ediyoruz.\n\n"
+            f"Gün ve saat seçimi bağlantınız:\n{url}\n\n"
+            "Bu bağlantı kişiseldir ve 7 gün süreyle geçerlidir. "
+            "Görüşme zamanınızı onayladıktan sonra mülakat erişim bilgileri ayrı bir e-posta ile iletilecektir.\n\n"
+            "Bağlantıyla ilgili sorun yaşamanız durumunda iletisim@ernasa.com adresine yazabilirsiniz.\n\n"
+            "İlginiz için teşekkür eder, iyi günler dileriz.\n"
+            "ERNASA Yazılım Sistemleri\n")
     return _send_text(address, subject, body, idempotency_key)
 
 
