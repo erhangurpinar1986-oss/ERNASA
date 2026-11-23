@@ -248,7 +248,7 @@
                 const doc = (d.documents || []).find(x => x.id === d.ats.document_id);
                 const unreadable = d.ats.state === "review_required" &&
                     /metin katmanı okunamadı|OCR gerekli|unreadable/i.test(d.ats.reason || "");
-                if (doc && /\\.pdf$/i.test(doc.filename || "") && unreadable) {
+                if (doc && /\.pdf$/i.test(doc.filename || "") && unreadable) {
                     const zone = el("section", {class: "hdc-card", "aria-label": "Okunamayan CV OCR kurtarma"});
                     const label = el("h4", {text: "PDF okunamadı — OCR ile kurtarma"});
                     const info = el("p", {class: "hdc-muted",
