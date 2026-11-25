@@ -29,9 +29,9 @@ def env(tmp_path, monkeypatch):
     path = tmp_path / "control.sqlite3"
     app.init(path)
     db = app.connect(path)
-    for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql"):
+    for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql"):
         db.executescript(re.sub(r"CREATE OR REPLACE TRIGGER.*?;", "",
-                                (MIG / name).read_text().replace("ernasa_control.", ""), flags=re.S))
+                                (MIG / name).read_text().replace("ernasa_control.", "").replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN"), flags=re.S))
     db.execute("INSERT INTO companies VALUES(1,'ERNASA Bayi','Aktif')")
     db.execute("INSERT INTO companies VALUES(2,'Müşteri Lojistik A.Ş.','Aktif')")
     db.execute("INSERT INTO users(id,email,name,secret,role) VALUES(1,'f@example.test','Kurucu',?,'founder')",
@@ -186,12 +186,21 @@ def test_payment_disabled_and_unknown_ref_and_cross_origin(env, monkeypatch):
     assert not shop["products"]
 
 
-def test_founder_only_one_kurus_live_test_plan_with_rep_commission(env):
+def test_founder_only_one_kurus_live_test_plan_is_kept_apart(env, monkeypatch):
     db, server, shop = env
+    monkeypatch.setenv("HR_PAYMENTS_ENABLED", "0")   # real customers stay closed
     prop = sale(db)
+    with pytest.raises(sales.Invalid, match="devre dışı"):
+        cmd(db, FOUNDER, "payment_request", company_id="2", proposal_id="direct", product="education",
+            plan_name="Ödeme Testi", period_start="2099-01-01")
+    monkeypatch.setenv("HR_TEST_PLAN_ENABLED", "1")
     with pytest.raises(sales.Invalid):
         cmd(db, REP, "payment_request", proposal_id=prop, product="education", plan_name="Ödeme Testi",
             period_start="2099-01-01")
+    real_ref = cmd(db, REP, "payment_request", proposal_id=prop, product="hr_flow", plan_name="Starter",
+                   period_start="2099-01-01")["ref"]
+    status, _, html = request(server, "GET", f"/odeme/{real_ref}")
+    assert "henüz açılmadı" in html  # real packages still closed
     ref = cmd(db, FOUNDER, "payment_request", proposal_id=prop, company_id="2", product="education",
               plan_name="Ödeme Testi", period_start="2099-01-01")["ref"]
     status, _, html = request(server, "GET", f"/odeme/{ref}")
@@ -200,14 +209,21 @@ def test_founder_only_one_kurus_live_test_plan_with_rep_commission(env):
             {"Content-Type": "application/x-www-form-urlencoded", "Origin": server.origin})
     assert shop["products"] == {"P1": 1}
     assert webhook(server, shop, "t1", "P1", 1, "wt1")[0] == 200
+    assert webhook(server, shop, "t1", "P1", 1, "wt2")[0] == 200   # duplicate delivery
     assert db.execute("SELECT capacity FROM billing_periods").fetchone()[0] == 1
-    m = db.execute("SELECT rate, amount_minor FROM sales_commissions").fetchone()
-    assert (m["rate"], m["amount_minor"]) == (25, 0)
+    assert db.execute("SELECT COUNT(*) FROM billing_provider_orders").fetchone()[0] == 1
+    # Real Sales Hub ledgers untouched; computed values kept apart
+    assert db.execute("SELECT COUNT(*) FROM sales_collections").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM sales_commissions").fetchone()[0] == 0
+    t = db.execute("SELECT * FROM billing_test_results").fetchone()
+    assert (t["gross_minor"], t["sales_net_minor"], t["sales_rate"], t["sales_commission_minor"]) == (1, 1, 25, 0)
+    assert t["commission_window"]
     assert db.execute("SELECT COUNT(*) FROM service_terms").fetchone()[0] == 0  # HR FLOW untouched
-    ref2 = cmd(db, FOUNDER, "payment_request", proposal_id="direct", company_id="2", product="education",
-               plan_name="Ödeme Testi", period_start="2099-02-01")["ref"]
-    assert ref2.startswith("ERN")
     ident_f = (FOUNDER, "csrf", {"name": "Kurucu", "email": "f@example.test"})
-    assert "Canlı ödeme testi" in sales_http.content(app, db, ident_f, "payments")
+    page = sales_http.content(app, db, ident_f, "payments")
+    assert "Canlı ödeme testi" in page and "TEST · " in page
     ident_rep = (REP, "csrf", {"name": "Temsilci A", "email": "a@example.test"})
-    assert "Canlı ödeme testi" not in sales_http.content(app, db, ident_rep, "payments")
+    rep_page = sales_http.content(app, db, ident_rep, "payments")
+    assert "Canlı ödeme testi" not in rep_page and ref not in rep_page
+    assert cmd(db, FOUNDER, "end_test")["detail"].startswith("1 test")
+    assert db.execute("SELECT status FROM billing_subscriptions").fetchone()[0] == "cancelled"

@@ -64,6 +64,17 @@ def payments_enabled(contract):
     return os.environ.get("HR_PAYMENTS_ENABLED") == "1" and contract.confirmed
 
 
+def test_plan_enabled():
+    return os.environ.get("HR_TEST_PLAN_ENABLED") == "1"
+
+
+def _is_test_checkout(db, checkout_id):
+    row = db.execute("""SELECT r.is_test FROM billing_checkout_requests x
+                        JOIN billing_payment_requests r ON r.ref=x.request_ref WHERE x.checkout_id=?""",
+                     (checkout_id,)).fetchone()
+    return bool(row and row[0])
+
+
 def _get(obj, path):
     for key in path:
         if not isinstance(obj, dict) or key not in obj:
@@ -125,7 +136,7 @@ def activate_from_order(db, *, order_id, fetch, contract, now, actor="shopier_ve
     Caller owns the transaction: commit on return, roll back on any exception.
     Returns 'activated' or 'already_processed'.
     """
-    if not payments_enabled(contract):
+    if not contract.confirmed or not (payments_enabled(contract) or test_plan_enabled()):
         raise PaymentRejected("HR ödeme kabulü etkin değil (sağlayıcı sözleşmesi doğrulanmadı).")
     if not isinstance(order_id, str) or not re.fullmatch(r"[0-9A-Za-z_-]{1,80}", order_id):
         raise PaymentRejected("Geçersiz sipariş numarası.")
@@ -141,6 +152,9 @@ def activate_from_order(db, *, order_id, fetch, contract, now, actor="shopier_ve
     if checkout is None:
         # Includes every ERNASA CV product and any product not issued by this system.
         raise PaymentRejected("Ürün bu sistemde verilmiş bir HR/Eğitim ödeme oturumuna ait değil.")
+    is_test = _is_test_checkout(db, checkout["id"])
+    if not (payments_enabled(contract) or (is_test and test_plan_enabled())):
+        raise PaymentRejected("Online ödeme kabulü etkin değil.")
     if expected_company_id is not None and checkout["company_id"] != expected_company_id:
         raise PaymentRejected("Müşteri eşleşmesi hatalı.")
     # 'expired' is accepted: the 15-minute window only limits starting a payment; a customer who
@@ -176,10 +190,59 @@ def activate_from_order(db, *, order_id, fetch, contract, now, actor="shopier_ve
     db.execute("UPDATE billing_checkouts SET status='paid' WHERE id=? AND status IN ('pending','expired')", (checkout["id"],))
     _audit(db, actor, "payment_verified_activated", checkout["id"],
            f"order={order_id}; gross_minor={v.gross_minor}; period={quote['period_start']}", now)
-    if quote["product"] == "hr_flow":
+    if quote["product"] == "hr_flow" and not is_test:
         grant_hr_flow(db, company_id=checkout["company_id"], quote=quote)
-    _book_sales(db, checkout, quote, order_id, now, actor)
+    if is_test:
+        _record_test(db, checkout, quote, order_id, now, actor)
+    else:
+        _book_sales(db, checkout, quote, order_id, now, actor)
     return "activated"
+
+
+def _record_test(db, checkout, quote, order_id, now, actor):
+    """Run the real Sales Hub booking + commission code, record what it computed, then roll the
+    Sales Hub rows back: a test is never revenue and never a payable commission."""
+    from . import sales
+    link = db.execute("SELECT * FROM billing_checkout_sales WHERE checkout_id=?", (checkout["id"],)).fetchone()
+    net = rate = amount = window = None
+    detail = "Doğrudan satış: temsilci yok, komisyon oluşmaz."
+    if link is not None:
+        founder = db.execute("SELECT id FROM users WHERE role='founder' AND active=1").fetchone()
+        db.execute("SAVEPOINT test_sales")
+        try:
+            collection_id, rate = sales.book_verified_payment(
+                db, proposal_id=link["proposal_id"], net_minor=int(quote["net_minor"]),
+                reference="TEST-shopier_hr:" + order_id,
+                collected_on=now.astimezone(ISTANBUL).date().isoformat(), verifier_user_id=founder["id"])
+            row = db.execute("""SELECT c.net_minor, c.collected_on, m.amount_minor FROM sales_collections c
+                                JOIN sales_commissions m ON m.collection_id=c.id WHERE c.id=?""",
+                             (collection_id,)).fetchone()
+            net, amount = int(row["net_minor"]), int(row["amount_minor"])
+            start, end = sales.payment_window(str(row["collected_on"]))
+            window = f"{start.isoformat()} – {end.isoformat()}"
+            detail = f"Temsilci {link['owner_id']}: Sales Hub kaydı ve komisyon hesaplandı, test olduğu için geri alındı."
+        except sales.Invalid as exc:
+            detail = "Sales Hub kaydı oluşturulamadı: " + str(exc)
+        db.execute("ROLLBACK TO SAVEPOINT test_sales")
+        db.execute("RELEASE SAVEPOINT test_sales")
+    db.execute("INSERT INTO billing_test_results VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+               (checkout["id"], order_id, int(now.timestamp()), int(quote["gross_minor"]), int(quote["capacity"]),
+                quote["period_start"], quote["period_end"], net, rate, amount, window, detail))
+    _audit(db, actor, "test_payment_verified", checkout["id"], f"order={order_id}; {detail}", now)
+
+
+def end_test(db, *, actor, now):
+    """Close test subscriptions whose periods all come from test payments. Data is kept."""
+    rows = db.execute("""SELECT s.id FROM billing_subscriptions s WHERE s.status='active' AND NOT EXISTS (
+                             SELECT 1 FROM billing_periods p
+                             JOIN billing_checkout_requests x ON x.checkout_id=p.checkout_id
+                             JOIN billing_payment_requests r ON r.ref=x.request_ref
+                             WHERE p.subscription_id=s.id AND r.is_test=FALSE)
+                         AND EXISTS (SELECT 1 FROM billing_periods p WHERE p.subscription_id=s.id)""").fetchall()
+    for r in rows:
+        db.execute("UPDATE billing_subscriptions SET status='cancelled' WHERE id=?", (r["id"],))
+    _audit(db, str(actor.id), "test_closed", "billing", f"cancelled_test_subscriptions={len(rows)}", now)
+    return len(rows)
 
 
 def grant_hr_flow(db, *, company_id, quote):
@@ -279,9 +342,13 @@ def create_payment_request(db, *, actor, product, plan_name, period_start, now,
         if not db.execute("SELECT 1 FROM companies WHERE id=?", (company_id,)).fetchone():
             sales.fail("Firma bulunamadı.", 404)
     ref = "ERN" + uuid4().hex[:20].upper()
-    db.execute("INSERT INTO billing_payment_requests VALUES(?,?,?,?,?,?,?,?,?)",
+    is_test = plan_name == TEST_PLAN.name
+    if is_test and not test_plan_enabled():
+        sales.fail("Test paketi şu an devre dışı.", 409)
+    db.execute("""INSERT INTO billing_payment_requests(ref,company_id,product,plan_name,period_start,proposal_id,
+                  owner_id,created_by,created_at,is_test) VALUES(?,?,?,?,?,?,?,?,?,?)""",
                (ref, company_id, product, plan_name, period_start.isoformat(), proposal_id, owner,
-                str(actor.id), int(now.timestamp())))
+                str(actor.id), int(now.timestamp()), is_test))
     _audit(db, str(actor.id), "payment_request_created", ref, f"{product}/{plan_name}; proposal={proposal_id}", now)
     return ref
 
@@ -303,9 +370,12 @@ def start_checkout(db, *, ref, rate, vat_rate, now, create_product, image_url, d
     Returns the Shopier product URL. Reuses a still-valid pending checkout for the same request.
     Caller owns the transaction (commit only after this returns)."""
     from .billing_quotes import issue_quote
-    if os.environ.get("HR_PAYMENTS_ENABLED") != "1":
-        raise PaymentRejected("Online ödeme henüz etkin değil.")
     req, checkouts = request_view(db, ref)
+    if req["is_test"]:
+        if not test_plan_enabled():
+            raise PaymentRejected("Test paketi devre dışı.")
+    elif os.environ.get("HR_PAYMENTS_ENABLED") != "1":
+        raise PaymentRejected("Online ödeme henüz etkin değil.")
     if any(c["status"] == "paid" for c in checkouts):
         raise PaymentRejected("Bu ödeme bağlantısı zaten ödendi.")
     at = int(now.timestamp())
@@ -353,7 +423,9 @@ def rep_sales(db, actor):
                     r.created_at AS sold_at, r.owner_id, col.collected_on AS paid_on, q.gross_minor,
                     q.net_minor AS quote_net_minor, col.net_minor AS basis_minor, m.rate,
                     m.amount_minor AS commission_minor, m.status AS commission_status, col.held,
-                    ch.status AS payment_status, s.status AS subscription_status
+                    ch.status AS payment_status, s.status AS subscription_status, r.is_test,
+                    t.sales_net_minor AS test_basis, t.sales_rate AS test_rate,
+                    t.sales_commission_minor AS test_commission, t.commission_window AS test_window
              FROM billing_payment_requests r
              JOIN companies co ON co.id=r.company_id
              LEFT JOIN sales_proposals p ON p.id=r.proposal_id
@@ -366,10 +438,11 @@ def rep_sales(db, actor):
              LEFT JOIN billing_checkout_sales cs ON cs.checkout_id=ch.id
              LEFT JOIN sales_collections col ON col.id=cs.sales_collection_id
              LEFT JOIN sales_commissions m ON m.collection_id=col.id
-             LEFT JOIN billing_subscriptions s ON s.company_id=r.company_id AND s.product=r.product"""
+             LEFT JOIN billing_subscriptions s ON s.company_id=r.company_id AND s.product=r.product
+             LEFT JOIN billing_test_results t ON t.checkout_id=ch.id"""
     params = ()
     if not actor.founder:
-        sql += " WHERE r.owner_id=? AND p.company_id=?"
+        sql += " WHERE r.owner_id=? AND p.company_id=? AND r.is_test=FALSE"
         params = (actor.id, actor.company_id)
     from . import sales
     out = []
