@@ -42,8 +42,8 @@ def db(monkeypatch):
     con.execute("CREATE TABLE companies(id INTEGER PRIMARY KEY, name TEXT, status TEXT)")
     con.executescript(LEGACY)
     con.executemany("INSERT INTO companies VALUES(?,?,?)", [(1, "A", "Aktif"), (2, "B", "Aktif")])
-    for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql"):
-        con.executescript(sqlite_schema((MIG / name).read_text()))
+    for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql"):
+        con.executescript(sqlite_schema((MIG / name).read_text().replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN")))
     return con
 
 

@@ -14,8 +14,7 @@ import re
 import threading
 
 from . import billing_payments as bp, shopier_hr, tcmb_rates
-from .billing_catalog import quote_amounts
-from .billing_quotes import PLANS
+from .billing_quotes import amounts_for, find_plan
 from .ik_bridge import ISTANBUL
 
 VAT_RATE = Decimal("0.20")
@@ -48,7 +47,7 @@ def limits(plan, product):
 
 def page(c, h, db, ref, error=None, status=200):
     req, checkouts = bp.request_view(db, ref)
-    plan = next(p for p in PLANS[req["product"]] if p.name == req["plan_name"])
+    plan = find_plan(req["product"], req["plan_name"], allow_test=True)
     paid = next((x for x in checkouts if x["status"] in ("paid", "refunded")), None)
     at = int(now().timestamp())
     live = next((x for x in checkouts if x["status"] == "pending" and x["expires_at"] > at and x["provider_url"]), None)
@@ -65,7 +64,7 @@ def page(c, h, db, ref, error=None, status=200):
         return h.page("ERNASA ödeme", body, status=status, brand="ERNASA")
     try:
         rate = tcmb_rates.fetch_latest_usd_selling_rate(now().astimezone(ISTANBUL).date())
-        amounts = quote_amounts(plan, rate.value, VAT_RATE)
+        amounts = amounts_for(plan, rate.value, VAT_RATE)
         body += (f'<table><tr><th>KDV hariç</th><td>{money(amounts.net_minor)}</td></tr>'
                  f'<tr><th>KDV (%20)</th><td>{money(amounts.vat_minor)}</td></tr>'
                  f'<tr><th>KDV dahil toplam</th><td><strong>{money(amounts.gross_minor)}</strong></td></tr></table>'

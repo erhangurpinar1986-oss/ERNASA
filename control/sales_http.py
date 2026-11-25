@@ -180,7 +180,7 @@ def commands(c, db, actor, data):
         db.execute('DELETE FROM sales_sessions WHERE account_id=?', (actor.id,))
         sales.audit(db, actor, 'password_changed', actor.id)
         return {'detail': 'Parola değişti. Yeniden giriş yapın.'}
-    if action in ('payment_request', 'link_company', 'verify_order'):
+    if action in ('payment_request', 'link_company', 'verify_order', 'end_test'):
         return billing_command(c, db, actor, data, action)
     if action not in sales.COMMANDS:
         sales.fail('İşlem bulunamadı.', 404)
@@ -202,6 +202,8 @@ def billing_command(c, db, actor, data, action):
         if start < sales.business_today():
             sales.fail('Dönem başlangıcı geçmiş tarih olamaz.', 422)
         proposal = data.get('proposal_id') or None
+        if proposal == 'direct':
+            proposal = None
         company = None if proposal else sales.integer(data, 'company_id', 1, 10**12)
         ref = bp.create_payment_request(db, actor=actor, proposal_id=proposal, company_id=company, product=product,
                                         plan_name=sales.text(data, 'plan_name', 20), period_start=start, now=now)
@@ -215,6 +217,10 @@ def billing_command(c, db, actor, data, action):
                    (customer['id'], tenant, int(actor.id), int(now.timestamp())))
         sales.audit(db, actor, 'customer_company_linked', customer['id'], f'company_id={tenant}')
         return {'id': customer['id']}
+    if action == 'end_test':
+        closed = bp.end_test(db, actor=actor, now=now)
+        sales.audit(db, actor, 'billing_test_closed', 'billing', f'subscriptions={closed}')
+        return {'detail': f'{closed} test aboneliği kapatıldı. Kayıtlar korunur.'}
     # verify_order: CONTROL reconciliation when a webhook was missed. Same server-side checks.
     order_id = sales.text(data, 'order_id', 80)
     try:
@@ -352,6 +358,15 @@ def payments_section(c, db, actor, data, f, inp, options):
                                   'Eşleşme bekleyen sınıflandırılmış müşteri yok.'))
         out += c.card('Doğrudan satış ödeme bağlantısı','<p>Temsilcisiz satış; komisyon oluşmaz.</p>'+
                       f('payment_request', options('company_id','Firma',[(r['id'],r['name']) for r in companies])+common,'Bağlantı oluştur'))
+        approved_all = [(r['id'], f"{r['brief'][:50]} · {r['owner_id']}") for r in data['proposals'] if r['status']=='approved']
+        if bp.test_plan_enabled():
+          out += c.card('Canlı ödeme testi (0,01 TL)','<p>Yalnız kurucu görür. Eğitim · 1 katılımcı · 0,01 TL. Temsilcinin onaylı teklifi seçilirse tahsilat ve komisyon kaydı da test edilir (komisyon tutarı 0 kuruş).</p>'+
+                      f('payment_request', '<input type="hidden" name="product" value="education"><input type="hidden" name="plan_name" value="Ödeme Testi">'+
+                        options('company_id','Firma (temsilci teklifi seçilmezse)',[(r['id'],r['name']) for r in companies])+
+                        options('proposal_id','Temsilci teklifi (isteğe bağlı)',[('direct','— doğrudan satış (komisyonsuz) —')]+approved_all)+
+                        inp('period_start','Dönem başlangıcı','date'),'Test bağlantısı oluştur')+
+                      '<p>Test bitince test aboneliklerini kapatın; ardından test paketi Render ayarından kapatılır.</p>'+
+                      f('end_test','','Test aboneliklerini kapat'))
         out += c.card('Shopier siparişini elle doğrula','<p>Webhook ulaşmadıysa Shopier sipariş numarasıyla aynı sunucu kontrolleri çalıştırılır.</p>'+
                       f('verify_order', inp('order_id','Shopier sipariş numarası'),'Doğrula'))
     else:
@@ -360,6 +375,12 @@ def payments_section(c, db, actor, data, f, inp, options):
                       guided_form(c, bool(approved), f('payment_request', options('proposal_id','Onaylı teklif',approved)+common,'Bağlantı oluştur'),
                                   'Önce CONTROL onaylı bir teklif gerekir.', '/sales?tab=proposals', 'Tekliflerime git'))
     money_or = lambda v: money(v) if v is not None else '—'
+    for r in rows:
+        if r.get('is_test'):
+            r['basis_minor'], r['rate'], r['commission_minor'], r['commission_window'] = (
+                r['test_basis'], r['test_rate'], r['test_commission'], r['test_window'])
+            r['commission_status'] = None
+            r['customer'] = 'TEST · ' + r['customer']
     body = [[c.e(r['customer']), c.e({'hr_flow':'HR FLOW','education':'Eğitim'}[r['product']]), c.e(r['plan_name']),
              c.e(local_date(datetime.fromtimestamp(r['sold_at'], timezone.utc).isoformat())), c.e(str(r['paid_on'] or '—')), money_or(r['gross_minor']),
              money_or(r['basis_minor']), (f"%{r['rate']}" if r['rate'] is not None else '—'), money_or(r['commission_minor']),

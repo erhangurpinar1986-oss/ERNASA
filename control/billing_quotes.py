@@ -5,11 +5,25 @@ from decimal import Decimal
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from .billing_catalog import EDUCATION, HR_FLOW, quote_amounts
+from .billing_catalog import EDUCATION, HR_FLOW, Plan, QuoteAmounts, quote_amounts
 from .tcmb_rates import ExchangeRate, RATE_TYPE, SOURCE
 
 
 PLANS = {"hr_flow": HR_FLOW, "education": EDUCATION}
+# Founder-only live payment test: Education, 1 participant, fixed 0,01 TL total (KDV 0 kuruş after
+# rounding). Never listed in the catalog, the rep form or the customer price table.
+TEST_PLAN = Plan("Ödeme Testi", Decimal("0.01"), 1)
+TEST_AMOUNTS = QuoteAmounts(1, 0, 1)
+
+
+def find_plan(product, plan_name, *, allow_test=False):
+    if allow_test and product == "education" and plan_name == TEST_PLAN.name:
+        return TEST_PLAN
+    return next((plan for plan in PLANS.get(product, ()) if plan.name == plan_name), None)
+
+
+def amounts_for(plan, usd_try, vat_rate):
+    return TEST_AMOUNTS if plan is TEST_PLAN else quote_amounts(plan, usd_try, vat_rate)
 QUOTE_LIFETIME = timedelta(minutes=15)
 
 
@@ -24,11 +38,11 @@ def issue_quote(db, *, company_id: int, product: str, plan_name: str,
         raise ValueError("Beklenen yayın tarihine ait kur gerekiyor.")
     if rate.source != SOURCE or rate.rate_type != RATE_TYPE:
         raise ValueError("TCMB döviz satış kuru gerekiyor.")
-    plan = next((plan for plan in PLANS.get(product, ()) if plan.name == plan_name), None)
+    plan = find_plan(product, plan_name, allow_test=True)
     if plan is None:
         raise ValueError("Paket bulunamadı.")
 
-    amounts = quote_amounts(plan, rate.value, vat_rate)
+    amounts = amounts_for(plan, rate.value, vat_rate)
     # Reject inputs the database would round differently from the amount calculation.
     if rate.value >= 10**12 or rate.value != rate.value.quantize(Decimal("0.00000001")):
         raise ValueError("Kur hassasiyeti desteklenmiyor.")

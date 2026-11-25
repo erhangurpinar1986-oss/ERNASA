@@ -40,8 +40,8 @@ def db(monkeypatch):
     con.executescript(sales.DDL)
     con.executescript(LEGACY)
     con.executescript(sales.SQLITE_GUARDS)
-    for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql"):
-        sql = re.sub(r"CREATE OR REPLACE TRIGGER.*?;", "", (MIG / name).read_text().replace("ernasa_control.", ""), flags=re.S)
+    for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql"):
+        sql = re.sub(r"CREATE OR REPLACE TRIGGER.*?;", "", (MIG / name).read_text().replace("ernasa_control.", "").replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN"), flags=re.S)
         con.executescript(sql)
     for rep in ("rep1", "rep2"):
         con.execute("INSERT INTO sales_accounts(id,company_id,name,email,secret,active) VALUES(?,?,?,?,?,1)",

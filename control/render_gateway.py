@@ -69,7 +69,7 @@ def shopier_startup_check(origin):
     try:
         shopier_hr.probe()
         print("SHOPIER_HR_API_CHECK status=ok", flush=True)
-        if os.getenv("HR_PAYMENTS_ENABLED") == "1":
+        if os.getenv("HR_PAYMENTS_ENABLED") == "1" or os.getenv("HR_TEST_PLAN_ENABLED") == "1":
             created = shopier_hr.ensure_webhooks(origin.rstrip("/") + "/control/odeme/shopier/webhook")
             print("SHOPIER_HR_WEBHOOKS status=ok created=" + (",".join(created) or "none"), flush=True)
         else:
@@ -84,6 +84,7 @@ def ensure_billing_payment_schema(db):
     with db.raw, db.raw.cursor() as cursor:
         cursor.execute("SELECT pg_advisory_xact_lock(184093, 47622)")
         cursor.execute((CONTROL_MIGRATIONS / "005_billing_payments.up.sql").read_text(encoding="utf-8"))
+        cursor.execute((CONTROL_MIGRATIONS / "006_billing_test.up.sql").read_text(encoding="utf-8"))
 
 
 def ensure_billing_quote_schema(db):
