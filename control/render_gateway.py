@@ -138,6 +138,11 @@ async def forward(request, server):
         if len(data) > 10*1024*1024+8192:
             return PlainTextResponse("İstek boyutu sınır dışında.",status_code=413)
     headers = {name:request.headers[name] for name in ("cookie","origin","content-type") if name in request.headers}
+    if path == "/odeme/shopier/webhook":
+        # Shopier webhook metadata (dedupe id, event type, HS256 signature) is needed by the handler.
+        headers.update({name:request.headers[name] for name in
+                        ("shopier-webhook-id","shopier-event","shopier-signature","shopier-timestamp")
+                        if name in request.headers})
     headers["host"] = urlsplit(server.origin).netloc
     url = httpx.URL(scheme="http",host="127.0.0.1",port=server.server_port,path=path,query=request.scope["query_string"])
     try:

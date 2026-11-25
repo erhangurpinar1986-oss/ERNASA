@@ -7,7 +7,7 @@ import os
 from base64 import b64decode
 from email.parser import BytesParser
 from email.policy import default as email_policy
-from . import address_catalog, firma, ik_bridge, interview_templates, sales, sales_http
+from . import address_catalog, billing_http, firma, ik_bridge, interview_templates, sales, sales_http
 from contextlib import closing
 from datetime import date, timedelta
 from http.cookies import SimpleCookie
@@ -1400,6 +1400,8 @@ class Handler(BaseHTTPRequestHandler):
             if not post and path in ASSETS:
                 filename, content_type = ASSETS[path]
                 return self.reply(200,(ROOT/filename).read_bytes(),content_type)
+            if billing_http.handle(self,path,post):
+                return
             if sales_http.handle(self,path,post):
                 return
             if not post and path == '/ernasa-invite-copy.js':

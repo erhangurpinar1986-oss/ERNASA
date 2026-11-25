@@ -14,10 +14,17 @@ from control.tcmb_rates import ExchangeRate
 MIG = Path(__file__).resolve().parents[1] / "migrations" / "control_postgresql"
 NOW = datetime(2026, 11, 25, 15, tzinfo=timezone.utc)
 RATE = ExchangeRate(Decimal("42.50000000"), date(2026, 11, 25))
-CONTRACT = replace(bp.PROVISIONAL_CONTRACT, confirmed=True)
+CONTRACT = bp.OFFICIAL_CONTRACT
 REP = sales.Actor("rep1", 10)
 REP2 = sales.Actor("rep2", 10)
 FOUNDER = sales.Actor("1", None, True)
+
+
+LEGACY = """CREATE TABLE subscriptions(company_id INTEGER PRIMARY KEY, package TEXT, starts TEXT, ends TEXT, status TEXT);
+CREATE TABLE service_terms(company_id INTEGER PRIMARY KEY, product TEXT, version TEXT, user_quota INTEGER, operation_quota INTEGER,
+ trial_days INTEGER, period TEXT, price_minor INTEGER, currency TEXT, vat_basis INTEGER, payment TEXT NOT NULL);
+CREATE TABLE ats_subscriptions(company_id INTEGER PRIMARY KEY, package TEXT, starts TEXT, ends TEXT, status TEXT, user_quota INTEGER);
+CREATE TABLE subscription_history(id INTEGER PRIMARY KEY, company_id INTEGER, snapshot TEXT, recorded TEXT DEFAULT CURRENT_TIMESTAMP);"""
 
 
 @pytest.fixture
@@ -31,6 +38,7 @@ def db(monkeypatch):
         INSERT INTO users VALUES(1,'founder',1);
         INSERT INTO companies VALUES(10,'Bayi','Aktif'),(20,'Müşteri A','Aktif'),(21,'Müşteri B','Aktif');""")
     con.executescript(sales.DDL)
+    con.executescript(LEGACY)
     con.executescript(sales.SQLITE_GUARDS)
     for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql"):
         sql = re.sub(r"CREATE OR REPLACE TRIGGER.*?;", "", (MIG / name).read_text().replace("ernasa_control.", ""), flags=re.S)
@@ -68,10 +76,21 @@ def pay(db, checkout_id, oid):
         raise
 
 
-def link(db, prop, pid, rep=REP, plan="Business", start=date(2026, 12, 1), product="hr_flow"):
-    return bp.create_rep_checkout(db, actor=rep, proposal_id=prop, product=product, plan_name=plan,
-                                  period_start=start, rate=RATE, expected_rate_date=RATE.published_on,
-                                  vat_rate=Decimal("0.20"), provider_product_id=pid, now=NOW)
+def fake_shopier(pid):
+    seen = {}
+    def create_product(*, title, description, gross_minor, image_url):
+        seen.update(title=title, gross_minor=gross_minor, image_url=image_url)
+        return pid, "https://www.shopier.com/" + pid
+    return create_product, seen
+
+
+def link(db, prop, pid, rep=REP, plan="Business", start=date(2026, 12, 1), product="hr_flow", company=None):
+    ref = bp.create_payment_request(db, actor=rep, proposal_id=prop, company_id=company, product=product,
+                                    plan_name=plan, period_start=start, now=NOW)
+    create, _ = fake_shopier(pid)
+    bp.start_checkout(db, ref=ref, rate=RATE, vat_rate=Decimal("0.20"), now=NOW, create_product=create,
+                      image_url="https://ernasa.com/control/ernasalogo.png")
+    return db.execute("SELECT checkout_id FROM billing_checkout_requests WHERE request_ref=?", (ref,)).fetchone()[0]
 
 
 def test_first_period_25_then_5_on_net_basis_and_visible_only_to_owner(db):
@@ -99,13 +118,34 @@ def test_duplicate_order_creates_no_second_collection_or_commission(db):
     assert db.execute("SELECT COUNT(*) FROM sales_commissions").fetchone()[0] == 1
 
 
-def test_direct_sale_has_no_commission(db):
-    from control.billing_quotes import issue_quote
-    q = issue_quote(db, company_id=21, product="education", plan_name="Starter", period_start=date(2026, 12, 1),
-                    rate=RATE, expected_rate_date=RATE.published_on, vat_rate=Decimal("0.20"), now=NOW)
-    db.execute("INSERT INTO billing_checkouts VALUES('d1',?,21,'shopier_hr','P-D','ref-d','pending',1)", (q,))
-    assert pay(db, "d1", "od") == "activated"
+def test_direct_sale_has_no_commission_and_only_founder_can_create_it(db):
+    with pytest.raises(sales.Invalid):
+        link(db, None, "P-X", rep=REP, product="education", plan="Starter", company=21)
+    cid = link(db, None, "P-D", rep=FOUNDER, product="education", plan="Starter", company=21)
+    assert pay(db, cid, "od") == "activated"
     assert db.execute("SELECT COUNT(*) FROM sales_commissions").fetchone()[0] == 0
+    assert db.execute("SELECT capacity FROM billing_periods").fetchone()[0] == 10
+
+
+def test_checkout_reuses_live_link_refuses_paid_and_needs_flag(db, monkeypatch):
+    _, _, prop = approved_proposal(db)
+    ref = bp.create_payment_request(db, actor=REP, proposal_id=prop, product="hr_flow", plan_name="PRO",
+                                    period_start=date(2026, 12, 1), now=NOW)
+    create, seen = fake_shopier("P-1")
+    kw = dict(ref=ref, rate=RATE, vat_rate=Decimal("0.20"), now=NOW, create_product=create, image_url="https://x/l.png")
+    url = bp.start_checkout(db, **kw)
+    assert bp.start_checkout(db, **kw) == url  # same 15-minute link, no second Shopier product
+    assert db.execute("SELECT COUNT(*) FROM billing_checkouts").fetchone()[0] == 1
+    # PRO 999.99 USD * 42.5 = 42499.575 -> 42499.58 net, KDV 8499.92, total 50999.50
+    assert seen["gross_minor"] == 5099950 and ref in seen["title"]
+    pay(db, db.execute("SELECT checkout_id FROM billing_checkout_requests").fetchone()[0], "o1")
+    with pytest.raises(bp.PaymentRejected, match="zaten ödendi"):
+        bp.start_checkout(db, **kw)
+    monkeypatch.setenv("HR_PAYMENTS_ENABLED", "0")
+    ref2 = bp.create_payment_request(db, actor=REP, proposal_id=prop, product="hr_flow", plan_name="PRO",
+                                     period_start=date(2027, 1, 1), now=NOW)
+    with pytest.raises(bp.PaymentRejected, match="etkin değil"):
+        bp.start_checkout(db, **{**kw, "ref": ref2})
 
 
 def test_existing_customer_and_addon_get_zero_automatic_commission(db):

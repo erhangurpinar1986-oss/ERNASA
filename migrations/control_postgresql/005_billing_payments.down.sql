@@ -8,4 +8,6 @@ DROP TABLE IF EXISTS ernasa_control.billing_provider_orders;
 DROP TABLE IF EXISTS ernasa_control.billing_subscriptions;
 DROP TABLE IF EXISTS ernasa_control.billing_webhook_events;
 DROP TABLE IF EXISTS ernasa_control.billing_audit;
+DROP TABLE IF EXISTS ernasa_control.billing_checkout_requests;
 DROP TABLE IF EXISTS ernasa_control.billing_checkouts;
+DROP TABLE IF EXISTS ernasa_control.billing_payment_requests;

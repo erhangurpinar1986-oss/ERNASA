@@ -48,3 +48,23 @@ def fetch_usd_selling_rate(expected_on: date) -> ExchangeRate:
     except (URLError, TimeoutError, OSError):
         raise RateUnavailable("TCMB kur kaynağına erişilemedi.") from None
     return parse_usd_selling_rate(payload, expected_on)
+
+
+def fetch_latest_usd_selling_rate(today: date, max_age_days: int = 4) -> ExchangeRate:
+    """Latest published TCMB indicative rate (weekends/holidays keep the previous bulletin).
+
+    Refuses bulletins older than max_age_days instead of silently using a stale rate."""
+    try:
+        with urlopen(SOURCE, timeout=5) as response:
+            payload = response.read(MAX_BYTES + 1)
+    except (URLError, TimeoutError, OSError):
+        raise RateUnavailable("TCMB kur kaynağına erişilemedi.") from None
+    if len(payload) > MAX_BYTES or b"<!DOCTYPE" in payload:
+        raise RateUnavailable("TCMB kur yanıtı geçersiz.")
+    try:
+        published = datetime.strptime(ElementTree.fromstring(payload).attrib["Tarih"], "%d.%m.%Y").date()
+    except (ElementTree.ParseError, KeyError, ValueError):
+        raise RateUnavailable("TCMB kur yanıtı geçersiz.") from None
+    if not 0 <= (today - published).days <= max_age_days:
+        raise RateUnavailable("Güncel TCMB kuru bulunamadı; ödeme başlatılamaz.")
+    return parse_usd_selling_rate(payload, published)

@@ -8,11 +8,32 @@ CREATE TABLE IF NOT EXISTS ernasa_control.billing_checkouts (
     provider TEXT NOT NULL CHECK (provider IN ('shopier_hr', 'bank_transfer')),
     -- Single-use provider product issued for this checkout only (binds order -> checkout).
     provider_product_id TEXT UNIQUE,
+    provider_url TEXT,
     payment_reference TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL CHECK (status IN ('pending', 'paid', 'failed', 'expired', 'cancelled', 'refunded')),
     created_at BIGINT NOT NULL,
     CHECK (provider <> 'shopier_hr' OR provider_product_id IS NOT NULL)
 );
+
+-- A payment request is what a representative (or CONTROL) sends to the customer.
+-- The price is NOT fixed here; a fresh 15-minute quote is issued when the customer starts payment.
+CREATE TABLE IF NOT EXISTS ernasa_control.billing_payment_requests (
+    ref TEXT PRIMARY KEY,
+    company_id BIGINT NOT NULL REFERENCES ernasa_control.companies(id),
+    product TEXT NOT NULL CHECK (product IN ('hr_flow', 'education')),
+    plan_name TEXT NOT NULL,
+    period_start DATE NOT NULL,
+    proposal_id TEXT,
+    owner_id TEXT,
+    created_by TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    CHECK ((proposal_id IS NULL) = (owner_id IS NULL))
+);
+CREATE TABLE IF NOT EXISTS ernasa_control.billing_checkout_requests (
+    checkout_id TEXT PRIMARY KEY REFERENCES ernasa_control.billing_checkouts(id),
+    request_ref TEXT NOT NULL REFERENCES ernasa_control.billing_payment_requests(ref)
+);
+CREATE INDEX IF NOT EXISTS billing_checkout_requests_ref_idx ON ernasa_control.billing_checkout_requests(request_ref);
 
 CREATE TABLE IF NOT EXISTS ernasa_control.billing_provider_orders (
     provider TEXT NOT NULL CHECK (provider IN ('shopier_hr', 'bank_transfer')),
