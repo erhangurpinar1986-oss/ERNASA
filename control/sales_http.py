@@ -30,7 +30,7 @@ FOUNDER_TABS = (
     ('accounts','Temsilciler'), ('claims','Sahiplik incelemeleri'),
     ('customers','Müşteriler'), ('opportunities','Satış fırsatları'),
     ('proposals','Teklif kararları'), ('tasks','Görevler'),
-    ('finance','Tahsilat ve komisyon'), ('audit','Denetim kayıtları'),
+    ('finance','Tahsilat ve komisyon'), ('catalog','Ürünler ve fiyatlar'), ('audit','Denetim kayıtları'),
 )
 
 
@@ -251,7 +251,7 @@ def render(c, h, title, content, identity=None, status=200, headers=(), tab='ove
             return h.page(title, content, info, status=status, path='/satis')
         links = (('overview','Ana sayfa'),('customers','Müşterilerim'),('opportunities','Fırsatlarım'),
                  ('proposals','Tekliflerim ve kararlar'),('tasks','Görevlerim'),('finance','Komisyonlarım'),
-                 ('resources','Satış kaynakları'),('profile','Profil ve güvenlik'))
+                 ('catalog','Ürünler ve fiyatlar'),('resources','Satış kaynakları'),('profile','Profil ve güvenlik'))
         menu = '<nav aria-label="Satış menüsü">'+''.join(
             f'<a href="/sales?tab={key}"'+(' aria-current="page"' if key==tab else '')+
             f'>{c.icon("/")}{label}</a>' for key,label in links)+'</nav>'
@@ -382,6 +382,14 @@ def content(c, db, identity, tab):
                 out += c.card('Kârlılık özeti',f'<p>Net tahsilat: {money(sum(r["net_minor"] for r in data["collections"]))} · Sağlayıcı maliyeti: {money(sum(r["cost_minor"] for r in data["collections"]))}</p><p>İade/iptal incelemesindeki kayıtlar ayrıca değerlendirilmelidir. Sağlayıcı maliyeti temsilci matrahından düşülmez.</p>')
         if section == 'audit':
             out += c.card('Silme ve güncellemeye kapalı satış denetimi',sales_table(c,'Henüz görüntülenecek satış denetim kaydı bulunmuyor.',('Tarih','İşlemi yapan','İşlem','Hedef','Açıklama'),[[c.e(local_date(r['stamp'])),record_code(c,r['actor_id'],'YNT'),c.e(r['event']),record_code(c,r['target'],'KYT'),c.e(r['detail'])] for r in data['audit']]))
+        if section == 'catalog':
+            plans = ('Starter', 'Growth', 'Business', 'PRO')
+            hr = [('99,99',100,2,1),('349,99',500,10,3),('499,99',1000,20,5),('999,99',2500,50,15)]
+            education = [('75',10),('150',50),('300',100),('500',250)]
+            out += c.card('ERNASA HR FLOW', '<p>ATS ve AI mülakat tek ürün; bir aday süreci bir işlem hakkıdır.</p>'+c.table(('Paket','USD / ay','Aylık aday','Aktif pozisyon','İK hesabı'),[[name,price,str(capacity),str(positions),str(users)] for name,(price,capacity,positions,users) in zip(plans,hr)]))
+            out += c.card('ERNASA Eğitim Platformu', '<p>Ayrı abonelik. Eğitim atama, ilerleme takibi, bilgi ölçme ve izinli sesli/görüntülü sunum. AI eğitim raporu geliştirme ve kabul testi sonrasında sunulur.</p>'+c.table(('Paket','USD / ay','Aylık eğitim katılımcısı'),[[name,price,str(capacity)] for name,(price,capacity) in zip(plans,education)]))
+            out += c.card('Kuruma özel eğitim içeriği', c.table(('Hizmet','Konu başına (TL)'),[['Hazır dokümandan eğitim','750'],['Özgün eğitim ve sınav','1.750'],['İleri teknik / mesleki eğitim','3.500'],['Özel video / animasyon','Özel teklif']]))
+            out += c.card('Fiyat koşulları','<p>Fiyatlar KDV hariçtir. Türkiye sözleşme, fatura ve tahsilatları TL ile yapılır. Sabit kur kampanyası yoktur. Güncel kur ve TL tutarı resmi teklif aşamasında CONTROL tarafından doğrulanır. Liste fiyatı resmi teklif değildir; indirim ve teklif onayı CONTROL yetkisindedir.</p>')
         if section == 'resources':
             out += c.card('Yetki ve komisyon rehberi','<p>Yeni müşterinin ilk ürün aboneliği: ilk tahsil edilmiş dönem %25; aynı aboneliğin devamı %5. Paket yükseltme ve mevcut müşteriye ek ürün %0. Özel projede maliyet/kâr analizi ve açık CONTROL kararı gerekir.</p><p>Resmi fiyat, indirim ve taahhüt için onaylı teklif kullanın. Tahsilat yoksa hak ediş yoktur. Ödeme takvimi sonraki ayın 1–15 günleridir ve CONTROL onayına bağlıdır.</p>')
         if section == 'profile':
@@ -480,7 +488,7 @@ def handle(h, path, post):
             elif path in ('/sales','/satis'):
                 default_tab = 'accounts' if actor.founder else 'overview'
                 tab = query.get('tab',[default_tab])[0]
-                allowed_tabs = tuple(key for key,_ in FOUNDER_TABS) if actor.founder else ('overview','customers','opportunities','proposals','tasks','finance','resources','profile')
+                allowed_tabs = tuple(key for key,_ in FOUNDER_TABS) if actor.founder else ('overview','customers','opportunities','proposals','tasks','finance','catalog','resources','profile')
                 if tab not in allowed_tabs:
                     sales.fail('Ekran bulunamadı.',404)
                 render(c,h,'Satış Yönetimi' if actor.founder else 'ERNASA Sales Hub',content(c,db,identity,tab),identity,tab=tab)
