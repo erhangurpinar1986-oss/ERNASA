@@ -1,0 +1,46 @@
+"""Approved monthly list prices and deterministic TRY quote calculation."""
+from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
+
+
+@dataclass(frozen=True)
+class Plan:
+    name: str
+    monthly_usd: Decimal
+    capacity: int
+    positions: int | None = None
+    hr_users: int | None = None
+
+
+HR_FLOW = (
+    Plan("Starter", Decimal("99.99"), 100, 2, 1),
+    Plan("Growth", Decimal("349.99"), 500, 10, 3),
+    Plan("Business", Decimal("499.99"), 1000, 20, 5),
+    Plan("PRO", Decimal("999.99"), 2500, 50, 15),
+)
+EDUCATION = (
+    Plan("Starter", Decimal("75"), 10),
+    Plan("Growth", Decimal("150"), 50),
+    Plan("Business", Decimal("300"), 100),
+    Plan("PRO", Decimal("500"), 250),
+)
+
+
+@dataclass(frozen=True)
+class QuoteAmounts:
+    net_minor: int
+    vat_minor: int
+    gross_minor: int
+
+
+def quote_amounts(plan: Plan, usd_try: Decimal, vat_rate: Decimal) -> QuoteAmounts:
+    """Convert an approved price using the caller's verified rate and VAT fraction."""
+    if not isinstance(usd_try, Decimal) or not usd_try.is_finite() or usd_try <= 0:
+        raise ValueError("Geçerli USD/TRY kuru gerekiyor.")
+    if not isinstance(vat_rate, Decimal) or not vat_rate.is_finite() or not 0 <= vat_rate <= 1:
+        raise ValueError("Geçerli KDV oranı gerekiyor.")
+    net = int((plan.monthly_usd * usd_try * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    if net < 1:
+        raise ValueError("Teklif tutarı en az bir kuruş olmalı.")
+    vat = int((net * vat_rate).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    return QuoteAmounts(net, vat, net + vat)

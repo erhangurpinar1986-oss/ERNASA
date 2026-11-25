@@ -11,6 +11,7 @@ import time
 from decimal import Decimal
 from urllib.parse import parse_qs, urlsplit
 
+from .billing_catalog import EDUCATION, HR_FLOW
 from . import sales
 
 LABELS = {
@@ -30,7 +31,7 @@ FOUNDER_TABS = (
     ('accounts','Temsilciler'), ('claims','Sahiplik incelemeleri'),
     ('customers','Müşteriler'), ('opportunities','Satış fırsatları'),
     ('proposals','Teklif kararları'), ('tasks','Görevler'),
-    ('finance','Tahsilat ve komisyon'), ('audit','Denetim kayıtları'),
+    ('finance','Tahsilat ve komisyon'), ('payments','Online ödemeler'), ('catalog','Ürünler ve fiyatlar'), ('audit','Denetim kayıtları'),
 )
 
 
@@ -179,9 +180,56 @@ def commands(c, db, actor, data):
         db.execute('DELETE FROM sales_sessions WHERE account_id=?', (actor.id,))
         sales.audit(db, actor, 'password_changed', actor.id)
         return {'detail': 'Parola değişti. Yeniden giriş yapın.'}
+    if action in ('payment_request', 'link_company', 'verify_order'):
+        return billing_command(c, db, actor, data, action)
     if action not in sales.COMMANDS:
         sales.fail('İşlem bulunamadı.', 404)
     return sales.COMMANDS[action](db, actor, data)
+
+
+def billing_command(c, db, actor, data, action):
+    from datetime import date as _date, datetime as _dt, timezone as _tz
+    from . import billing_payments as bp, shopier_hr
+    now = _dt.now(_tz.utc)
+    if action == 'payment_request':
+        product = sales.text(data, 'product', 20)
+        if product not in ('hr_flow', 'education'):
+            sales.fail('Ürün seçin.', 422)
+        try:
+            start = _date.fromisoformat(sales.text(data, 'period_start', 10))
+        except ValueError:
+            sales.fail('Geçersiz dönem başlangıcı.', 422)
+        if start < sales.business_today():
+            sales.fail('Dönem başlangıcı geçmiş tarih olamaz.', 422)
+        proposal = data.get('proposal_id') or None
+        company = None if proposal else sales.integer(data, 'company_id', 1, 10**12)
+        ref = bp.create_payment_request(db, actor=actor, proposal_id=proposal, company_id=company, product=product,
+                                        plan_name=sales.text(data, 'plan_name', 20), period_start=start, now=now)
+        return {'ref': ref, 'url': c_public_url(ref)}
+    sales.admin(actor)
+    if action == 'link_company':
+        customer = sales.owned(db, actor, 'customers', sales.text(data, 'customer_id', 32))
+        tenant = sales.integer(data, 'company_id', 1, 10**12)
+        c.company(db, tenant)
+        db.execute('INSERT INTO sales_customer_companies VALUES(?,?,?,?)',
+                   (customer['id'], tenant, int(actor.id), int(now.timestamp())))
+        sales.audit(db, actor, 'customer_company_linked', customer['id'], f'company_id={tenant}')
+        return {'id': customer['id']}
+    # verify_order: CONTROL reconciliation when a webhook was missed. Same server-side checks.
+    order_id = sales.text(data, 'order_id', 80)
+    try:
+        result = bp.activate_from_order(db, order_id=order_id, fetch=shopier_hr.fetch_order,
+                                        contract=bp.OFFICIAL_CONTRACT, now=now, actor='founder:'+str(actor.id))
+    except (bp.PaymentRejected, shopier_hr.ShopierError) as exc:
+        sales.fail(f'Sipariş doğrulanmadı: {exc}', 409)
+    sales.audit(db, actor, 'order_verified_manually', order_id, result)
+    return {'detail': 'Sipariş doğrulandı ve abonelik etkinleştirildi.' if result == 'activated'
+            else 'Bu sipariş daha önce işlenmiş.'}
+
+
+def c_public_url(ref):
+    import os
+    return os.environ.get('ERNASA_CONTROL_PUBLIC_ORIGIN', '') + '/control/odeme/' + ref
 
 
 def current(c, h, db):
@@ -250,8 +298,8 @@ def render(c, h, title, content, identity=None, status=200, headers=(), tab='ove
                 info['routes']=info['routes']-{'/aday-deneyimi'}
             return h.page(title, content, info, status=status, path='/satis')
         links = (('overview','Ana sayfa'),('customers','Müşterilerim'),('opportunities','Fırsatlarım'),
-                 ('proposals','Tekliflerim ve kararlar'),('tasks','Görevlerim'),('finance','Komisyonlarım'),
-                 ('resources','Satış kaynakları'),('profile','Profil ve güvenlik'))
+                 ('proposals','Tekliflerim ve kararlar'),('tasks','Görevlerim'),('finance','Komisyonlarım'),('payments','Ödeme bağlantıları'),
+                 ('catalog','Ürünler ve fiyatlar'),('resources','Satış kaynakları'),('profile','Profil ve güvenlik'))
         menu = '<nav aria-label="Satış menüsü">'+''.join(
             f'<a href="/sales?tab={key}"'+(' aria-current="page"' if key==tab else '')+
             f'>{c.icon("/")}{label}</a>' for key,label in links)+'</nav>'
@@ -275,6 +323,55 @@ def overview(c, data):
                ('Değerlendirmede',sum(p['status']=='submitted' for p in data['proposals'])),
                ('Bekleyen hak ediş',money(sum(m['amount_minor'] for m in data['commissions'] if m['status'] in ('pending','approved'))))]
     return '<div class="stats metrics">'+''.join(c.card(label,f'<strong>{c.e(str(value))}</strong>') for label,value in metrics)+'</div>'
+
+
+PAYMENT_STATUS = {'awaiting_payment':'Ödeme bekleniyor','pending':'Ödeme bekleniyor','paid':'Ödendi','refunded':'İade edildi'}
+SUB_STATUS = {'active':'Aktif','renewal_due':'Yenileme bekleniyor','expired':'Süresi doldu','suspended':'Askıda',
+              'cancelled':'İptal edildi','refunded':'İade edildi','awaiting_payment':'Ödeme bekleniyor'}
+COMMISSION_STATUS = {'pending':'Onay bekliyor','approved':'Onaylandı','paid':'Ödendi','reversed':'Ters kayıt'}
+
+
+def payments_section(c, db, actor, data, f, inp, options):
+    from . import billing_payments as bp
+    from .billing_quotes import PLANS
+    plans = [(p.name, p.name) for p in PLANS['hr_flow']]
+    products = [('hr_flow','ERNASA HR FLOW'),('education','ERNASA Eğitim Platformu')]
+    common = (options('product','Ürün',products)+options('plan_name','Paket',plans)+
+              inp('period_start','Dönem başlangıcı','date'))
+    out = ''
+    try:
+        rows = bp.rep_sales(db, actor)
+    except Exception:
+        return c.card('Online ödemeler','<p role="status">Ödeme tabloları henüz kurulmadı (migration 005).</p>')
+    if actor.founder:
+        companies = db.execute('SELECT id,name FROM companies ORDER BY name').fetchall()
+        linked = {r[0] for r in db.execute('SELECT customer_id FROM sales_customer_companies').fetchall()}
+        unlinked = [(r['id'], r['name']) for r in data['customers'] if r['id'] not in linked and r['classification'] != 'unverified']
+        out += c.card('Müşteri – CONTROL firma eşleşmesi','<p>Temsilcinin ödeme bağlantısı oluşturabilmesi için müşterinin aboneliği alacak CONTROL firmasıyla eşleşmesi gerekir. Eşleşme sonradan değiştirilemez.</p>'+
+                      guided_form(c, bool(unlinked), f('link_company', options('customer_id','Satış müşterisi',unlinked)+options('company_id','CONTROL firması',[(r['id'],r['name']) for r in companies]),'Eşleştir'),
+                                  'Eşleşme bekleyen sınıflandırılmış müşteri yok.'))
+        out += c.card('Doğrudan satış ödeme bağlantısı','<p>Temsilcisiz satış; komisyon oluşmaz.</p>'+
+                      f('payment_request', options('company_id','Firma',[(r['id'],r['name']) for r in companies])+common,'Bağlantı oluştur'))
+        out += c.card('Shopier siparişini elle doğrula','<p>Webhook ulaşmadıysa Shopier sipariş numarasıyla aynı sunucu kontrolleri çalıştırılır.</p>'+
+                      f('verify_order', inp('order_id','Shopier sipariş numarası'),'Doğrula'))
+    else:
+        approved = [(r['id'], f"{r['brief'][:60]} · sürüm {r['version']}") for r in data['proposals'] if r['status']=='approved']
+        out += c.card('Müşteriye özel ödeme bağlantısı','<p>Yalnız CONTROL onaylı teklifleriniz için. Tutar, müşteri ödemeye başladığında güncel TCMB kuruyla hesaplanır ve 15 dakika sabitlenir.</p>'+
+                      guided_form(c, bool(approved), f('payment_request', options('proposal_id','Onaylı teklif',approved)+common,'Bağlantı oluştur'),
+                                  'Önce CONTROL onaylı bir teklif gerekir.', '/sales?tab=proposals', 'Tekliflerime git'))
+    money_or = lambda v: money(v) if v is not None else '—'
+    body = [[c.e(r['customer']), c.e({'hr_flow':'HR FLOW','education':'Eğitim'}[r['product']]), c.e(r['plan_name']),
+             c.e(local_date(datetime.fromtimestamp(r['sold_at'], timezone.utc).isoformat())), c.e(str(r['paid_on'] or '—')), money_or(r['gross_minor']),
+             money_or(r['basis_minor']), (f"%{r['rate']}" if r['rate'] is not None else '—'), money_or(r['commission_minor']),
+             c.e(r['commission_window'] or '—'),
+             c.e(PAYMENT_STATUS.get(r['payment_status'], r['payment_status'])+(' · iade incelemesi' if r['held'] else '')+
+                 (' / '+COMMISSION_STATUS[r['commission_status']] if r['commission_status'] else '')),
+             c.e(SUB_STATUS.get(r['subscription_status'] or '', '—')),
+             f'<a href="/odeme/{c.e(r["ref"])}">{c.e(r["ref"])}</a>'] for r in rows]
+    out += c.card('Satışlar, tahsilatlar ve komisyonlar' if actor.founder else 'Satışlarım ve komisyonlarım',
+                  sales_table(c,'Henüz ödeme bağlantısı yok.',('Müşteri','Ürün','Paket','Satış tarihi','Ödeme tarihi','Tahsilat (KDV dahil)',
+                              'Komisyon matrahı (KDV hariç)','Oran','Komisyon','Komisyon ödeme aralığı','Ödeme / komisyon','Abonelik','Bağlantı'),body))
+    return out
 
 
 def content(c, db, identity, tab):
@@ -382,6 +479,21 @@ def content(c, db, identity, tab):
                 out += c.card('Kârlılık özeti',f'<p>Net tahsilat: {money(sum(r["net_minor"] for r in data["collections"]))} · Sağlayıcı maliyeti: {money(sum(r["cost_minor"] for r in data["collections"]))}</p><p>İade/iptal incelemesindeki kayıtlar ayrıca değerlendirilmelidir. Sağlayıcı maliyeti temsilci matrahından düşülmez.</p>')
         if section == 'audit':
             out += c.card('Silme ve güncellemeye kapalı satış denetimi',sales_table(c,'Henüz görüntülenecek satış denetim kaydı bulunmuyor.',('Tarih','İşlemi yapan','İşlem','Hedef','Açıklama'),[[c.e(local_date(r['stamp'])),record_code(c,r['actor_id'],'YNT'),c.e(r['event']),record_code(c,r['target'],'KYT'),c.e(r['detail'])] for r in data['audit']]))
+        if section == 'payments':
+            out += payments_section(c, db, actor, data, f, inp, options)
+        if section == 'catalog':
+            hr_rows = [
+                [plan.name, str(plan.monthly_usd).replace('.', ','), str(plan.capacity),
+                 str(plan.positions), str(plan.hr_users)]
+                for plan in HR_FLOW
+            ]
+            education_rows = [
+                [plan.name, str(plan.monthly_usd), str(plan.capacity)] for plan in EDUCATION
+            ]
+            out += c.card('ERNASA HR FLOW', '<p>ATS ve AI mülakat tek ürün; bir aday süreci bir işlem hakkıdır.</p>'+c.table(('Paket','USD / ay','Aylık aday','Aktif pozisyon','İK hesabı'),hr_rows))
+            out += c.card('ERNASA Eğitim Platformu', '<p>Ayrı abonelik. Eğitim atama, ilerleme takibi, bilgi ölçme ve izinli sesli/görüntülü sunum. AI eğitim raporu geliştirme ve kabul testi sonrasında sunulur.</p>'+c.table(('Paket','USD / ay','Aylık eğitim katılımcısı'),education_rows))
+            out += c.card('Kuruma özel eğitim içeriği', c.table(('Hizmet','Konu başına (TL)'),[['Hazır dokümandan eğitim','750'],['Özgün eğitim ve sınav','1.750'],['İleri teknik / mesleki eğitim','3.500'],['Özel video / animasyon','Özel teklif']]))
+            out += c.card('Fiyat koşulları','<p>Fiyatlar KDV hariçtir. Türkiye sözleşme, fatura ve tahsilatları TL ile yapılır. Sabit kur kampanyası yoktur. Güncel kur ve TL tutarı resmi teklif aşamasında CONTROL tarafından doğrulanır. Liste fiyatı resmi teklif değildir; indirim ve teklif onayı CONTROL yetkisindedir.</p>')
         if section == 'resources':
             out += c.card('Yetki ve komisyon rehberi','<p>Yeni müşterinin ilk ürün aboneliği: ilk tahsil edilmiş dönem %25; aynı aboneliğin devamı %5. Paket yükseltme ve mevcut müşteriye ek ürün %0. Özel projede maliyet/kâr analizi ve açık CONTROL kararı gerekir.</p><p>Resmi fiyat, indirim ve taahhüt için onaylı teklif kullanın. Tahsilat yoksa hak ediş yoktur. Ödeme takvimi sonraki ayın 1–15 günleridir ve CONTROL onayına bağlıdır.</p>')
         if section == 'profile':
@@ -480,7 +592,7 @@ def handle(h, path, post):
             elif path in ('/sales','/satis'):
                 default_tab = 'accounts' if actor.founder else 'overview'
                 tab = query.get('tab',[default_tab])[0]
-                allowed_tabs = tuple(key for key,_ in FOUNDER_TABS) if actor.founder else ('overview','customers','opportunities','proposals','tasks','finance','resources','profile')
+                allowed_tabs = tuple(key for key,_ in FOUNDER_TABS) if actor.founder else ('overview','customers','opportunities','proposals','tasks','finance','payments','catalog','resources','profile')
                 if tab not in allowed_tabs:
                     sales.fail('Ekran bulunamadı.',404)
                 render(c,h,'Satış Yönetimi' if actor.founder else 'ERNASA Sales Hub',content(c,db,identity,tab),identity,tab=tab)
