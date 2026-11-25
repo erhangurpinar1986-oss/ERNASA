@@ -184,3 +184,30 @@ def test_payment_disabled_and_unknown_ref_and_cross_origin(env, monkeypatch):
     status, _, html = request(server, "GET", f"/odeme/{ref}")
     assert status == 200 and "henüz açılmadı" in html and "<form" not in html.split("ERNASA ödeme")[-1]
     assert not shop["products"]
+
+
+def test_founder_only_one_kurus_live_test_plan_with_rep_commission(env):
+    db, server, shop = env
+    prop = sale(db)
+    with pytest.raises(sales.Invalid):
+        cmd(db, REP, "payment_request", proposal_id=prop, product="education", plan_name="Ödeme Testi",
+            period_start="2099-01-01")
+    ref = cmd(db, FOUNDER, "payment_request", proposal_id=prop, company_id="2", product="education",
+              plan_name="Ödeme Testi", period_start="2099-01-01")["ref"]
+    status, _, html = request(server, "GET", f"/odeme/{ref}")
+    assert status == 200 and "0,01 TL" in html and "1 eğitim katılımcısı" in html
+    request(server, "POST", f"/odeme/{ref}", b"terms=1",
+            {"Content-Type": "application/x-www-form-urlencoded", "Origin": server.origin})
+    assert shop["products"] == {"P1": 1}
+    assert webhook(server, shop, "t1", "P1", 1, "wt1")[0] == 200
+    assert db.execute("SELECT capacity FROM billing_periods").fetchone()[0] == 1
+    m = db.execute("SELECT rate, amount_minor FROM sales_commissions").fetchone()
+    assert (m["rate"], m["amount_minor"]) == (25, 0)
+    assert db.execute("SELECT COUNT(*) FROM service_terms").fetchone()[0] == 0  # HR FLOW untouched
+    ref2 = cmd(db, FOUNDER, "payment_request", proposal_id="direct", company_id="2", product="education",
+               plan_name="Ödeme Testi", period_start="2099-02-01")["ref"]
+    assert ref2.startswith("ERN")
+    ident_f = (FOUNDER, "csrf", {"name": "Kurucu", "email": "f@example.test"})
+    assert "Canlı ödeme testi" in sales_http.content(app, db, ident_f, "payments")
+    ident_rep = (REP, "csrf", {"name": "Temsilci A", "email": "a@example.test"})
+    assert "Canlı ödeme testi" not in sales_http.content(app, db, ident_rep, "payments")

@@ -166,8 +166,8 @@ def activate_from_order(db, *, order_id, fetch, contract, now, actor="shopier_ve
                    (sub_id, checkout["company_id"], quote["product"], "active", stamp))
     else:
         sub_id = sub["id"]
-        if sub["status"] in ("refunded", "suspended"):
-            raise PaymentRejected("Abonelik inceleme durumunda; otomatik aktivasyon yapılmaz.")
+        if sub["status"] == "suspended":
+            raise PaymentRejected("Abonelik askıda; otomatik aktivasyon yapılmaz.")
         db.execute("UPDATE billing_subscriptions SET status='active' WHERE id=?", (sub_id,))
     db.execute("INSERT INTO billing_periods VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                (uuid4().hex, sub_id, quote["id"], checkout["id"], quote["period_start"], quote["period_end"],
@@ -256,9 +256,11 @@ def create_payment_request(db, *, actor, product, plan_name, period_start, now,
     Representatives cannot choose the paying company: it comes from the CONTROL-maintained
     customer link. Only the founder may create direct (commission-free) requests."""
     from . import sales
-    from .billing_quotes import PLANS
-    if not any(p.name == plan_name for p in PLANS.get(product, ())):
+    from .billing_quotes import TEST_PLAN, find_plan
+    if find_plan(product, plan_name, allow_test=actor.founder) is None:
         sales.fail("Paket bulunamadı.", 422)
+    if plan_name == TEST_PLAN.name and not actor.founder:
+        sales.fail("Test paketi yalnız CONTROL kurucusuna açıktır.", 403)
     owner = None
     if proposal_id:
         p = sales.owned(db, actor, "proposals", proposal_id)

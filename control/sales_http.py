@@ -202,6 +202,8 @@ def billing_command(c, db, actor, data, action):
         if start < sales.business_today():
             sales.fail('Dönem başlangıcı geçmiş tarih olamaz.', 422)
         proposal = data.get('proposal_id') or None
+        if proposal == 'direct':
+            proposal = None
         company = None if proposal else sales.integer(data, 'company_id', 1, 10**12)
         ref = bp.create_payment_request(db, actor=actor, proposal_id=proposal, company_id=company, product=product,
                                         plan_name=sales.text(data, 'plan_name', 20), period_start=start, now=now)
@@ -352,6 +354,12 @@ def payments_section(c, db, actor, data, f, inp, options):
                                   'Eşleşme bekleyen sınıflandırılmış müşteri yok.'))
         out += c.card('Doğrudan satış ödeme bağlantısı','<p>Temsilcisiz satış; komisyon oluşmaz.</p>'+
                       f('payment_request', options('company_id','Firma',[(r['id'],r['name']) for r in companies])+common,'Bağlantı oluştur'))
+        approved_all = [(r['id'], f"{r['brief'][:50]} · {r['owner_id']}") for r in data['proposals'] if r['status']=='approved']
+        out += c.card('Canlı ödeme testi (0,01 TL)','<p>Yalnız kurucu görür. Eğitim · 1 katılımcı · 0,01 TL. Temsilcinin onaylı teklifi seçilirse tahsilat ve komisyon kaydı da test edilir (komisyon tutarı 0 kuruş).</p>'+
+                      f('payment_request', '<input type="hidden" name="product" value="education"><input type="hidden" name="plan_name" value="Ödeme Testi">'+
+                        options('company_id','Firma (temsilci teklifi seçilmezse)',[(r['id'],r['name']) for r in companies])+
+                        options('proposal_id','Temsilci teklifi (isteğe bağlı)',[('direct','— doğrudan satış (komisyonsuz) —')]+approved_all)+
+                        inp('period_start','Dönem başlangıcı','date'),'Test bağlantısı oluştur'))
         out += c.card('Shopier siparişini elle doğrula','<p>Webhook ulaşmadıysa Shopier sipariş numarasıyla aynı sunucu kontrolleri çalıştırılır.</p>'+
                       f('verify_order', inp('order_id','Shopier sipariş numarası'),'Doğrula'))
     else:
