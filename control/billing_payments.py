@@ -143,7 +143,9 @@ def activate_from_order(db, *, order_id, fetch, contract, now, actor="shopier_ve
         raise PaymentRejected("Ürün bu sistemde verilmiş bir HR/Eğitim ödeme oturumuna ait değil.")
     if expected_company_id is not None and checkout["company_id"] != expected_company_id:
         raise PaymentRejected("Müşteri eşleşmesi hatalı.")
-    if checkout["status"] != "pending":
+    # 'expired' is accepted: the 15-minute window only limits starting a payment; a customer who
+    # completed Shopier checkout at the fixed amount must still be activated.
+    if checkout["status"] not in ("pending", "expired"):
         raise PaymentRejected("Ödeme oturumu beklemede değil: " + checkout["status"])
     quote = db.execute("SELECT * FROM billing_quotes WHERE id=? AND company_id=?",
                        (checkout["quote_id"], checkout["company_id"])).fetchone()
@@ -171,7 +173,7 @@ def activate_from_order(db, *, order_id, fetch, contract, now, actor="shopier_ve
                (uuid4().hex, sub_id, quote["id"], checkout["id"], quote["period_start"], quote["period_end"],
                 quote["plan_name"], quote["capacity"], quote["positions"], quote["hr_users"],
                 quote["net_minor"], quote["vat_minor"], stamp))
-    db.execute("UPDATE billing_checkouts SET status='paid' WHERE id=? AND status='pending'", (checkout["id"],))
+    db.execute("UPDATE billing_checkouts SET status='paid' WHERE id=? AND status IN ('pending','expired')", (checkout["id"],))
     _audit(db, actor, "payment_verified_activated", checkout["id"],
            f"order={order_id}; gross_minor={v.gross_minor}; period={quote['period_start']}", now)
     if quote["product"] == "hr_flow":
@@ -293,7 +295,7 @@ def request_view(db, ref):
     return row, checkouts
 
 
-def start_checkout(db, *, ref, rate, vat_rate, now, create_product, image_url):
+def start_checkout(db, *, ref, rate, vat_rate, now, create_product, image_url, delete_product=None):
     """Fix price+rate for 15 minutes and create the single-use Shopier payment link.
 
     Returns the Shopier product URL. Reuses a still-valid pending checkout for the same request.
@@ -308,6 +310,14 @@ def start_checkout(db, *, ref, rate, vat_rate, now, create_product, image_url):
     for c in checkouts:
         if c["status"] == "pending" and c["expires_at"] > at and c["provider_url"]:
             return c["provider_url"]
+    stale = [c for c in checkouts if c["status"] == "pending" and c["expires_at"] <= at]
+    for c in stale:
+        db.execute("UPDATE billing_checkouts SET status='expired' WHERE id=? AND status='pending'", (c["id"],))
+        if delete_product:
+            try:  # best effort: remove the outdated single-use listing from the shop
+                delete_product(c["provider_product_id"])
+            except Exception:
+                pass
     quote_id = issue_quote(db, company_id=req["company_id"], product=req["product"], plan_name=req["plan_name"],
                            period_start=_date(req["period_start"]), rate=rate, expected_rate_date=rate.published_on,
                            vat_rate=vat_rate, now=now)

@@ -90,3 +90,50 @@ def paid_try_order(order):
     return (isinstance(order, dict) and order.get("paymentStatus") == "paid"
             and order.get("currency") == "TRY" and order.get("refunds") == []
             and order.get("returns") == [])
+
+
+WEBHOOK_EVENTS = ("order.created", "refund.updated")
+
+
+def probe():
+    """Read-only connectivity/permission check: GET /products?limit=1. Returns nothing sensitive."""
+    products = _call("GET", "products?limit=1")
+    if not isinstance(products, list):
+        raise ShopierError("Shopier ürün listesi beklenen biçimde değil.")
+    return "ok"
+
+
+def ensure_webhooks(url):
+    """Subscribe order.created and refund.updated to `url` if not already (GET/POST /webhooks).
+
+    Only adds subscriptions for this exact URL; never deletes or edits others (e.g. ERNASA CV's).
+    The signing token is returned once by Shopier; it is not stored or logged here because every
+    notification is re-verified through the API anyway. Returns the list of events created."""
+    existing = _call("GET", "webhooks?limit=50")
+    if not isinstance(existing, list):
+        raise ShopierError("Shopier webhook listesi beklenen biçimde değil.")
+    have = {(w.get("event"), w.get("url")) for w in existing if isinstance(w, dict)}
+    created = []
+    for event in WEBHOOK_EVENTS:
+        if (event, url) not in have:
+            _call("POST", "webhooks", {"event": event, "url": url})
+            created.append(event)
+    return created
+
+
+def delete_product(product_id):
+    if not isinstance(product_id, str) or not re.fullmatch(r"[0-9A-Za-z_-]{1,80}", product_id):
+        raise ShopierError("Geçersiz ürün numarası.")
+    _call_no_body("DELETE", "products/" + product_id)
+
+
+def _call_no_body(method, path, timeout=4):
+    req = Request(BASE + path, method=method,
+                  headers={"Authorization": "Bearer " + _token(), "Accept": "application/json"})
+    try:
+        with urlopen(req, timeout=timeout) as response:
+            response.read(MAX_BYTES)
+    except HTTPError as exc:
+        raise ShopierError(f"Shopier isteği reddedildi (HTTP {exc.code}).") from None
+    except (URLError, TimeoutError, OSError):
+        raise ShopierError("Shopier'e ulaşılamadı.") from None

@@ -11,6 +11,7 @@ from decimal import Decimal
 import json
 import os
 import re
+import threading
 
 from . import billing_payments as bp, shopier_hr, tcmb_rates
 from .billing_catalog import quote_amounts
@@ -105,6 +106,7 @@ def webhook(c, h):
     raw = read_body(h)
     if not bp.signature_ok(raw, h.headers.get("Shopier-Signature", "")):
         return h.reply(200, b"ignored", "text/plain; charset=utf-8")
+    sold = None
     with closing(c.connect(h.server.db_path)) as db:
         try:
             db.execute("BEGIN IMMEDIATE")
@@ -115,8 +117,12 @@ def webhook(c, h):
                 db.execute("SAVEPOINT activation")
                 try:
                     if event == "order.created":
-                        bp.activate_from_order(db, order_id=order_id, fetch=shopier_hr.fetch_order,
-                                               contract=bp.OFFICIAL_CONTRACT, now=now())
+                        if bp.activate_from_order(db, order_id=order_id, fetch=shopier_hr.fetch_order,
+                                                  contract=bp.OFFICIAL_CONTRACT, now=now()) == "activated":
+                            sold = db.execute("""SELECT c.provider_product_id FROM billing_provider_orders o
+                                                 JOIN billing_checkouts c ON c.id=o.checkout_id
+                                                 WHERE o.provider=? AND o.provider_order_id=?""",
+                                              (bp.PROVIDER, order_id)).fetchone()
                     else:
                         bp.refund_from_order(db, order_id=order_id, fetch=shopier_hr.fetch_order, now=now())
                     db.execute("RELEASE SAVEPOINT activation")
@@ -126,6 +132,9 @@ def webhook(c, h):
                     db.execute("RELEASE SAVEPOINT activation")
                     bp._audit(db, "shopier_webhook", "payment_rejected", order_id, str(exc), now())
             db.commit()
+            if sold:
+                # Sold single-use listing is no longer needed in the shop; best effort, off the 5 s path.
+                threading.Thread(target=_quiet_delete, args=(sold[0],), daemon=True).start()
         except shopier_hr.ShopierError:
             # Transient provider problem: roll back the dedupe record so Shopier's retry is processed.
             _rollback(db)
@@ -134,6 +143,13 @@ def webhook(c, h):
             _rollback(db)
             raise
     h.reply(200, b"ok", "text/plain; charset=utf-8")
+
+
+def _quiet_delete(product_id):
+    try:
+        shopier_hr.delete_product(product_id)
+    except Exception:
+        pass
 
 
 def _rollback(db):
@@ -164,7 +180,8 @@ def handle(h, path, post):
                 db.execute("BEGIN IMMEDIATE")
                 rate = tcmb_rates.fetch_latest_usd_selling_rate(now().astimezone(ISTANBUL).date())
                 bp.start_checkout(db, ref=ref, rate=rate, vat_rate=VAT_RATE, now=now(),
-                                  create_product=shopier_hr.create_product, image_url=image_url(h))
+                                  create_product=shopier_hr.create_product, image_url=image_url(h),
+                                  delete_product=shopier_hr.delete_product)
                 db.commit()
                 return h.redirect(f"/odeme/{ref}")
             return page(c, h, db, ref)
