@@ -55,7 +55,7 @@ def test_migration_005_and_paid_order_activation_on_postgres(monkeypatch):
         fetch = lambda _id: order
         assert bp.activate_from_order(db, order_id="pg-o1", fetch=fetch, contract=bp.OFFICIAL_CONTRACT, now=now) == "activated"
         assert bp.activate_from_order(db, order_id="pg-o1", fetch=fetch, contract=bp.OFFICIAL_CONTRACT, now=now) == "already_processed"
-        period = db.execute("SELECT * FROM billing_periods p JOIN billing_subscriptions s ON s.id=p.subscription_id "
+        period = db.execute("SELECT p.* FROM billing_periods p JOIN billing_subscriptions s ON s.id=p.subscription_id "
                             "WHERE s.company_id=?", (company_id,)).fetchone()
         assert (period["capacity"], period["positions"], period["hr_users"]) == (1000, 20, 5)
         assert tuple(db.execute("SELECT package, starts, ends, status FROM subscriptions WHERE company_id=?",
