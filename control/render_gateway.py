@@ -13,6 +13,7 @@ from . import app, postgres, sales
 
 
 # These are strictly new sales tables; existing CONTROL, İK and Academy tables stay untouched.
+CONTROL_MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations" / "control_postgresql"
 SALES_TABLES = frozenset({
     "sales_accounts", "sales_sessions", "sales_customers",
     "sales_customer_identities", "sales_claims", "sales_opportunities",
@@ -47,8 +48,7 @@ def ensure_sales_schema(db):
                 )
             cursor.execute("SET LOCAL search_path = ernasa_control, pg_catalog")
             cursor.execute(sales.DDL)
-            migrations = Path(__file__).resolve().parents[1] / "migrations" / "control_postgresql"
-            cursor.execute((migrations / "003_sales_hub.up.sql").read_text(encoding="utf-8"))
+            cursor.execute((CONTROL_MIGRATIONS / "003_sales_hub.up.sql").read_text(encoding="utf-8"))
             cursor.execute(
                 "SELECT tablename FROM pg_catalog.pg_tables "
                 "WHERE schemaname='ernasa_control' AND tablename LIKE 'sales\\_%' ESCAPE '\\'"
@@ -56,6 +56,13 @@ def ensure_sales_schema(db):
             installed = {row[0] for row in cursor.fetchall()}
             if not SALES_TABLES.issubset(installed):
                 raise RuntimeError("Sales Hub tablo doğrulaması başarısız.")
+
+
+def ensure_billing_quote_schema(db):
+    """Install the additive checkout quote schema after the CONTROL sales schema."""
+    with db.raw, db.raw.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(184093, 47622)")
+        cursor.execute((CONTROL_MIGRATIONS / "004_billing_quotes.up.sql").read_text(encoding="utf-8"))
 
 
 @contextmanager
@@ -87,6 +94,7 @@ def start_control():
         db.execute("SELECT 1 FROM ik_interview_templates LIMIT 1").fetchone()
         if dsn:
             ensure_sales_schema(db)
+            ensure_billing_quote_schema(db)
 
     with app.server(target,0) as server:
         import candidate_experience
