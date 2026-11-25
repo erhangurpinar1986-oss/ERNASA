@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 
 BASE = "https://api.shopier.com/v1/"
 MAX_BYTES = 1024 * 1024
+USER_AGENT = "ERNASA-HR-Flow/1.0 (+https://ernasa.com)"
 
 
 class ShopierError(RuntimeError):
@@ -28,7 +29,7 @@ def _token():
 
 def _call(method, path, body=None, timeout=4):
     data = None if body is None else json.dumps(body).encode()
-    headers = {"Authorization": "Bearer " + _token(), "Accept": "application/json"}
+    headers = {"Authorization": "Bearer " + _token(), "Accept": "application/json", "User-Agent": USER_AGENT}
     if data is not None:
         headers["Content-Type"] = "application/json"
     req = Request(BASE + path, data=data, method=method, headers=headers)
@@ -36,7 +37,7 @@ def _call(method, path, body=None, timeout=4):
         with urlopen(req, timeout=timeout) as response:
             raw = response.read(MAX_BYTES + 1)
     except HTTPError as exc:
-        raise ShopierError(f"Shopier isteği reddedildi (HTTP {exc.code}).") from None
+        raise ShopierError(f"Shopier isteği reddedildi (HTTP {exc.code}{_why(exc)}).") from None
     except (URLError, TimeoutError, OSError):
         raise ShopierError("Shopier'e ulaşılamadı.") from None
     if len(raw) > MAX_BYTES:
@@ -45,6 +46,24 @@ def _call(method, path, body=None, timeout=4):
         return json.loads(raw)
     except ValueError:
         raise ShopierError("Shopier yanıtı okunamadı.") from None
+
+
+def _why(exc):
+    """Short, secret-free reason: Shopier's JSON error code/message, or the edge server name."""
+    try:
+        body = exc.read(2048)
+        server = (exc.headers.get("Server") or "")[:20]
+    except Exception:
+        return ""
+    try:
+        err = json.loads(body)
+        if isinstance(err, dict):
+            parts = [str(err.get(k))[:80] for k in ("error", "code", "message", "error_description") if err.get(k)]
+            if parts:
+                return "; " + " / ".join(parts)
+    except ValueError:
+        pass
+    return f"; server={server}" if server else ""
 
 
 def fetch_order(order_id):
@@ -129,7 +148,7 @@ def delete_product(product_id):
 
 def _call_no_body(method, path, timeout=4):
     req = Request(BASE + path, method=method,
-                  headers={"Authorization": "Bearer " + _token(), "Accept": "application/json"})
+                  headers={"Authorization": "Bearer " + _token(), "Accept": "application/json", "User-Agent": USER_AGENT})
     try:
         with urlopen(req, timeout=timeout) as response:
             response.read(MAX_BYTES)
