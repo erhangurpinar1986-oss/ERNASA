@@ -21,6 +21,8 @@ import os
 import re
 from uuid import uuid4
 
+from .ik_bridge import ISTANBUL
+
 
 class PaymentRejected(RuntimeError):
     """Order must not activate anything. Message is safe to log (no secrets/PII)."""
@@ -171,7 +173,99 @@ def activate_from_order(db, *, order_id, fetch, contract, now, actor="shopier_ve
     db.execute("UPDATE billing_checkouts SET status='paid' WHERE id=? AND status='pending'", (checkout["id"],))
     _audit(db, actor, "payment_verified_activated", checkout["id"],
            f"order={order_id}; gross_minor={v.gross_minor}; period={quote['period_start']}", now)
+    _book_sales(db, checkout, quote, order_id, now, actor)
     return "activated"
+
+
+def _book_sales(db, checkout, quote, order_id, now, actor):
+    """Book the collection + automatic commission for representative-linked checkouts.
+
+    Runs in a savepoint: if a sales rule blocks automatic booking, the subscription stays
+    active (customer paid) and the case is queued for CONTROL review instead."""
+    from . import sales
+    link = db.execute("SELECT * FROM billing_checkout_sales WHERE checkout_id=?", (checkout["id"],)).fetchone()
+    if link is None:
+        return None  # direct sale: no representative, no commission
+    founder = db.execute("SELECT id FROM users WHERE role='founder' AND active=1").fetchone()
+    db.execute("SAVEPOINT sales_booking")
+    try:
+        if founder is None:
+            sales.fail("Aktif CONTROL kurucusu yok.")
+        collection_id, _ = sales.book_verified_payment(
+            db, proposal_id=link["proposal_id"], net_minor=int(quote["net_minor"]),
+            reference="shopier_hr:" + order_id, collected_on=now.astimezone(ISTANBUL).date().isoformat(),
+            verifier_user_id=founder["id"])
+        db.execute("UPDATE billing_checkout_sales SET sales_collection_id=? WHERE checkout_id=?",
+                   (collection_id, checkout["id"]))
+        db.execute("RELEASE SAVEPOINT sales_booking")
+        return collection_id
+    except sales.Invalid as exc:
+        db.execute("ROLLBACK TO SAVEPOINT sales_booking")
+        db.execute("RELEASE SAVEPOINT sales_booking")
+        _audit(db, actor, "sales_review_required", checkout["id"], str(exc), now)
+        return None
+
+
+def create_rep_checkout(db, *, actor, proposal_id, product, plan_name, period_start, rate,
+                        expected_rate_date, vat_rate, provider_product_id, now):
+    """Representative-specific payment session bound to customer + approved proposal.
+
+    The representative may only use their own approved proposal; the paying CONTROL
+    company comes from the CONTROL-maintained customer link, never from the rep."""
+    from . import sales
+    from .billing_quotes import issue_quote
+    p = sales.owned(db, actor, "proposals", proposal_id)
+    if p["status"] != "approved":
+        sales.fail("Ödeme bağlantısı yalnız CONTROL onaylı teklif için oluşturulabilir.")
+    op = db.execute("SELECT * FROM sales_opportunities WHERE id=?", (p["opportunity_id"],)).fetchone()
+    link = db.execute("SELECT company_id FROM sales_customer_companies WHERE customer_id=?",
+                      (op["customer_id"],)).fetchone()
+    if link is None:
+        sales.fail("Müşterinin CONTROL firma eşleşmesi yapılmamış.")
+    quote_id = issue_quote(db, company_id=link["company_id"], product=product, plan_name=plan_name,
+                           period_start=period_start, rate=rate, expected_rate_date=expected_rate_date,
+                           vat_rate=vat_rate, now=now)
+    checkout_id = uuid4().hex
+    db.execute("INSERT INTO billing_checkouts VALUES(?,?,?,?,?,?,?,?)",
+               (checkout_id, quote_id, link["company_id"], PROVIDER, provider_product_id,
+                "ERN-" + checkout_id[:16].upper(), "pending", int(now.timestamp())))
+    db.execute("INSERT INTO billing_checkout_sales VALUES(?,?,?,?)",
+               (checkout_id, p["id"], p["owner_id"], None))
+    _audit(db, actor.id, "rep_checkout_created", checkout_id, f"proposal={p['id']}; plan={product}/{plan_name}", now)
+    return checkout_id
+
+
+def rep_sales(db, actor):
+    """Rows for the representative panel (own records only) or CONTROL (all)."""
+    sql = """SELECT cu.name AS customer, q.product, q.plan_name, ch.created_at AS sold_at,
+                    col.collected_on AS paid_on, q.gross_minor, col.net_minor AS basis_minor,
+                    m.rate, m.amount_minor AS commission_minor, m.status AS commission_status,
+                    ch.status AS payment_status, s.status AS subscription_status, ch.id AS checkout_id,
+                    cs.owner_id
+             FROM billing_checkout_sales cs
+             JOIN billing_checkouts ch ON ch.id=cs.checkout_id
+             JOIN billing_quotes q ON q.id=ch.quote_id
+             JOIN sales_proposals p ON p.id=cs.proposal_id
+             JOIN sales_opportunities o ON o.id=p.opportunity_id
+             JOIN sales_customers cu ON cu.id=o.customer_id
+             LEFT JOIN sales_collections col ON col.id=cs.sales_collection_id
+             LEFT JOIN sales_commissions m ON m.collection_id=col.id
+             LEFT JOIN billing_subscriptions s ON s.company_id=ch.company_id AND s.product=q.product"""
+    params = ()
+    if not actor.founder:
+        sql += " WHERE cs.owner_id=? AND p.company_id=?"
+        params = (actor.id, actor.company_id)
+    out = []
+    from . import sales
+    for r in db.execute(sql + " ORDER BY ch.created_at DESC", params).fetchall():
+        row = dict(r)
+        if row["paid_on"]:
+            start, end = sales.payment_window(row["paid_on"])
+            row["commission_window"] = f"{start.isoformat()} – {end.isoformat()}"
+        else:
+            row["commission_window"] = None
+        out.append(row)
+    return out
 
 
 def record_webhook(db, *, raw_body: bytes, now):
@@ -228,4 +322,9 @@ def mark_refunded(db, *, order_id, actor, reason, now):
         raise PaymentRejected("Doğrulanmış sipariş bulunamadı.")
     db.execute("UPDATE billing_checkouts SET status='refunded' WHERE id=?", (row["checkout_id"],))
     db.execute("UPDATE billing_subscriptions SET status='refunded' WHERE id=?", (row["subscription_id"],))
+    link = db.execute("SELECT sales_collection_id FROM billing_checkout_sales WHERE checkout_id=?",
+                      (row["checkout_id"],)).fetchone()
+    if link and link["sales_collection_id"]:
+        # Commission goes into refund review; CONTROL then posts the reversing entry (sales.reverse).
+        db.execute("UPDATE sales_collections SET held=1 WHERE id=?", (link["sales_collection_id"],))
     _audit(db, actor, "payment_refunded", row["checkout_id"], reason, now)

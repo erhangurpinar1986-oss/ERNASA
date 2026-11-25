@@ -88,3 +88,18 @@ FOR EACH ROW EXECUTE FUNCTION ernasa_control.sales_reject_history_mutation();
 CREATE OR REPLACE TRIGGER billing_audit_immutable
 BEFORE UPDATE OR DELETE ON ernasa_control.billing_audit
 FOR EACH ROW EXECUTE FUNCTION ernasa_control.sales_reject_history_mutation();
+
+-- Sales Hub link: which approved proposal / representative a checkout belongs to.
+-- Direct sales have no row here and therefore never create commission.
+CREATE TABLE IF NOT EXISTS ernasa_control.sales_customer_companies (
+    customer_id TEXT PRIMARY KEY REFERENCES ernasa_control.sales_customers(id),
+    company_id BIGINT NOT NULL UNIQUE REFERENCES ernasa_control.companies(id),
+    linked_by BIGINT NOT NULL REFERENCES ernasa_control.users(id),
+    linked_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ernasa_control.billing_checkout_sales (
+    checkout_id TEXT PRIMARY KEY REFERENCES ernasa_control.billing_checkouts(id),
+    proposal_id TEXT NOT NULL REFERENCES ernasa_control.sales_proposals(id),
+    owner_id TEXT NOT NULL,
+    sales_collection_id TEXT UNIQUE REFERENCES ernasa_control.sales_collections(id)
+);

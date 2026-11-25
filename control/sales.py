@@ -249,12 +249,21 @@ def collection(db, actor, data):
     if collected > business_today():
         fail('Gelecek tarihli tahsilat doğrulanamaz.', 422)
     period = integer(data, 'period', 1, 12000)
+    target, rate = _book(db, p, op, c, period, text(data, 'reference', 120), amount,
+                         integer(data, 'cost_minor'), collected.isoformat(), actor.id, text(data, 'reason'))
+    audit(db, actor, 'collection_verified', target, f'net_minor={amount}; rate={rate}')
+    return {'id': target}
+
+
+def _book(db, p, op, c, period, reference, amount, cost, collected_on, verified_by, reason):
+    """Shared booking + automatic commission rules (manual CONTROL entry and verified Shopier payment)."""
     sub_id, rate = None, 0
     if op['kind'] != 'project':
         sub = db.execute('SELECT * FROM sales_subscriptions WHERE opportunity_id=?', (op['id'],)).fetchone()
         if sub is None:
             if period != 1:
                 fail('İlk tahsilat dönemi 1 olmalı.')
+            # %25 only for a NEW customer's first product subscription; upgrade/addon/existing => 0.
             eligible = int(c['classification'] == 'new' and op['kind'] == 'subscription' and not db.execute(
                 'SELECT 1 FROM sales_collections x JOIN sales_proposals p ON p.id=x.proposal_id JOIN sales_opportunities o ON o.id=p.opportunity_id WHERE o.customer_id=?', (c['id'],)).fetchone())
             sub_id = uid()
@@ -271,14 +280,39 @@ def collection(db, actor, data):
         fail('Tek seferlik proje dönemi 1 olmalı.', 422)
     target = uid()
     db.execute('INSERT INTO sales_collections(id,proposal_id,subscription_id,period,reference,net_minor,cost_minor,collected_on,verified_by,reason) VALUES(?,?,?,?,?,?,?,?,?,?)',
-               (target, p['id'], sub_id, period, text(data, 'reference', 120), amount, integer(data, 'cost_minor'),
-                collected.isoformat(), actor.id, text(data, 'reason')))
+               (target, p['id'], sub_id, period, reference, amount, cost, collected_on, verified_by, reason))
     # Projects deliberately have no automatic accrual.
     if op['kind'] != 'project':
         db.execute('INSERT INTO sales_commissions(id,collection_id,amount_minor,rate,status) VALUES(?,?,?,?,?)',
                    (uid(), target, (amount*rate+50)//100, rate, 'pending'))
-    audit(db, actor, 'collection_verified', target, f'net_minor={amount}; rate={rate}')
-    return {'id': target}
+    return target, rate
+
+
+def next_period(db, opportunity_id):
+    sub = db.execute('SELECT id FROM sales_subscriptions WHERE opportunity_id=?', (opportunity_id,)).fetchone()
+    if sub is None:
+        return 1
+    return (db.execute('SELECT MAX(period) FROM sales_collections WHERE subscription_id=?', (sub['id'],)).fetchone()[0] or 0) + 1
+
+
+def book_verified_payment(db, *, proposal_id, net_minor, reference, collected_on, verifier_user_id):
+    """Called inside the payment-activation transaction after Shopier verification.
+    Basis is the VAT-exclusive amount actually collected; Shopier fees are never deducted."""
+    p = db.execute('SELECT * FROM sales_proposals WHERE id=?', (proposal_id,)).fetchone()
+    if p is None or p['status'] != 'approved':
+        fail('Onaylı teklif yok; tahsilat CONTROL incelemesine alındı.')
+    op = db.execute('SELECT * FROM sales_opportunities WHERE id=?', (p['opportunity_id'],)).fetchone()
+    c = db.execute('SELECT * FROM sales_customers WHERE id=?', (op['customer_id'],)).fetchone()
+    if c['classification'] == 'unverified':
+        fail('Müşteri sınıflandırması bekliyor; tahsilat CONTROL incelemesine alındı.')
+    if op['kind'] == 'project':
+        fail('Proje satışları otomatik komisyona girmez.')
+    target, rate = _book(db, p, op, c, next_period(db, op['id']), reference, net_minor, 0,
+                         collected_on, verifier_user_id, 'Shopier API ile doğrulanmış otomatik tahsilat')
+    db.execute('INSERT INTO sales_audit VALUES(?,?,?,?,?,?,?)',
+               (uid(), p['company_id'], 'shopier_verifier', 'collection_verified', target,
+                f'net_minor={net_minor}; rate={rate}; ref={reference}', stamp()))
+    return target, rate
 
 
 def project_commission(db, actor, data):
