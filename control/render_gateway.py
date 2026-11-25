@@ -58,6 +58,14 @@ def ensure_sales_schema(db):
                 raise RuntimeError("Sales Hub tablo doğrulaması başarısız.")
 
 
+def ensure_billing_payment_schema(db):
+    """Install additive payment/subscription tables (005). Activation stays disabled until
+    HR_PAYMENTS_ENABLED=1 and the Shopier order contract is confirmed."""
+    with db.raw, db.raw.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(184093, 47622)")
+        cursor.execute((CONTROL_MIGRATIONS / "005_billing_payments.up.sql").read_text(encoding="utf-8"))
+
+
 def ensure_billing_quote_schema(db):
     """Install the additive checkout quote schema after the CONTROL sales schema."""
     with db.raw, db.raw.cursor() as cursor:
@@ -95,6 +103,7 @@ def start_control():
         if dsn:
             ensure_sales_schema(db)
             ensure_billing_quote_schema(db)
+            ensure_billing_payment_schema(db)
 
     with app.server(target,0) as server:
         import candidate_experience
