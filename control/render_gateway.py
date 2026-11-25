@@ -1,5 +1,6 @@
 """Bind CONTROL to an explicit HTTPS host without duplicating production records."""
 import os
+import threading
 import sqlite3
 from contextlib import closing, contextmanager
 from pathlib import Path
@@ -58,6 +59,25 @@ def ensure_sales_schema(db):
                 raise RuntimeError("Sales Hub tablo doğrulaması başarısız.")
 
 
+def shopier_startup_check(origin):
+    """Log (without secrets) whether the HR Shopier token works; when online payment is enabled,
+    make sure the order/refund webhooks point at this deployment."""
+    from . import shopier_hr
+    if not os.getenv("SHOPIER_HR_API_TOKEN"):
+        print("SHOPIER_HR_API_CHECK status=missing_token", flush=True)
+        return
+    try:
+        shopier_hr.probe()
+        print("SHOPIER_HR_API_CHECK status=ok", flush=True)
+        if os.getenv("HR_PAYMENTS_ENABLED") == "1":
+            created = shopier_hr.ensure_webhooks(origin.rstrip("/") + "/control/odeme/shopier/webhook")
+            print("SHOPIER_HR_WEBHOOKS status=ok created=" + (",".join(created) or "none"), flush=True)
+        else:
+            print("SHOPIER_HR_PAYMENTS status=disabled", flush=True)
+    except shopier_hr.ShopierError as exc:
+        print("SHOPIER_HR_API_CHECK status=error detail=" + str(exc), flush=True)
+
+
 def ensure_billing_payment_schema(db):
     """Install additive payment/subscription tables (005). Activation stays disabled until
     HR_PAYMENTS_ENABLED=1 and the Shopier order contract is confirmed."""
@@ -104,6 +124,9 @@ def start_control():
             ensure_sales_schema(db)
             ensure_billing_quote_schema(db)
             ensure_billing_payment_schema(db)
+
+    if dsn:
+        threading.Thread(target=shopier_startup_check, args=(origin,), daemon=True).start()
 
     with app.server(target,0) as server:
         import candidate_experience

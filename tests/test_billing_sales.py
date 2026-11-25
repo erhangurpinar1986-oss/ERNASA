@@ -184,3 +184,41 @@ def test_refund_holds_commission_and_allows_reversal(db):
         sales.commission_action(db, FOUNDER, {"id": cid, "decision": "approved", "reason": "x"})
     sales.reverse(db, FOUNDER, {"id": cid, "reason": "Shopier iadesi"})
     assert db.execute("SELECT status FROM sales_commissions").fetchone()[0] == "reversed"
+
+
+def test_expired_link_is_replaced_and_deleted_but_late_payment_still_activates(db):
+    from datetime import timedelta
+    _, _, prop = approved_proposal(db)
+    ref = bp.create_payment_request(db, actor=REP, proposal_id=prop, product="hr_flow", plan_name="Starter",
+                                    period_start=date(2026, 12, 1), now=NOW)
+    deleted = []
+    c1, _ = fake_shopier("P-OLD")
+    bp.start_checkout(db, ref=ref, rate=RATE, vat_rate=Decimal("0.20"), now=NOW, create_product=c1,
+                      image_url="https://x/l.png", delete_product=deleted.append)
+    later = NOW + timedelta(minutes=16)
+    c2, _ = fake_shopier("P-NEW")
+    url = bp.start_checkout(db, ref=ref, rate=RATE, vat_rate=Decimal("0.20"), now=later, create_product=c2,
+                            image_url="https://x/l.png", delete_product=deleted.append)
+    assert url.endswith("P-NEW") and deleted == ["P-OLD"]
+    old = db.execute("SELECT id, status FROM billing_checkouts WHERE provider_product_id='P-OLD'").fetchone()
+    assert old["status"] == "expired"
+    # Customer had already paid the old (fixed-price) link: money received -> activate, commission once
+    assert pay(db, old["id"], "late-1") == "activated"
+    new = db.execute("SELECT id FROM billing_checkouts WHERE provider_product_id='P-NEW'").fetchone()[0]
+    with pytest.raises(sqlite3.IntegrityError):  # same period cannot be paid twice
+        pay(db, new, "late-2")
+    assert db.execute("SELECT COUNT(*) FROM sales_commissions").fetchone()[0] == 1
+
+
+def test_ensure_webhooks_only_adds_missing_subscriptions(monkeypatch):
+    from control import shopier_hr
+    calls = []
+    def fake(method, path, body=None, timeout=4):
+        calls.append((method, path, body))
+        if method == "GET":
+            return [{"event": "order.created", "url": "https://ernasa.com/control/odeme/shopier/webhook"},
+                    {"event": "order.created", "url": "https://ernasa.com/cv/webhook"}]
+        return {"id": "w", "event": body["event"], "url": body["url"], "token": "secret"}
+    monkeypatch.setattr(shopier_hr, "_call", fake)
+    assert shopier_hr.ensure_webhooks("https://ernasa.com/control/odeme/shopier/webhook") == ["refund.updated"]
+    assert [c[0] for c in calls] == ["GET", "POST"] and "DELETE" not in str(calls)
