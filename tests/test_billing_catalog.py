@@ -6,10 +6,10 @@ from control.billing_catalog import EDUCATION, HR_FLOW, QuoteAmounts, quote_amou
 
 
 @pytest.mark.parametrize("plan, price, limits", [
-    (HR_FLOW[0], "99.99", (100, 2, 1)),
-    (HR_FLOW[1], "349.99", (500, 10, 3)),
-    (HR_FLOW[2], "499.99", (1000, 20, 5)),
-    (HR_FLOW[3], "999.99", (2500, 50, 15)),
+    (HR_FLOW[0], "109.99", (100, 2, 1)),
+    (HR_FLOW[1], "269.99", (500, 10, 3)),
+    (HR_FLOW[2], "539.99", (1000, 20, 5)),
+    (HR_FLOW[3], "1079.99", (2500, 50, 15)),
     (EDUCATION[0], "75", (10, None, None)),
     (EDUCATION[1], "150", (50, None, None)),
     (EDUCATION[2], "300", (100, None, None)),
@@ -22,7 +22,7 @@ def test_approved_prices_and_limits(plan, price, limits):
 
 def test_quote_rounds_net_then_vat_to_kurus():
     assert quote_amounts(HR_FLOW[0], Decimal("48.1234"), Decimal("0.20")) == (
-        QuoteAmounts(481186, 96237, 577423)
+        QuoteAmounts(529309, 105862, 635171)
     )
 
 
