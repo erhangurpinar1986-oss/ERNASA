@@ -497,21 +497,21 @@ def content(c, db, identity, tab):
             out += c.card('Komisyonlar',sales_table(c,'Henüz tahsilata bağlı komisyon hak edişi oluşmadı.',('Kayıt','Hak ediş','Oran','Durum','Ödeme takvimi','CONTROL'),commissions))
             out += c.card('Düzeltme kayıtları',sales_table(c,'Henüz komisyon düzeltme kaydı bulunmuyor.',('Hak ediş','Düzeltme (kuruş)','Gerekçe','Tarih'),[[record_code(c,r['commission_id'],'KOM'),money(r['amount_minor']),c.e(r['reason']),c.e(local_date(r['stamp']))] for r in data['adjustments']]))
             if actor.founder:
-                out += c.card('Kârlılık özeti',f'<p>Net tahsilat: {money(sum(r["net_minor"] for r in data["collections"]))} · Sağlayıcı maliyeti: {money(sum(r["cost_minor"] for r in data["collections"]))}</p><p>İade/iptal incelemesindeki kayıtlar ayrıca değerlendirilmelidir. Sağlayıcı maliyeti temsilci matrahından düşülmez.</p>')
+                out += c.card('Kârlılık özeti',f'<p>Net tahsilat: {money(sum(r["net_minor"] for r in data["collections"]))} · Sağlayıcı maliyeti: {money(sum(r["cost_minor"] for r in data["collections"]))}</p><p>İade/iptal incelemesindeki kayıtlar ayrıca değerlendirilmelidir. HR FLOW komisyonunda onaylı ana paket bedeli esas alınır; KDV ve ödeme maliyeti farkı hariçtir.</p>')
         if section == 'audit':
             out += c.card('Silme ve güncellemeye kapalı satış denetimi',sales_table(c,'Henüz görüntülenecek satış denetim kaydı bulunmuyor.',('Tarih','İşlemi yapan','İşlem','Hedef','Açıklama'),[[c.e(local_date(r['stamp'])),record_code(c,r['actor_id'],'YNT'),c.e(r['event']),record_code(c,r['target'],'KYT'),c.e(r['detail'])] for r in data['audit']]))
         if section == 'payments':
             out += payments_section(c, db, actor, data, f, inp, options)
         if section == 'catalog':
             hr_rows = [
-                [plan.name, str(plan.monthly_usd).replace('.', ','), str(plan.capacity),
+                [plan.name, str(plan.monthly_usd).replace('.', ','), str(plan.commission_usd).replace('.', ','), str((plan.monthly_usd * Decimal('1.20')).quantize(Decimal('0.01'))).replace('.', ','), str(plan.capacity),
                  str(plan.positions), str(plan.hr_users)]
                 for plan in HR_FLOW
             ]
             education_rows = [
                 [plan.name, str(plan.monthly_usd), str(plan.capacity)] for plan in EDUCATION
             ]
-            out += c.card('ERNASA HR FLOW', '<p>ATS ve AI mülakat tek ürün; bir aday süreci bir işlem hakkıdır.</p>'+c.table(('Paket','USD / ay','Aylık aday','Aktif pozisyon','İK hesabı'),hr_rows))
+            out += c.card('ERNASA HR FLOW', '<p>ATS ve AI mülakat tek ürün; bir aday süreci bir işlem hakkıdır.</p>'+c.table(('Paket','USD / ay + KDV','Komisyon matrahı USD','KDV dahil USD','Aylık aday','Aktif pozisyon','İK hesabı'),hr_rows))
             out += c.card('ERNASA Eğitim Platformu', '<p>Ayrı abonelik. Eğitim atama, ilerleme takibi, bilgi ölçme ve izinli sesli/görüntülü sunum. AI eğitim raporu geliştirme ve kabul testi sonrasında sunulur.</p>'+c.table(('Paket','USD / ay','Aylık eğitim katılımcısı'),education_rows))
             out += c.card('Kuruma özel eğitim içeriği', c.table(('Hizmet','Konu başına (TL)'),[['Hazır dokümandan eğitim','750'],['Özgün eğitim ve sınav','1.750'],['İleri teknik / mesleki eğitim','3.500'],['Özel video / animasyon','Özel teklif']]))
             out += c.card('Fiyat koşulları','<p>Fiyatlar KDV hariçtir. Türkiye sözleşme, fatura ve tahsilatları TL ile yapılır. Sabit kur kampanyası yoktur. Güncel kur ve TL tutarı resmi teklif aşamasında CONTROL tarafından doğrulanır. Liste fiyatı resmi teklif değildir; indirim ve teklif onayı CONTROL yetkisindedir.</p>')
