@@ -13,10 +13,10 @@ class Plan:
 
 
 HR_FLOW = (
-    Plan("Starter", Decimal("99.99"), 100, 2, 1),
-    Plan("Growth", Decimal("349.99"), 500, 10, 3),
-    Plan("Business", Decimal("499.99"), 1000, 20, 5),
-    Plan("PRO", Decimal("999.99"), 2500, 50, 15),
+    Plan("Starter", Decimal("109.99"), 100, 2, 1),
+    Plan("Growth", Decimal("269.99"), 500, 10, 3),
+    Plan("Business", Decimal("539.99"), 1000, 20, 5),
+    Plan("PRO", Decimal("1079.99"), 2500, 50, 15),
 )
 EDUCATION = (
     Plan("Starter", Decimal("75"), 10),
