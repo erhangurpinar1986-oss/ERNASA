@@ -22,6 +22,7 @@ import re
 from uuid import uuid4
 
 from .ik_bridge import ISTANBUL
+from .billing_catalog import commission_basis_for_quote
 
 
 class PaymentRejected(RuntimeError):
@@ -300,7 +301,7 @@ def _book_sales(db, checkout, quote, order_id, now, actor):
         collection_id, _ = sales.book_verified_payment(
             db, proposal_id=link["proposal_id"], net_minor=int(quote["net_minor"]),
             reference="shopier_hr:" + order_id, collected_on=now.astimezone(ISTANBUL).date().isoformat(),
-            verifier_user_id=founder["id"])
+            verifier_user_id=founder["id"], commission_basis_minor=commission_basis_for_quote(quote))
         db.execute("UPDATE billing_checkout_sales SET sales_collection_id=? WHERE checkout_id=?",
                    (collection_id, checkout["id"]))
         db.execute("RELEASE SAVEPOINT sales_booking")
