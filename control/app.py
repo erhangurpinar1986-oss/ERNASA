@@ -9,7 +9,7 @@ import os
 from base64 import b64decode
 from email.parser import BytesParser
 from email.policy import default as email_policy
-from . import address_catalog, billing_http, firma, ik_bridge, interview_templates, sales, sales_http
+from . import address_catalog, billing_http, firma, ik_bridge, interview_templates, nova, nova_http, sales, sales_http
 from contextlib import closing
 from datetime import date, timedelta
 from http.cookies import SimpleCookie
@@ -26,6 +26,7 @@ ERNASA_INVITE_SLUG = 'ernasa-davet'
 NAV[ERNASA_INVITE_PATH] = 'ERNASA Aday Davetleri'
 NAV['/aday-deneyimi'] = 'Aday Deneyimi'
 NAV['/satis'] = 'Satış Yönetimi'
+NAV['/nova'] = 'NOVA AI Sales Center'
 ROLES = {'founder':'Kurucu', 'supervisor':'Firma Süpervizörü', 'staff':'Personel'}
 ACCESS = {'founder':set(NAV), 'supervisor':{'/', '/kullanicilar'}, 'staff':{'/'}}
 STAFF_PERMISSION = 'subscription_read'
@@ -36,8 +37,8 @@ TTL = 28800
 LOGIN_CSRF_TTL = 600
 GROUPS = (('Platform', tuple(NAV)[:4]),
           ('Yönetim', tuple(NAV)[4:7]),
-          ('Güvenlik ve Sistem', tuple(route for route in NAV if route not in tuple(NAV)[:7] and route != '/satis')),
-          ('Satış ve İş Geliştirme', ('/satis',)))
+          ('Güvenlik ve Sistem', tuple(route for route in NAV if route not in tuple(NAV)[:7] and route not in ('/satis', '/nova'))),
+          ('Satış ve İş Geliştirme', ('/satis', '/nova')))
 ICONS = (
     'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
     'M5 21V5h14v16 M9 9h1m4 0h1m-6 4h1m4 0h1m-6 4h1m4 0h1 M3 21h18',
@@ -99,6 +100,7 @@ def init(path):
         db.execute('PRAGMA journal_mode=WAL')
         db.executescript(SCHEMA)
         db.executescript('BEGIN IMMEDIATE;'+firma.DDL+ik_bridge.SCHEMA+interview_templates.SCHEMA+sales.DDL+sales.SQLITE_GUARDS+'COMMIT;')
+        db.executescript('BEGIN IMMEDIATE;'+nova.DDL+nova.SQLITE_GUARDS+'COMMIT;')
 
 
 def digest(password, salt=None):
@@ -1428,6 +1430,8 @@ class Handler(BaseHTTPRequestHandler):
             if billing_http.handle(self,path,post):
                 return
             if sales_http.handle(self,path,post):
+                return
+            if nova_http.handle(self,path,post):
                 return
             if not post and path == '/ernasa-invite-copy.js':
                 return self.reply(200,(ROOT/'ernasa-invite-copy.js').read_bytes(),'application/javascript; charset=utf-8')

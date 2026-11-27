@@ -1,0 +1,39 @@
+name: ERNASA NOVA AI Sales Center
+on:
+  pull_request:
+    paths:
+      - 'control/**'
+      - 'migrations/**'
+      - 'services/invite_email.py'
+      - 'tests/test_nova*'
+      - '.github/workflows/nova-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nova:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: sales_test_nova
+          POSTGRES_USER: sales_test
+          POSTGRES_PASSWORD: synthetic-ci-only-password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SALES_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 dbname=sales_test_nova user=sales_test password=synthetic-ci-only-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt pytest
+      # NOVA + PostgreSQL migration, then the existing CONTROL / Sales Hub regression set must stay green.
+      - run: python -m pytest tests/test_nova.py tests/test_nova_postgres.py -q
+      - run: python -m pytest tests/test_sales_hub.py tests/test_sales_postgres.py tests/test_billing_catalog.py tests/test_billing_payments.py tests/test_billing_sales.py tests/test_billing_e2e.py tests/test_billing_bank.py tests/test_billing_share.py tests/test_commission_fx.py tests/test_commission_policy.py -q
+      - run: python tests/control_smoke.py
+        env:
+          PYTHONPATH: .
