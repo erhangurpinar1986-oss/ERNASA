@@ -133,3 +133,46 @@ WhatsApp Business Platform ve web canlı destek kanalı adaptörleri (`nova_prov
   arama akışı, webhook, Sales Hub ataması, HTTP/CSRF/yetki). Yerelde 32/32 geçti.
 - `tests/test_nova_postgres.py`: Gerçek PG'de başlangıç migration'ı ve iş kurallarını kontrol eder (CI'da `nova-tests.yml`).
 - Mevcut CONTROL/Sales Hub/billing seti dal ve main üzerinde aynı sonucu verdi (193/193).
+
+## 10. Güncelleme — 27 Kasım 2026 akşamı
+
+**Birleşik test (NOVA #81 + SECURITY #79 + #80):** `integration/nova-security-20261127` dalında yapıldı.
+- Tek çakışma `control/app.py` import satırındaydı; iki taraf da korundu.
+- Yerelde 263 test geçti, 1 test atlandı (PG DSN yok). Bu set NOVA, giriş kısıtlama, auth yapı taşları, Sales Hub ve billing testlerini kapsıyor. CONTROL smoke testi de geçti.
+- GitHub Actions'ta **PostgreSQL 18** ile `nova-tests.yml` başarılı.
+- İlk PG18 koşusu gerçek bir hata buldu: `sum()` Decimal döndürüyordu. Düzeltildi.
+
+**Vapi ücretsiz test:**
+- Yeni hesaba 10 $ başlangıç kredisi verilir ve kart istenmez.
+- Ücretsiz Vapi numaraları yalnızca ABD'yi arayabilir. Türkiye araması için TR operatöründen BYO SIP hattı gerekir.
+- Bakiye 0 $ olunca ve otomatik yükleme kapalıysa hesap dondurulur, yani beklenmedik harcama olmaz. Otomatik yükleme açılmamalıdır.
+
+**Netgsm:**
+- Abonelik belgeleri doğrulanarak hizmet açılır.
+- Kesin belge listesi ve SIP dakika ücreti kamuya açık kaynakta bulunamadı. Satış ekibinden yazılı teklif alınmalı. Sorulacaklar:
+  1. 0850/0212 numara ücreti
+  2. Sabit ve mobil dakika ücreti
+  3. Yurt dışı IP'den SIP kaydı veya trunk desteği
+  4. TLS 5061 desteği
+  5. Taahhüt ve kurulum ücreti
+  6. Gerekli belgeler
+
+**OpenAI Realtime/Live + TR SIP (doğrudan altyapı):**
+- Teknik olarak mümkün. Gelen aramalar SIP trunk ile `sip.api.openai.com`'a bağlanabiliyor; AB veri yerleşimi için `sip-eu` uç noktası var.
+- Giden SIP araması organizasyon bazında etkinleştirilmeli ve Live API üzerinden yapılıyor.
+- GPT-Live dakika ücreti 0,05 $; arka plandaki model kullanımı ayrıca faturalanıyor. Bu yüzden AI katmanındaki tasarruf Vapi'ye göre sınırlı (~%20).
+- Ek mühendislik gerektiriyor: webhook imzası, oturum yönetimi, kendi özet/maliyet hesabı.
+- Öneri: İlk test Vapi ile yapılsın. Hacim aylık ~5.000 dakikayı geçerse `nova_providers` içine OpenAI adaptörü eklensin (arayüz hazır).
+
+**Veri havuzu:**
+- 8 doğrulanmış firma hazır.
+- KOBİ odaklı yeni zamanlanmış görev oluşturuldu: hafta içi 11:13, 20 firma.
+- Bu akşam 3 ek çalıştırma başlatıldı (perakende, otel/sağlık, hizmet).
+- Lojistik ve üretim çalıştırmaları izin sistemi tarafından engellendi; bu sektörler Pzt/Salı planlı çalıştırmalarla tamamlanacak.
+- Geçmiş NOVA raporları için `scripts/nova_report_to_pool.py` hazır. Rapor dosyaları bu oturumdan erişilemiyor, kurucunun eklemesi gerekiyor.
+
+**Canlıya geçiş öncesi açık kabul koşulları:**
+1. Üretim DB yedeğinin doğrulanması: Render › ernasa-db › Recovery/Backups.
+2. Veri havuzunun 100 firmaya ulaşması.
+3. Ortam değişkenleri (bkz. `eposta-baglanti-adimlari.md`).
+4. SECURITY PR'larının önce veya birlikte merge edilmesi.
