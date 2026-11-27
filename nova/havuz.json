@@ -1,0 +1,637 @@
+{
+ "schema_version": 1,
+ "target_verified": 100,
+ "updated_at": "2026-11-27",
+ "levels": {
+  "A": "Firma + kurumsal iletişim + mevzuat kontrolleri tamam; satışa açık",
+  "B": "Firma + güncel işe alım ihtiyacı doğrulandı; kurumsal iletişim eksik",
+  "C": "Aday tespit edildi; araştırma sürüyor"
+ },
+ "records": [
+  {
+   "id": "dogahr",
+   "level": "A",
+   "segment": "KOBI",
+   "export_status": "aktarildi:2026-11-27",
+   "record": {
+    "legal_name": "Doğa İnsan Kaynakları Yönetim ve Bilişim Hizmetleri Ltd. Şti. (DoğaHR)",
+    "sector": "İK danışmanlığı / özel istihdam bürosu",
+    "city": "İzmir",
+    "district": "Konak",
+    "website": "https://dogahr.com",
+    "email": "info@dogahr.com",
+    "email_source_url": "https://dogahr.com/iletisim/",
+    "phone": "0 216 225 9466",
+    "phone_source_url": "https://dogahr.com/iletisim/",
+    "contact_department": "Genel iletişim",
+    "linkedin_url": "https://tr.linkedin.com/company/do%C4%9Fa-i%CC%87nsan-kaynaklar%C4%B1-ve-dan%C4%B1%C5%9Fmanl%C4%B1k-hizmetleri",
+    "employee_count": "25-49",
+    "employee_source_url": "https://www.kariyer.net/firma-profil/doga-insan-kaynaklari-196629-217574",
+    "open_jobs": "Almanca Bilen Inbound Müşteri Temsilcisi (Home Office)",
+    "job_source_url": "https://www.kariyer.net/is-ilani/doga-insan-kaynaklari-almanca-bilen-inbound-musteri-temsilcisi-home-off-4602417",
+    "job_seen_on": "2026-11-23",
+    "workload_terms": "Tam zamanlı; sabit saatli çalışma seçenekleri; haftada 2 gün tatil; e-ticaret, havayolu, bankacılık, turizm, sağlık ve çağrı merkezi müşterileri için çok sektörlü işe alım",
+    "other_open_jobs": 15,
+    "hiring_need": "Almanca ve Hollandaca bilen müşteri temsilcisi, takım lideri ve yönetici adaylarını yurt dışındaki müşterileri için İstanbul, Antalya, Sakarya ve uzaktan çalışma pozisyonlarına sürekli olarak işe alıyor.",
+    "product_fit": "Birden fazla müşteri için aynı anda açık olan dil bilen çağrı merkezi ilanlarına gelen toplu başvurularda HR FLOW ile otomatik ön eleme, AI ile dil ve deneyim puanlaması ve yeniden kullanılabilir bir aday havuzu iş yükünü belirgin biçimde azaltır.",
+    "suggested_package": "Growth",
+    "source_url": "https://dogahr.com/is-ilanlari/",
+    "verified_on": "2026-11-27"
+   },
+   "compliance": {
+    "kurumsal_kanal": true,
+    "alan_adi_eslesmesi": true,
+    "kisisel_veri_yok": true,
+    "ticari_unvan": true,
+    "ret_listesi_kontrolu": true
+   },
+   "notes": "Telefon 0216 (İstanbul/Ümraniye ofisi); kayıttaki il İzmir/Konak — sonraki turda merkez il yeniden kontrol edilecek.",
+   "next_step": "İl/ilçe teyidi (dogahr.com/iletisim önbellekte; yeniden açmaya gerek yoksa açma).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "seak",
+   "level": "B",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "SEAK Endüstriyel Temizlik Hizmetleri",
+    "sector": "Temizlik / tesis hizmetleri",
+    "city": "İzmir",
+    "job_source_url": "https://www.eleman.net/is-ilani/i4813754",
+    "source_url": "https://www.eleman.net/is-ilani/i4813754",
+    "verified_on": "2026-11-27",
+    "district": "Çiğli",
+    "job_seen_on": "2026-11-25"
+   },
+   "evidence": "Havalimanı projesi, 10 kişilik alım; 'tam zamanlı çalışma temposuna uyum'",
+   "next_step": "Resmî web sitesini bul (WebSearch), İletişim sayfasını aç.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "dincpak",
+   "level": "B",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Dinçpak Hizmet İşletmeciliği",
+    "sector": "Temizlik / tesis hizmetleri",
+    "city": "Ankara",
+    "job_source_url": "https://www.eleman.net/is-ilani/i4815236",
+    "source_url": "https://www.eleman.net/is-ilani/i4815236",
+    "verified_on": "2026-11-27",
+    "district": "Mamak",
+    "job_seen_on": "2026-11-26"
+   },
+   "evidence": "Profilde 6+ ilan, Temizlik Hizmetleri Proje Müdürü dahil; merkez İstanbul Anadolu yakası görünüyor",
+   "next_step": "dincpak.com.tr İletişim sayfasını aç; ölçeği kontrol et.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "dogankoc",
+   "level": "B",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Doğankoç Özel Güvenlik Hizmetleri",
+    "sector": "Özel güvenlik",
+    "city": "İzmir",
+    "job_source_url": "https://www.eleman.net/is-ilani/ozel-guvenlik-gorevlisi-kemalpasa-i4809965",
+    "source_url": "https://www.eleman.net/is-ilani/ozel-guvenlik-gorevlisi-kemalpasa-i4809965",
+    "verified_on": "2026-11-27",
+    "district": "Kemalpaşa",
+    "job_seen_on": "2026-11-26"
+   },
+   "evidence": "2+2 12 saat vardiya; İzmir'de 9+ güvenlik ve temizlik ilanı; Secretcv'de İK Yöneticisi ilanı (secretcv 1540792); 36 ilde faaliyet — ölçek 500 sınırında olabilir",
+   "next_step": "dogankocguvenlik.com.tr İletişim sayfasını aç; çalışan sayısını Kariyer.net profilinden kontrol et (500+ ise kurumsal).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "ceyber",
+   "level": "B",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Ceyber Eğitim Teknolojileri Ticaret A.Ş. (CeyBer Çağrı Merkezi)",
+    "sector": "Çağrı merkezi",
+    "city": "İzmir",
+    "job_source_url": "https://www.kariyer.net/is-ilani/ceyber-egitim-teknolojileri-ticaret-anonim-sirketi-cagri-merkezi-musteri-temsilcisi-bankacilik-proj-4585664",
+    "source_url": "https://www.kariyer.net/is-ilani/ceyber-egitim-teknolojileri-ticaret-anonim-sirketi-cagri-merkezi-musteri-temsilcisi-bankacilik-proj-4585664",
+    "verified_on": "2026-11-27",
+    "district": "Bornova",
+    "job_seen_on": "2026-11-23"
+   },
+   "evidence": "'hedef ve başarı odaklı'; aynı anda 3+ temsilci ilanı; Secretcv 1885850 (2026-11-18) 'yoğun tempo'",
+   "next_step": "Resmî siteyi bul, İletişim sayfasını aç.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "firstcontact",
+   "level": "B",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "First Contact Service İletişim Hizmetleri A.Ş.",
+    "sector": "Çağrı merkezi",
+    "city": "İzmir",
+    "job_source_url": "https://www.kariyer.net/is-ilani/4594147",
+    "source_url": "https://www.kariyer.net/is-ilani/4594147",
+    "verified_on": "2026-11-27",
+    "job_seen_on": "2026-11-09"
+   },
+   "evidence": "150-199 çalışan (Kariyer.net); temsilci ilanı 4588463 (2026-10-30) 'fast-paced; night shift; shift options'; takım lideri ilanı 4594147",
+   "next_step": "Resmî siteyi bul, İletişim sayfasını aç. (Paralel bir çalıştırmada doğrulanmış olabilir; o oturumun dosyası erişilemedi.)",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "omuzomuza",
+   "level": "B",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Omuz Omuza Engelsiz İnsan Kaynakları",
+    "sector": "İK danışmanlığı / özel istihdam bürosu",
+    "city": "İstanbul",
+    "job_source_url": "https://www.kariyer.net/is-ilani/omuz-omuza-engelsiz-insan-kaynaklari-insan-kaynaklari-uzmani-2156657",
+    "source_url": "https://www.kariyer.net/is-ilani/omuz-omuza-engelsiz-insan-kaynaklari-insan-kaynaklari-uzmani-2156657",
+    "verified_on": "2026-11-27",
+    "job_seen_on": "2026-11-17"
+   },
+   "evidence": "İK Uzmanı ilanı; 1-24 çalışan (20 altı olabilir)",
+   "next_step": "Resmî siteyi bul, İletişim sayfasını aç.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "sga",
+   "level": "B",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "SGA Güvenlik Hizmetleri A.Ş.",
+    "sector": "Özel güvenlik",
+    "city": "İzmir",
+    "job_source_url": "https://www.eleman.net/firma/sga-guvenlik-hizmetleri-a-s-f675012",
+    "source_url": "https://www.eleman.net/firma/sga-guvenlik-hizmetleri-a-s-f675012",
+    "verified_on": "2026-11-27"
+   },
+   "evidence": "Konak, Buca, Kemalpaşa, Bergama, Narlıdere, Çiğli ve Manisa'da çoklu ilan",
+   "next_step": "http://www.sgaguvenlik.com/iletisim/ sayfasını aç; bir ilanın tarihini al.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "euroserve-guv",
+   "level": "B",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Euroserve Güvenlik",
+    "sector": "Özel güvenlik",
+    "city": "Bursa",
+    "job_source_url": "https://www.eleman.net/is-ilani/guvenlik-gorevlisi-i4808009",
+    "source_url": "https://www.eleman.net/is-ilani/guvenlik-gorevlisi-i4808009",
+    "verified_on": "2026-11-27",
+    "job_seen_on": "2026-11-21"
+   },
+   "evidence": "Konya ilanı i4801774 (2026-11-25); ayrıca İzmir/Kemalpaşa temizlik ilanı i4810376",
+   "next_step": "Çalışan sayısını kontrol et (büyük olabilir → kurumsal); resmî sitenin İletişim sayfası.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "pirilpiril",
+   "level": "B",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Pırıl Pırıl Temizlik Şirketi",
+    "sector": "Temizlik / tesis hizmetleri",
+    "city": "Ankara",
+    "job_source_url": "https://www.eleman.net/is-ilani/i4809200",
+    "source_url": "https://www.eleman.net/is-ilani/i4809200",
+    "verified_on": "2026-11-27",
+    "district": "Çankaya"
+   },
+   "evidence": "5 kişilik alım",
+   "next_step": "İlan tarihini al; resmî siteyi bul.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "isds",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "İSDS Güvenlik",
+    "sector": "Özel güvenlik",
+    "city": "İzmir",
+    "source_url": "https://www.eleman.net/firma/isds-guvenlik-f1332189"
+   },
+   "evidence": "Çiğli/Menemen/Karşıyaka/Foça ilanları ve Güvenlik Operasyon Yöneticisi ilanı (liste görüldü, ilan açılmadı)",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "sipahi",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Sipahi Güvenlik ve Koruma Hiz. Ltd. Şti.",
+    "sector": "Özel güvenlik",
+    "city": "İzmir",
+    "source_url": "https://www.kariyer.net/firma-profil/sipahi-guvenlik-ve-koruma-hiz-ltd-sti-128319-51425"
+   },
+   "evidence": "Çeşme ilanı",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "hedef",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Hedef Güvenlik",
+    "sector": "Özel güvenlik"
+   },
+   "evidence": "İlanlar İstanbul ve Kırklareli; site hedefguvenlik.com.tr",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "turassist",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "TURASSIST Yardım ve Servis A.Ş.",
+    "sector": "Çağrı merkezi",
+    "city": "Kocaeli"
+   },
+   "evidence": "250-349 çalışan; ilan 2026-10-12, 7/24 vardiyalı, kapalı — yeni ilan ara",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "pusula",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Pusula Customer Experience İletişim A.Ş.",
+    "sector": "Çağrı merkezi",
+    "city": "Ankara"
+   },
+   "evidence": "İlan 2026-08-17 kapalı — yeni ilan ara",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "anatolia",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Anatolia Bilişim",
+    "sector": "Çağrı merkezi",
+    "city": "Konya"
+   },
+   "evidence": "25-49 çalışan; ilan 2026-06-29 kapalı",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "mega",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Mega Çağrı Merkezi",
+    "sector": "Çağrı merkezi",
+    "city": "İzmir"
+   },
+   "evidence": "İlan 2026-07-27 kapalı",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "regiocom",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Regiocom",
+    "sector": "Çağrı merkezi",
+    "city": "Kocaeli",
+    "source_url": "https://www.kariyer.net/is-ilani/4564337"
+   },
+   "evidence": "İlan açılamadı (izin zaman aşımı); ölçek kontrol",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "smsbilisim",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "SMS Bilişim",
+    "sector": "Çağrı merkezi",
+    "city": "Samsun",
+    "source_url": "https://www.kariyer.net/is-ilani/1144478"
+   },
+   "evidence": "İlan açılamadı",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "medicall",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "MEDICALL",
+    "sector": "Çağrı merkezi",
+    "source_url": "https://www.kariyer.net/is-ilani/4605024"
+   },
+   "evidence": "İlan açılamadı",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "ntc",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "NTC Yazılım",
+    "sector": "Çağrı merkezi",
+    "source_url": "https://www.kariyer.net/is-ilani/4543895"
+   },
+   "evidence": "İlan açılamadı",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "alpa",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Alpa Danışmanlık İK Özel İstihdam",
+    "sector": "İK danışmanlığı / özel istihdam bürosu"
+   },
+   "evidence": "Aday listesi",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "keystone",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Keystone Human Resources",
+    "sector": "İK danışmanlığı / özel istihdam bürosu"
+   },
+   "evidence": "Aday listesi",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "vizyon",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Vizyon Personel Danışmanlık",
+    "sector": "İK danışmanlığı / özel istihdam bürosu"
+   },
+   "evidence": "Aday listesi",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "asa",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Asa İş Gücü Yönetim Danışmanlığı",
+    "sector": "İK danışmanlığı / özel istihdam bürosu",
+    "city": "Antalya"
+   },
+   "evidence": "Aday listesi",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "eskariyer",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "ES Kariyer Danışmanlık",
+    "sector": "İK danışmanlığı / özel istihdam bürosu"
+   },
+   "evidence": "Aday listesi",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "bbi",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "BBI HR Office",
+    "sector": "İK danışmanlığı / özel istihdam bürosu"
+   },
+   "evidence": "Aday listesi",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "yaklasim",
+   "level": "C",
+   "segment": "KOBI",
+   "record": {
+    "legal_name": "Yaklaşım Danışmanlık",
+    "sector": "İK danışmanlığı / özel istihdam bürosu",
+    "city": "İzmir"
+   },
+   "evidence": "İlan Haziran 2026'da kapanmış — yeni ilan ara",
+   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "fms",
+   "level": "B",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "FMS Servis Grup / FMS Tesis ve Yönetim Hizmetleri A.Ş.",
+    "sector": "Temizlik / tesis hizmetleri",
+    "employee_count": "1000-1499 (Kariyer.net)",
+    "city": "İzmir",
+    "job_source_url": "https://www.eleman.net/is-ilani/i4797406",
+    "source_url": "https://www.eleman.net/is-ilani/i4797406",
+    "job_seen_on": "2026-11-25"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "bizimservis",
+   "level": "B",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "BS Bizim Servis Personel Danışmanlık A.Ş.",
+    "sector": "Personel hizmetleri",
+    "employee_count": "3000+ (ajan raporu)",
+    "city": "Kocaeli",
+    "job_source_url": "https://www.eleman.net/is-ilani/i4808576",
+    "source_url": "https://www.eleman.net/is-ilani/i4808576",
+    "job_seen_on": "2026-11-21"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "arven",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "Arven Özel Güvenlik",
+    "sector": "Özel güvenlik",
+    "employee_count": "3000-3999 (Kariyer.net)"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "odeon",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "Odeon Güvenlik",
+    "sector": "Özel güvenlik",
+    "employee_count": "6000+"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "ekol",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "Ekol Grup (Ekol Koruma)",
+    "sector": "Özel güvenlik / tesis",
+    "employee_count": "6000+",
+    "city": "İzmir",
+    "job_source_url": "https://www.eleman.net/firma/ekol-grup-guvenlik-f209579",
+    "source_url": "https://www.eleman.net/firma/ekol-grup-guvenlik-f209579"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "yks",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "YKS Tesis Yönetim",
+    "sector": "Tesis hizmetleri",
+    "employee_count": "~1.100",
+    "city": "İstanbul"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "hem",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "Hem İletişim / Net Call Center",
+    "sector": "Çağrı merkezi",
+    "employee_count": "1000+"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "etb",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "ETB",
+    "sector": "Çağrı merkezi",
+    "employee_count": "1000+"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "dcs",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "DCS",
+    "sector": "Çağrı merkezi",
+    "employee_count": "1000+"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "ulak",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "Ulak CX / Akkoyunlar",
+    "sector": "Çağrı merkezi",
+    "employee_count": "1000+"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "echoccs",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "EchoCCS",
+    "sector": "Çağrı merkezi",
+    "employee_count": "1000+"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  },
+  {
+   "id": "tepe",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "record": {
+    "legal_name": "Tepe Güvenlik",
+    "sector": "Özel güvenlik",
+    "employee_count": "Grup şirketi"
+   },
+   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27"
+  }
+ ]
+}

@@ -1,0 +1,130 @@
+{
+ "note": "Her WebFetch buraya yazılır. status=ok olan URL 14 gün içinde yeniden açılmaz (iletişim sayfaları 30 gün). Hata alanlar sonraki çalıştırmada bir kez daha denenir; 2. hatada 'kalici_hata'.",
+ "entries": [
+  {
+   "url": "https://dogahr.com/iletisim/",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://dogahr.com/is-ilanlari/",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.kariyer.net/firma-profil/doga-insan-kaynaklari-196629-217574",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.kariyer.net/is-ilani/doga-insan-kaynaklari-almanca-bilen-inbound-musteri-temsilcisi-home-off-4602417",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.eleman.net/is-ilani/i4813754",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.eleman.net/is-ilani/i4815236",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.eleman.net/is-ilani/ozel-guvenlik-gorevlisi-kemalpasa-i4809965",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.eleman.net/is-ilani/i4797406",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.eleman.net/is-ilani/i4808576",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.eleman.net/is-ilani/guvenlik-gorevlisi-i4808009",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.eleman.net/is-ilani/ozel-guvenlik-gorevlisi-i4801774",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.eleman.net/firma/sga-guvenlik-hizmetleri-a-s-f675012",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.eleman.net/firma/isds-guvenlik-f1332189",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.kariyer.net/is-ilani/ceyber-egitim-teknolojileri-ticaret-anonim-sirketi-cagri-merkezi-musteri-temsilcisi-bankacilik-proj-4585664",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "https://www.kariyer.net/is-ilani/omuz-omuza-engelsiz-insan-kaynaklari-insan-kaynaklari-uzmani-2156657",
+   "fetched_on": "2026-11-27",
+   "status": "ok"
+  },
+  {
+   "url": "dincpak.com.tr",
+   "fetched_on": "2026-11-27",
+   "status": "izin_zaman_asimi"
+  },
+  {
+   "url": "dogankocguvenlik.com.tr",
+   "fetched_on": "2026-11-27",
+   "status": "izin_zaman_asimi"
+  },
+  {
+   "url": "fmstemizlik.com.tr",
+   "fetched_on": "2026-11-27",
+   "status": "izin_zaman_asimi"
+  },
+  {
+   "url": "fmsservisgrup.com",
+   "fetched_on": "2026-11-27",
+   "status": "izin_zaman_asimi"
+  },
+  {
+   "url": "http://www.sgaguvenlik.com/iletisim/",
+   "fetched_on": "2026-11-27",
+   "status": "saatlik_limit"
+  },
+  {
+   "url": "https://www.izmirguvenlik.com.tr/iletisim/",
+   "fetched_on": "2026-11-27",
+   "status": "robots_erisilemedi"
+  },
+  {
+   "url": "https://www.kariyer.net/is-ilani/4543895",
+   "fetched_on": "2026-11-27",
+   "status": "izin_zaman_asimi"
+  },
+  {
+   "url": "https://www.kariyer.net/is-ilani/1144478",
+   "fetched_on": "2026-11-27",
+   "status": "izin_zaman_asimi"
+  },
+  {
+   "url": "https://www.kariyer.net/is-ilani/4605024",
+   "fetched_on": "2026-11-27",
+   "status": "izin_zaman_asimi"
+  },
+  {
+   "url": "https://www.kariyer.net/is-ilani/4564337",
+   "fetched_on": "2026-11-27",
+   "status": "izin_zaman_asimi"
+  }
+ ]
+}
