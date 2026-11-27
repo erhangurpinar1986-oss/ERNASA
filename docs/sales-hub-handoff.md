@@ -23,8 +23,10 @@ dağıtım için ayrıca açık kullanıcı onayı gerekir. Bunlar yapılmadı.
 - Vergi numarası/alan adı ile mükerrer müşteri ve sahiplik talebi; talepte diğer
   temsilcinin müşterisi açığa çıkmıyor. Geçmişi olan müşteri otomatik devredilmiyor.
 - Resmi fiyat/indirim CONTROL'den; onaysız teklif resmi belgeye dönüşmüyor.
-- İlk yeni müşteri/ürün aboneliği %25, aynı abonelik devamı %5; yükseltme/ek ürün
-  %0. İlk ürün uygunluğu müşteri geçmişi üzerinden sınırlandırılıyor.
+- Komisyon politikası 2026-11-27 (USD bazlı, satış kuruyla sabit TL): ilk ürün aboneliği %25, devamı %5;
+  paket yükseltme ayı eski/yeni USD matrah farkının %2'si, sonrası yeni matrahın %5'i; ayrı ürün ve yeniden
+  abonelik %5; aynı müşteriye ikinci %25 yok (müşteri ve CONTROL firma geçmişi). Ayrıntı:
+  `docs/sales/satis-ortakligi-sozlesmesi-sablonu.md` Ek-1.
 - Doğrulanmış tahsilat yoksa hak ediş yok. Özel projede otomatik oran yok;
   yazılı CONTROL kararı + maliyet/kâr analizi ile tutar tanımlanıyor.
 - Tahsilat referansı ve abonelik dönemi tekil; sağlayıcı maliyeti matrahtan ayrı.

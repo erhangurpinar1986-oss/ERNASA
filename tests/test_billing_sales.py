@@ -40,8 +40,8 @@ def db(monkeypatch):
     con.executescript(sales.DDL)
     con.executescript(LEGACY)
     con.executescript(sales.SQLITE_GUARDS)
-    for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql", "009_commission_fx.up.sql"):
-        sql = re.sub(r"CREATE OR REPLACE TRIGGER.*?;", "", (MIG / name).read_text().replace("ernasa_control.", "").replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN"), flags=re.S)
+    for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql", "009_commission_fx.up.sql", "010_commission_policy.up.sql"):
+        sql = re.sub(r"CREATE OR REPLACE TRIGGER.*?;|DO \$\$.*?END \$\$;", "", (MIG / name).read_text().replace("ernasa_control.", "").replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN"), flags=re.S)
         con.executescript(sql)
     for rep in ("rep1", "rep2"):
         con.execute("INSERT INTO sales_accounts(id,company_id,name,email,secret,active) VALUES(?,?,?,?,?,1)",
@@ -151,12 +151,13 @@ def test_checkout_reuses_live_link_refuses_paid_and_needs_flag(db, monkeypatch):
         bp.start_checkout(db, **{**kw, "ref": ref2})
 
 
-def test_existing_customer_and_addon_get_zero_automatic_commission(db):
+def test_existing_customer_zero_and_separate_product_five_percent(db):
     _, _, prop = approved_proposal(db, classification="existing")
     pay(db, link(db, prop, "P-1"), "o1")
     _, _, prop2 = approved_proposal(db, kind="addon", company=21, tax="2234567890")
     pay(db, link(db, prop2, "P-2", product="education", plan="Growth"), "o2")
-    assert [r[0] for r in db.execute("SELECT rate FROM sales_commissions")] == [0, 0]
+    # policy 2026-11-27: existing (not won) customer %0; separate product of a won customer %5 from period 1
+    assert [r[0] for r in db.execute("SELECT rate FROM sales_commissions")] == [0, 5]
 
 
 def test_rep_cannot_create_link_for_others_or_unapproved_proposal(db):

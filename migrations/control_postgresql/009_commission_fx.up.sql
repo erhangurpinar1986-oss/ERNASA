@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS ernasa_control.sales_commission_fx (
     commission_id TEXT PRIMARY KEY REFERENCES ernasa_control.sales_commissions(id),
     basis_usd NUMERIC(12, 2) NOT NULL CHECK (basis_usd >= 0),
-    rate INTEGER NOT NULL CHECK (rate IN (0, 5, 25)),
+    rate INTEGER NOT NULL CHECK (rate IN (0, 2, 5, 25)),  -- widened in place for new installs; 010 widens existing DBs
     commission_usd NUMERIC(12, 2) NOT NULL CHECK (commission_usd >= 0),
     fx_rate NUMERIC(20, 8) NOT NULL CHECK (fx_rate > 0),
     fx_date DATE NOT NULL,

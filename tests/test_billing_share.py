@@ -27,8 +27,8 @@ START = (date.today() + timedelta(days=5)).isoformat()
 
 def migrate(db):
     for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql",
-                 "007_bank_transfer.up.sql", "008_payment_link_events.up.sql", "009_commission_fx.up.sql"):
-        db.executescript(re.sub(r"CREATE OR REPLACE TRIGGER.*?;", "",
+                 "007_bank_transfer.up.sql", "008_payment_link_events.up.sql", "009_commission_fx.up.sql", "010_commission_policy.up.sql"):
+        db.executescript(re.sub(r"CREATE OR REPLACE TRIGGER.*?;|DO \$\$.*?END \$\$;", "",
                                 (MIG / name).read_text().replace("ernasa_control.", "").replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN")
                                 .replace("CHECK (iban ~ '^TR[0-9]{24}$')", ""), flags=re.S))
 

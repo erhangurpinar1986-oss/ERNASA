@@ -255,43 +255,73 @@ def collection(db, actor, data):
     return {'id': target}
 
 
+def customer_has_history(db, c):
+    """True if this customer - or any sales customer linked to the same CONTROL company - already has
+    a verified collection. Re-creating the customer, opening a new opportunity or a new subscription
+    therefore never resets the history (identity keys are unique, so the tax number/domain cannot be
+    registered twice either)."""
+    if db.execute("""SELECT 1 FROM sales_collections x JOIN sales_proposals p ON p.id=x.proposal_id
+                     JOIN sales_opportunities o ON o.id=p.opportunity_id WHERE o.customer_id=?""", (c['id'],)).fetchone():
+        return True
+    db.execute('SAVEPOINT history_probe')
+    try:
+        row = db.execute("""SELECT 1 FROM sales_customer_companies me
+                            JOIN sales_customer_companies other ON other.company_id=me.company_id
+                            JOIN sales_opportunities o ON o.customer_id=other.customer_id
+                            JOIN sales_proposals p ON p.opportunity_id=o.id
+                            JOIN sales_collections x ON x.proposal_id=p.id
+                            WHERE me.customer_id=?""", (c['id'],)).fetchone()
+    except Exception:  # billing link table not installed (sales-only installation)
+        db.execute('ROLLBACK TO SAVEPOINT history_probe')
+        row = None
+    db.execute('RELEASE SAVEPOINT history_probe')
+    return row is not None
+
+
 def _book(db, p, op, c, period, reference, amount, cost, collected_on, verified_by, reason, commission_basis_minor=None,
           commission_fx=None):
     """Shared booking + automatic commission rules (manual CONTROL entry and verified Shopier/bank payment).
 
-    Rates: new customer's first product subscription: period 1 %25, later %5. Package upgrade of a
-    new customer: upgrade month %0, later periods %5. Second product / add-on: %0 (only the first
-    product subscription is commission-eligible, enforced by the sales_first_product index).
-    Existing customer: %0. A customer who already had a collection never earns %25 again
-    (covers renewals within 60 days).
-    With commission_fx (verified payments) the commission is USD-based: USD basis x rate rounded to
-    cents, then x the sale's TCMB rate -> fixed TRY entitlement, stored separately and never
-    recalculated."""
+    Commission policy 2026-11-27 (only customers won by the representative, classification 'new'):
+    - first product subscription of a customer without any earlier collection: period 1 %25, later %5;
+      the %25 can exist once per customer (sales_first_product index + customer_has_history);
+    - package upgrade month: %2 of the positive USD basis difference (old -> new package), later %5
+      of the new basis; ambiguous cases go to CONTROL review;
+    - separate product / add-on subscriptions and re-subscriptions (any gap): %5 from the first period;
+    - existing (not won) customer: %0. Projects: manual CONTROL decision.
+    With commission_fx (verified payments) the commission is USD-based, rounded to cents, and fixed in
+    TRY at the sale's TCMB rate; the snapshot is stored and never recalculated."""
     sub_id, rate = None, 0
+    won = c['classification'] == 'new'
     if op['kind'] != 'project':
         sub = db.execute('SELECT * FROM sales_subscriptions WHERE opportunity_id=?', (op['id'],)).fetchone()
         if sub is None:
             if period != 1:
                 fail('İlk tahsilat dönemi 1 olmalı.')
-            new_customer = c['classification'] == 'new'
-            first_ever = not db.execute(
-                'SELECT 1 FROM sales_collections x JOIN sales_proposals p ON p.id=x.proposal_id JOIN sales_opportunities o ON o.id=p.opportunity_id WHERE o.customer_id=?', (c['id'],)).fetchone()
-            eligible = int(new_customer and op['kind'] == 'subscription' and first_ever)
-            first_rate = 25 if eligible else 0
+            prior = customer_has_history(db, c) or bool(commission_fx and commission_fx.get('prior_paid_periods'))
+            acquisition = won and op['kind'] == 'subscription' and not prior
             sub_id = uid()
-            db.execute('INSERT INTO sales_subscriptions VALUES(?,?,?,?)', (sub_id, op['id'], c['id'], eligible))
-            rate = first_rate
+            db.execute('INSERT INTO sales_subscriptions VALUES(?,?,?,?)', (sub_id, op['id'], c['id'], int(acquisition)))
+            if acquisition:
+                rate = 25
+            elif not won:
+                rate = 0
+            elif op['kind'] == 'upgrade':
+                rate = 2
+            else:
+                rate = 5
         else:
-            sub_id, eligible = sub['id'], sub['eligible']
+            sub_id = sub['id']
             if db.execute('SELECT 1 FROM sales_collections WHERE subscription_id=? AND held=1', (sub_id,)).fetchone():
                 fail('İade/iptal incelemesindeki aboneliğe yeni tahakkuk üretilemez.')
             last = db.execute('SELECT MAX(period) FROM sales_collections WHERE subscription_id=?', (sub_id,)).fetchone()[0]
             if period != last+1:
                 fail('Tahsilat dönemi mükerrer veya sırasız.')
-            upgrade_of_new = op['kind'] == 'upgrade' and c['classification'] == 'new'
-            rate = 5 if (eligible or upgrade_of_new) else 0
+            rate = 5 if won else 0
     elif period != 1:
         fail('Tek seferlik proje dönemi 1 olmalı.', 422)
+    if rate == 2 and commission_fx is None:
+        fail('Paket yükseltme komisyonu yalnız doğrulanmış USD bazlı tahsilatta hesaplanır; CONTROL incelemesine alındı.')
     target = uid()
     db.execute('INSERT INTO sales_collections(id,proposal_id,subscription_id,period,reference,net_minor,cost_minor,collected_on,verified_by,reason) VALUES(?,?,?,?,?,?,?,?,?,?)',
                (target, p['id'], sub_id, period, reference, amount, cost, collected_on, verified_by, reason))
@@ -313,16 +343,34 @@ def _book(db, p, op, c, period, reference, amount, cost, collected_on, verified_
                     or not commission_fx.get('fx_date') or commission_fx.get('fx_source') != SOURCE
                     or commission_fx.get('rate_type', RATE_TYPE) != RATE_TYPE):
                 fail('Satış kuru doğrulanamadı; kesin hak ediş oluşturulmadı, CONTROL incelemesine alındı.')
-            usd = commission_usd(commission_fx['basis_usd'], rate)
-            amount_try = fixed_try_minor(usd, fx_rate)
             if fixed_try_minor(commission_fx['basis_usd'], fx_rate) > amount:
                 fail('Komisyon matrahı tahsilattan büyük olamaz.', 422)
+            usd_basis = Decimal(commission_fx['basis_usd'])
+            upgrade = None
+            if rate == 2:
+                old = commission_fx.get('previous_basis_usd')
+                if old is None or not commission_fx.get('previous_plan'):
+                    fail('Yükseltme öncesi paket doğrulanamadı; komisyon CONTROL incelemesine alındı.')
+                old = Decimal(old)
+                if usd_basis <= old:
+                    fail('Paket yükseltmesinde pozitif matrah farkı yok; CONTROL incelemesine alındı.')
+                if commission_fx.get('upgrades_same_month'):
+                    fail('Aynı ay içinde birden fazla paket yükseltmesi; CONTROL incelemesine alındı.')
+                upgrade = (commission_fx['previous_plan'], old, usd_basis)
+                usd_basis = usd_basis - old
+            usd = commission_usd(usd_basis, rate)
+            amount_try = fixed_try_minor(usd, fx_rate)
+            now_ts = int(datetime.now(timezone.utc).timestamp())
             db.execute('INSERT INTO sales_commissions(id,collection_id,amount_minor,rate,status) VALUES(?,?,?,?,?)',
                        (commission_id, target, amount_try, rate, 'pending'))
             db.execute('INSERT INTO sales_commission_fx VALUES(?,?,?,?,?,?,?,?,?)',
-                       (commission_id, str(commission_fx['basis_usd']), rate, str(usd), str(fx_rate),
-                        commission_fx['fx_date'], commission_fx['fx_source'], amount_try,
-                        int(datetime.now(timezone.utc).timestamp())))
+                       (commission_id, str(usd_basis), rate, str(usd), str(fx_rate),
+                        commission_fx['fx_date'], commission_fx['fx_source'], amount_try, now_ts))
+            if upgrade:
+                db.execute('INSERT INTO sales_commission_upgrades VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                           (commission_id, commission_fx.get('product', ''), upgrade[0], commission_fx.get('plan', ''),
+                            str(upgrade[1]), str(upgrade[2]), str(usd_basis), str(usd), int(commission_fx.get('company_id') or 0),
+                            str(collected_on)[:7], now_ts))
     return target, rate
 
 

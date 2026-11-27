@@ -293,6 +293,39 @@ def grant_hr_flow(db, *, company_id, quote):
                (company_id, package, starts, last_day, "Aktif", quote["hr_users"]))
 
 
+def _commission_context(db, checkout, quote, now):
+    """USD basis + sale rate (from the quote) plus the facts the commission policy needs: earlier
+    paid periods of this company/product (excluding this checkout), the previous package for an
+    upgrade, and whether another upgrade was already booked in the same month."""
+    from .billing_catalog import commission_basis_usd
+    fx = commission_fx_for_quote(quote)
+    if fx is None:
+        return None
+    prev = db.execute("""SELECT q.plan_name, q.monthly_usd FROM billing_periods p
+                         JOIN billing_subscriptions s ON s.id=p.subscription_id
+                         JOIN billing_quotes q ON q.id=p.quote_id
+                         JOIN billing_checkout_requests x ON x.checkout_id=p.checkout_id
+                         JOIN billing_payment_requests r ON r.ref=x.request_ref
+                         WHERE s.company_id=? AND s.product=? AND p.checkout_id<>? AND r.is_test=FALSE
+                         ORDER BY p.period_start DESC, p.activated_at DESC""",
+                      (checkout["company_id"], quote["product"], checkout["id"])).fetchall()
+    month = now.astimezone(ISTANBUL).date().isoformat()[:7]
+    db.execute("SAVEPOINT upgrade_probe")
+    try:
+        same_month = db.execute("""SELECT COUNT(*) FROM sales_commission_upgrades
+                                   WHERE company_id=? AND product=? AND collected_month=?""",
+                                (checkout["company_id"], quote["product"], month)).fetchone()[0]
+    except Exception:
+        db.execute("ROLLBACK TO SAVEPOINT upgrade_probe")
+        same_month = 0
+    db.execute("RELEASE SAVEPOINT upgrade_probe")
+    fx.update(prior_paid_periods=len(prev), product=quote["product"], plan=quote["plan_name"],
+              company_id=checkout["company_id"], upgrades_same_month=int(same_month),
+              previous_plan=prev[0]["plan_name"] if prev else None,
+              previous_basis_usd=commission_basis_usd(quote["product"], prev[0]["plan_name"], prev[0]["monthly_usd"]) if prev else None)
+    return fx
+
+
 def _book_sales(db, checkout, quote, order_id, now, actor):
     """Book the collection + automatic commission for representative-linked checkouts.
 
@@ -311,7 +344,7 @@ def _book_sales(db, checkout, quote, order_id, now, actor):
             db, proposal_id=link["proposal_id"], net_minor=int(quote["net_minor"]),
             reference=checkout["provider"] + ":" + order_id, collected_on=now.astimezone(ISTANBUL).date().isoformat(),
             verifier_user_id=founder["id"], commission_basis_minor=commission_basis_for_quote(quote),
-            commission_fx=commission_fx_for_quote(quote))
+            commission_fx=_commission_context(db, checkout, quote, now))
         db.execute("UPDATE billing_checkout_sales SET sales_collection_id=? WHERE checkout_id=?",
                    (collection_id, checkout["id"]))
         db.execute("RELEASE SAVEPOINT sales_booking")

@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS sales_collections(
 CREATE UNIQUE INDEX IF NOT EXISTS sales_single_project_collection ON sales_collections(proposal_id) WHERE subscription_id IS NULL;
 CREATE TABLE IF NOT EXISTS sales_commissions(
  id TEXT PRIMARY KEY, collection_id TEXT UNIQUE NOT NULL REFERENCES sales_collections(id),
- amount_minor BIGINT NOT NULL CHECK(amount_minor>=0), rate INTEGER NOT NULL CHECK(rate IN (0,5,25)),
+ amount_minor BIGINT NOT NULL CHECK(amount_minor>=0), rate INTEGER NOT NULL CHECK(rate IN (0,2,5,25)),
  status TEXT NOT NULL CHECK(status IN ('pending','approved','paid','reversed')),
  manual_reason TEXT NOT NULL DEFAULT '', approved_by BIGINT REFERENCES users(id), paid_on TEXT);
 CREATE TABLE IF NOT EXISTS sales_adjustments(

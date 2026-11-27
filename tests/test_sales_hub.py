@@ -136,7 +136,7 @@ def test_proposal_revision_official_price_and_decision_history(store):
 
 @pytest.mark.parametrize('kind,classification,rates', [
     ('subscription','new',[25,5]),('subscription','existing',[0,0]),
-    ('upgrade','new',[0,5]),('addon','existing',[0,0]),('addon','new',[0,0])])
+    ('addon','existing',[0,0]),('addon','new',[5,5])])
 def test_commission_rates_collections_and_provider_costs(store,kind,classification,rates):
     db,_ = store
     _,_,p = setup_sale(db,kind,classification)
@@ -158,8 +158,8 @@ def test_only_first_product_subscription_eligible(store):
     p2 = execute(db,A,'proposal',opportunity_id=o2,requested_minor=10001,brief='İkinci kapsam')['id']
     execute(db,A,'submit',id=p2)
     execute(db,F,'decide',id=p2,decision='approved',reason='Sentetik',official_minor=10001)
-    cid = collect(db,p2)
-    assert db.execute('SELECT rate FROM sales_commissions WHERE collection_id=?',(cid,)).fetchone()[0] == 0
+    cid = collect(db,p2)   # policy 2026-11-27: separate product of a won customer earns %5, never a second %25
+    assert db.execute('SELECT rate FROM sales_commissions WHERE collection_id=?',(cid,)).fetchone()[0] == 5
     with pytest.raises(sales.Invalid):
         execute(db,F,'classify',id=customer,classification='existing',reason='Geçmişi değiştirme')
 
@@ -531,3 +531,12 @@ def test_control_and_sales_hub_sessions_never_mix(store, web):
     # a representative POST to /sales with both cookies acts as the representative, never as founder
     assert http(web, '/sales/api', 'POST', {'action': 'decide'}, both, csrf=csrf)[0] == 403
     assert http(web, '/sales/official?id=x', cookie='control_session=founder-cookie')[0] == 303
+
+
+def test_manual_upgrade_collection_goes_to_review_not_a_guessed_commission(store):
+    """%2 needs the verified USD basis difference; a manual TRY entry cannot provide it."""
+    db,_ = store
+    _,_,p = setup_sale(db,'upgrade','new')
+    with pytest.raises(sales.Invalid, match='CONTROL incelemesine'):
+        collect(db,p)
+    assert db.execute('SELECT COUNT(*) FROM sales_commissions').fetchone()[0] == 0

@@ -25,8 +25,8 @@ def db(tmp_path, monkeypatch):
     app.init(path)
     con = app.connect(path)
     for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql",
-                 "007_bank_transfer.up.sql", "008_payment_link_events.up.sql", "009_commission_fx.up.sql"):
-        con.executescript(re.sub(r"CREATE OR REPLACE TRIGGER.*?;", "", (MIG / name).read_text()
+                 "007_bank_transfer.up.sql", "008_payment_link_events.up.sql", "009_commission_fx.up.sql", "010_commission_policy.up.sql"):
+        con.executescript(re.sub(r"CREATE OR REPLACE TRIGGER.*?;|DO \$\$.*?END \$\$;", "", (MIG / name).read_text()
                                  .replace("ernasa_control.", "").replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN")
                                  .replace("CHECK (iban ~ '^TR[0-9]{24}$')", ""), flags=re.S))
     con.execute("INSERT INTO companies VALUES(1,'ERNASA Bayi','Aktif')")
@@ -141,27 +141,28 @@ def test_renewal_uses_its_own_sale_rate_and_never_reapplies_25(db):
     assert [(r["rate"], Decimal(str(r["commission_usd"])), r["amount_minor"]) for r in rows] == [
         (25, Decimal("62.50"), 317313), (5, Decimal("12.50"), 65000)]     # 62.50 x 50.77 ; 12.50 x 52.00
     # a new subscription for the same customer (e.g. renewal within 60 days after cancellation): no 25 %
-    _, prop2 = sale(db, 2, customer=customer)
+    _, prop2 = sale(db, 2, customer=customer)   # re-subscription: %5, never %25 again
     pay_bank(db, prop2, "Starter", RATE_5077, period_start=(date.fromisoformat(START) + timedelta(days=62)).isoformat())
-    assert fx_rows(db)[-1]["rate"] == 0
+    assert fx_rows(db)[-1]["rate"] == 5 and fx_rows(db)[-1]["amount_minor"] == 25385   # 5.00 USD x 50.77
 
 
-def test_upgrade_month_zero_then_five_percent(db):
+def test_upgrade_month_two_percent_of_difference_then_five_percent(db):
     customer, prop = sale(db, 3, tax="3333333333")
     pay_bank(db, prop, "Starter")
     _, up = sale(db, 3, kind="upgrade", customer=customer)
     day = lambda n: (date.fromisoformat(START) + timedelta(days=n)).isoformat()
     pay_bank(db, up, "Business", period_start=day(31))
     pay_bank(db, up, "Business", period_start=day(62))
-    assert [(r["rate"], r["amount_minor"]) for r in fx_rows(db)] == [(25, 126925), (0, 0), (5, 126925)]  # 25.00 USD x 50.77
+    # Starter -> Business: (499.99 - 99.99) = 400.00 USD x %2 = 8.00 USD x 50.77 = 406,16 TL; then %5 of 499.99 = 25.00 USD
+    assert [(r["rate"], r["amount_minor"]) for r in fx_rows(db)] == [(25, 126925), (2, 40616), (5, 126925)]
 
 
-def test_second_product_first_period_zero(db):
+def test_second_product_five_percent_from_first_period(db):
     customer, prop = sale(db, 4, tax="4444444444")
     pay_bank(db, prop, "Starter")
     _, addon = sale(db, 4, kind="addon", customer=customer)
     pay_bank(db, addon, "Growth", period_start=(date.fromisoformat(START) + timedelta(days=31)).isoformat())
-    assert fx_rows(db)[-1]["rate"] == 0 and fx_rows(db)[-1]["amount_minor"] == 0
+    assert fx_rows(db)[-1]["rate"] == 5 and fx_rows(db)[-1]["amount_minor"] == fixed_try_minor(Decimal("12.50"), Decimal("50.77"))
 
 
 def test_shopier_and_bank_give_identical_fixed_entitlements(db):
