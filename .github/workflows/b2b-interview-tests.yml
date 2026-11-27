@@ -37,6 +37,10 @@ on:
       - 'tests/test_partner_first_round_template.py'
       - '.github/workflows/b2b-interview-tests.yml'
 
+concurrency:
+  # Cancel superseded runs of the same PR (a newer push will run every check again).
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   interview-template-tests:
     runs-on: ubuntu-latest

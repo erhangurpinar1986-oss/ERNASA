@@ -27,6 +27,10 @@ on:
       - tests/test_candidate_experience.py
       - tests/test_invite_email.py
       - .github/workflows/academy-tests.yml
+concurrency:
+  # Cancel superseded runs of the same PR (a newer push will run every check again).
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   test-academy:
     runs-on: ubuntu-latest
