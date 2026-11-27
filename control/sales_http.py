@@ -427,6 +427,53 @@ def payments_section(c, db, actor, data, f, inp, options, ref=None):
     return out
 
 
+def commission_cards(c, db, actor):
+    """USD commission with the TRY entitlement fixed at the sale's TCMB rate (stored values only)."""
+    from . import commission_report as cr
+    items = cr.rows(db, actor)
+    heads = ['Müşteri','Satılan paket','Satış tarihi','Tahsilat tarihi','Komisyon matrahı (USD)','Komisyon oranı',
+             'Kazanılan komisyon (USD)','Satışta uygulanan sabit kur','Kur tarihi','Kesinleşmiş TL hak edişi',
+             'Komisyon ödeme dönemi','Ödeme durumu','Gerçekleşen ödeme tarihi']
+    if actor.founder:
+        heads.insert(0, 'Temsilci')
+    body = []
+    for r in items:
+        package = ' '.join(x for x in ({'hr_flow':'HR FLOW','education':'Eğitim'}.get(r['product'] or '', ''), r['plan_name'] or '') if x) or c.e(r['opportunity'])
+        row = [c.e(r['customer']), c.e(package), c.e(cr.tr_date(r['sold_at'] if r['sold_at'] is not None else r['collected_on'])),
+               c.e(cr.tr_date(r['collected_on'])), cr.usd(r['basis_usd']), f"%{r['rate']}", cr.usd(r['commission_usd']),
+               cr.fx(r['fx_rate']), c.e(cr.tr_date(r['fx_date'])), '<strong>'+cr.try_text(r['amount_minor'])+'</strong>',
+               c.e(r['window_text']), c.e(r['status_text']), c.e(cr.tr_date(r['paid_on']))]
+        if actor.founder:
+            row.insert(0, c.e(r['rep_name'] or r['owner_id']))
+        body.append(row)
+    out = c.card('Komisyon hak edişleri (USD → sabit TL)' if actor.founder else 'Komisyon hak edişlerim (USD → sabit TL)',
+                 f'<p><strong>{c.e(cr.EXPLANATION)}</strong></p>'
+                 + sales_table(c, 'Henüz doğrulanmış tahsilata bağlı komisyon hak edişi yok.', tuple(heads), body))
+    if not actor.founder:
+        return out
+    reps = cr.by_rep(items)
+    total_open = sum(s['open'] for s in reps)
+    total_paid = sum(s['paid'] for s in reps)
+    out += c.card('Temsilci bazında komisyon özeti',
+        f'<p>Toplam bekleyen komisyon (kesinleşmiş TL): <strong>{cr.try_text(total_open)}</strong> · '
+        f'Ödenmiş komisyonlar: <strong>{cr.try_text(total_paid)}</strong>. '
+        'Kesinleşmiş TL borçları güncel kurla yeniden hesaplanmaz.</p>'
+        + sales_table(c, 'Henüz temsilci komisyonu yok.',
+                      ('Temsilci','Hak ediş sayısı','USD komisyon kazancı','Kesinleşmiş TL toplamı','Bekleyen TL borç','Ödenen TL'),
+                      [[c.e(s['rep']), str(s['count']), cr.usd(s['usd']), cr.try_text(s['fixed']), cr.try_text(s['open']), cr.try_text(s['paid'])]
+                       for s in reps]))
+    out += c.card('Aylık komisyon ödeme dönemleri', sales_table(c, 'Henüz ödeme dönemi oluşmadı.',
+        ('Ödeme dönemi','Hak ediş sayısı','Kesinleşmiş TL','Bekleyen','Ödenen'),
+        [[f'{w[0]:%d.%m.%Y} – {w[1]:%d.%m.%Y}', str(s['count']), cr.try_text(s['fixed']), cr.try_text(s['open']), cr.try_text(s['paid'])]
+         for w, s in cr.by_window(items)]))
+    paid = [r for r in items if r['status'] == 'paid']
+    out += c.card('Komisyon ödeme geçmişi', sales_table(c, 'Henüz ödenmiş komisyon yok.',
+        ('Ödeme tarihi','Temsilci','Müşteri','Kesinleşmiş TL','Sabit kur','Kur tarihi','Ödeme dönemi'),
+        [[c.e(cr.tr_date(r['paid_on'])), c.e(r['rep_name'] or r['owner_id']), c.e(r['customer']), cr.try_text(r['amount_minor']),
+          cr.fx(r['fx_rate']), c.e(cr.tr_date(r['fx_date'])), c.e(r['window_text'])] for r in paid]))
+    return out
+
+
 def stage_badge(c, code):
     from .billing_share import STAGES
     label, css = STAGES[code]
@@ -648,6 +695,7 @@ def content(c, db, identity, tab, ref=None):
             out += c.card('Teklif değerlendirme',sales_table(c,'Henüz teklif talebi bulunmuyor.',('Kayıt','Sürüm','Kapsam','Durum','Talep','Resmi net','İşlem'),proposals))
             out += c.card('Yönetim karar geçmişi',sales_table(c,'Henüz yönetim kararı kaydedilmedi.',('Teklif','Karar','Gerekçe','Karar sahibi','Tarih'),[[record_code(c,r['proposal_id'],'TEK'),status(r['decision']),c.e(r['reason']),record_code(c,r['actor_id'],'YNT'),c.e(local_date(r['stamp']))] for r in data['decisions']]))
         if section == 'finance':
+            out += commission_cards(c, db, actor)
             if actor.founder:
                 approved = [(r['id'],r['id']) for r in data['proposals'] if r['status']=='approved']
                 out += c.card('Tahsilat doğrulama', '<p>KDV hariç tam dönem tutarı girin. Sağlayıcı maliyeti ayrı raporlanır. Gerçek ödeme veya e-posta işlemi yapılmaz.</p>'+guided_form(c, bool(approved),
@@ -684,20 +732,56 @@ def content(c, db, identity, tab, ref=None):
         if section == 'payments':
             out += payments_section(c, db, actor, data, f, inp, options, ref)
         if section == 'catalog':
+            from . import commission_report as cr
+            prices = cr.price_rows()
             hr_rows = [
-                [plan.name, str(plan.monthly_usd).replace('.', ','), str(plan.commission_usd).replace('.', ','), str((plan.monthly_usd * Decimal('1.20')).quantize(Decimal('0.01'))).replace('.', ','), str(plan.capacity),
-                 str(plan.positions), str(plan.hr_users)]
-                for plan in HR_FLOW
+                [r['plan'].name, cr.usd(r['plan'].monthly_usd), cr.usd(r['plan'].commission_usd), cr.usd(r['first']), cr.usd(r['later']),
+                 cr.usd((r['plan'].monthly_usd * Decimal('1.20')).quantize(Decimal('0.01'))), str(r['plan'].capacity),
+                 str(r['plan'].positions), str(r['plan'].hr_users)]
+                for r in prices
             ]
             education_rows = [
-                [plan.name, str(plan.monthly_usd), str(plan.capacity)] for plan in EDUCATION
+                [plan.name, cr.usd(plan.monthly_usd), str(plan.capacity)] for plan in EDUCATION
             ]
-            out += c.card('ERNASA HR FLOW', '<p>ATS ve AI mülakat tek ürün; bir aday süreci bir işlem hakkıdır.</p>'+c.table(('Paket','USD / ay + KDV','Komisyon matrahı USD','KDV dahil USD','Aylık aday','Aktif pozisyon','İK hesabı'),hr_rows))
-            out += c.card('ERNASA Eğitim Platformu', '<p>Ayrı abonelik. Eğitim atama, ilerleme takibi, bilgi ölçme ve izinli sesli/görüntülü sunum. AI eğitim raporu geliştirme ve kabul testi sonrasında sunulur.</p>'+c.table(('Paket','USD / ay','Aylık eğitim katılımcısı'),education_rows))
+            out += c.card('ERNASA HR FLOW', '<p>ATS ve AI mülakat tek ürün; bir aday süreci bir işlem hakkıdır. Tablodaki bütün tutarlar <strong>Amerikan doları (USD)</strong> cinsindendir.</p>'+c.table(('Paket','Aylık fiyat + KDV (USD)','Komisyon matrahı (USD)','İlk dönem %25 (USD)','Sonraki dönem %5 (USD)','KDV dahil fiyat (USD)','Aylık aday','Aktif pozisyon','İK hesabı'),hr_rows))
+            rate = cr.current_rate()
+            if rate is None:
+                out += c.card('Güncel TCMB kuru ve tahmini TL komisyon','<p role="status">Güncel TCMB USD döviz satış kuru şu an doğrulanamadı; tahmini TL karşılıkları gösterilmiyor. Sabit veya elle girilmiş kur kullanılmaz.</p>')
+            else:
+                out += c.card('Güncel TCMB kuru ve tahmini TL komisyon',
+                    f'<p>TCMB USD döviz satış (gösterge) kuru: <strong>{cr.fx(rate.value)}</strong> · Yayın tarihi: <strong>{rate.published_on:%d.%m.%Y}</strong>. '
+                    'Hafta sonu ve resmî tatillerde son yayımlanan kur gösterilir.</p>'
+                    '<p><strong>Aşağıdaki TL tutarlar tahminidir; kesinleşmiş hak ediş değildir.</strong> Kesin TL hak ediş, müşterinin satış işleminde uygulanan kurla tahsilat doğrulandığında oluşur.</p>'
+                    + c.table(('Paket','İlk dönem %25 (USD)','Tahmini TL','Sonraki dönem %5 (USD)','Tahmini TL'),
+                              [[r['plan'].name, cr.usd(r['first']), cr.try_text(cr.estimate_try(r['first'], rate)),
+                                cr.usd(r['later']), cr.try_text(cr.estimate_try(r['later'], rate))] for r in prices]))
+            out += c.card('ERNASA Eğitim Platformu', '<p>Ayrı abonelik. Eğitim atama, ilerleme takibi, bilgi ölçme ve izinli sesli/görüntülü sunum. AI eğitim raporu geliştirme ve kabul testi sonrasında sunulur.</p>'+c.table(('Paket','Aylık fiyat (USD)','Aylık eğitim katılımcısı'),education_rows))
             out += c.card('Kuruma özel eğitim içeriği', c.table(('Hizmet','Konu başına (TL)'),[['Hazır dokümandan eğitim','750'],['Özgün eğitim ve sınav','1.750'],['İleri teknik / mesleki eğitim','3.500'],['Özel video / animasyon','Özel teklif']]))
             out += c.card('Fiyat koşulları','<p>Fiyatlar KDV hariçtir. Türkiye sözleşme, fatura ve tahsilatları TL ile yapılır. Sabit kur kampanyası yoktur. Güncel kur ve TL tutarı resmi teklif aşamasında CONTROL tarafından doğrulanır. Liste fiyatı resmi teklif değildir; indirim ve teklif onayı CONTROL yetkisindedir.</p>')
         if section == 'resources':
-            out += c.card('Yetki ve komisyon rehberi','<p>Yeni müşterinin ilk ürün aboneliği: ilk tahsil edilmiş dönem %25; aynı aboneliğin devamı %5. Paket yükseltme ve mevcut müşteriye ek ürün %0. Özel projede maliyet/kâr analizi ve açık CONTROL kararı gerekir.</p><p>Resmi fiyat, indirim ve taahhüt için onaylı teklif kullanın. Tahsilat yoksa hak ediş yoktur. Ödeme takvimi sonraki ayın 1–15 günleridir ve CONTROL onayına bağlıdır.</p>')
+            from . import commission_report as cr
+            out += c.card('Yetki ve komisyon rehberi',
+                '<p>Komisyon matrahı merkezi fiyat kataloğundaki USD tutardır (KDV ve fiyata dahil ödeme sistemi maliyeti hariç): '
+                'Starter $99,99 · Growth $249,99 · Business $499,99 · PRO $999,99.</p>'
+                '<p>Yeni müşterinin ilk ürün aboneliği: ilk tahsil edilmiş dönem %25, sonraki uygun dönemler %5. '
+                'Paket yükseltme ayında %0, yükseltmeden sonraki uygun dönemlerde %5. İkinci ürünün ilk döneminde %0. '
+                'Daha önce tahsilatı olan müşteriye (60 gün içinde yenileme dahil) yeniden %25 uygulanmaz. '
+                'Mevcut müşteri %0. WhatsApp API modülleri komisyon dışıdır. Özel projede maliyet/kâr analizi ve açık CONTROL kararı gerekir.</p>'
+                f'<p><strong>{c.e(cr.EXPLANATION)}</strong></p>'
+                '<p>Örnek: Starter, %25 → $25,00. Satışta uygulanan kur 50,77 TL ise kesinleşen hak ediş 1.269,25 TL’dir; '
+                'ödeme gününde kur 54 TL veya 48 TL olsa da ödenecek tutar 1.269,25 TL kalır. ERNASA sonradan oluşan kur farkından sorumlu değildir.</p>'
+                '<p>Resmi fiyat, indirim ve taahhüt için onaylı teklif kullanın. Tahsilat doğrulanmadan hak ediş yoktur. '
+                'Ödemeler tahsilatı izleyen ayın 1–15 günlerinde, CONTROL onayıyla yapılır. Test ödemelerinden komisyon doğmaz.</p>')
+            out += c.card('Yeni satış ortaklığı sözleşmesi şablonu',
+                '<p>Bu şablon yalnız <strong>yeni</strong> imzalanacak satış ortaklığı sözleşmelerinde kullanılır; mevcut imzalı sözleşmeler '
+                'tek taraflı değiştirilmez. İmza öncesi hukuki inceleme gerekir.</p>'
+                '<p><strong>Madde – Komisyon ve ödeme.</strong> Komisyon, ERNASA merkezi fiyat kataloğundaki USD komisyon matrahı üzerinden '
+                'USD olarak hesaplanır ve iki ondalık basamağa yuvarlanır. TL hak ediş, müşterinin satış işleminde uygulanan TCMB USD '
+                'döviz satış kuru üzerinden, tahsilat ERNASA tarafından doğrulandığında kesinleşir ve sabitlenir. Ödeme günündeki kur '
+                'kullanılmaz; sonraki kur değişiklikleri kesinleşmiş tutarı etkilemez ve ERNASA kur farkından sorumlu değildir. Ödeme, '
+                'tahsilatı izleyen ayın 1–15 günleri arasında Türk lirası olarak yapılır. Doğrulanmamış tahsilat, test ödemesi, iade/iptal '
+                'incelemesindeki tahsilat ve WhatsApp API modülleri için hak ediş doğmaz.</p>'
+                '<p>Tam metin: depo içinde <code>docs/sales/satis-ortakligi-sozlesmesi-sablonu.md</code>.</p>')
         if section == 'profile':
             out += c.card('Profil',f'<p>{c.e(info["name"])} · {c.e(info["email"])}</p><p>Firma: {actor.company_id}</p>')
             out += c.card('Parolayı değiştir',f('password',inp('old_password','Mevcut parola','password')+inp('password','Yeni parola (12–128 karakter)','password'),'Parolayı değiştir ve oturumları kapat'))

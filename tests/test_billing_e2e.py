@@ -30,7 +30,7 @@ def env(tmp_path, monkeypatch):
     app.init(path)
     db = app.connect(path)
     for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql",
-                 "007_bank_transfer.up.sql"):
+                 "007_bank_transfer.up.sql", "009_commission_fx.up.sql"):
         db.executescript(re.sub(r"CREATE OR REPLACE TRIGGER.*?;", "",
                                 (MIG / name).read_text().replace("ernasa_control.", "").replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN")
                                 .replace("CHECK (iban ~ '^TR[0-9]{24}$')", ""), flags=re.S))
@@ -129,7 +129,7 @@ def test_full_paid_flow_over_http(env):
     period = db.execute("SELECT * FROM billing_periods").fetchone()
     assert (period["capacity"], period["positions"], period["hr_users"]) == (500, 10, 3)
     m = db.execute("SELECT * FROM sales_commissions").fetchall()
-    assert len(m) == 1 and m[0]["rate"] == 25 and m[0]["amount_minor"] == (1062458 * 25 + 50) // 100  # basis 249.99 USD
+    assert len(m) == 1 and m[0]["rate"] == 25 and m[0]["amount_minor"] == 265625  # 62.50 USD x 42.50
 
     status, _, html = request(server, "GET", f"/odeme/{ref}")
     assert "Ödendi" in html and "active" in html
@@ -267,7 +267,7 @@ def test_bank_transfer_flow_over_http(env):
     out = cmd(db, FOUNDER, "confirm_bank", checkout_id=checkout_id, transaction_id="DEKONT-77", gross_tl="13.769,50")
     assert "etkinleştirildi" in out["detail"]
     m = db.execute("SELECT rate, amount_minor FROM sales_commissions").fetchall()
-    assert [tuple(r) for r in m] == [(25, (1062458 * 25 + 50) // 100)]
+    assert [tuple(r) for r in m] == [(25, 265625)]
     _, _, html = request(server, "GET", f"/odeme/{ref}")
     assert "Ödendi" in html and "active" in html
     assert "Onay bekleyen banka ödemesi yok." in sales_http.content(app, db, ident_f, "payments")

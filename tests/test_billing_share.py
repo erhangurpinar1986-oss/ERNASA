@@ -27,7 +27,7 @@ START = (date.today() + timedelta(days=5)).isoformat()
 
 def migrate(db):
     for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql",
-                 "007_bank_transfer.up.sql", "008_payment_link_events.up.sql"):
+                 "007_bank_transfer.up.sql", "008_payment_link_events.up.sql", "009_commission_fx.up.sql"):
         db.executescript(re.sub(r"CREATE OR REPLACE TRIGGER.*?;", "",
                                 (MIG / name).read_text().replace("ernasa_control.", "").replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN")
                                 .replace("CHECK (iban ~ '^TR[0-9]{24}$')", ""), flags=re.S))
@@ -278,7 +278,7 @@ def test_tracking_stages_through_payment_commission_and_refund(env):
     gross = db.execute("SELECT q.gross_minor FROM billing_checkouts c JOIN billing_quotes q ON q.id=c.quote_id WHERE c.id=?", (cid,)).fetchone()[0]
     cmd(db, FOUNDER, "confirm_bank", checkout_id=cid, transaction_id="TX-9", gross_tl=f"{gross // 100},{gross % 100:02d}")
     code, info = share.stage(db, ref)
-    assert code == "active" and info["commission_minor"] == (1062458 * 25 + 50) // 100   # approved basis 249.99 USD
+    assert code == "active" and info["commission_minor"] == 265625   # 249.99 USD x %25 = 62.50 USD x 42.50 = 2.656,25 TL
     assert info["commission_window"] and info["commission_status"] == "pending"
     with pytest.raises(sales.Invalid, match="ödemesi tamamlandı"):
         cmd(db, REP_A, "send_payment_email", ref=ref)

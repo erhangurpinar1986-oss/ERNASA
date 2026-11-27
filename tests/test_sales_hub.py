@@ -136,7 +136,7 @@ def test_proposal_revision_official_price_and_decision_history(store):
 
 @pytest.mark.parametrize('kind,classification,rates', [
     ('subscription','new',[25,5]),('subscription','existing',[0,0]),
-    ('upgrade','new',[0,0]),('addon','existing',[0,0]),('addon','new',[0,0])])
+    ('upgrade','new',[0,5]),('addon','existing',[0,0]),('addon','new',[0,0])])
 def test_commission_rates_collections_and_provider_costs(store,kind,classification,rates):
     db,_ = store
     _,_,p = setup_sale(db,kind,classification)

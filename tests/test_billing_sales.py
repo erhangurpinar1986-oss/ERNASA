@@ -40,7 +40,7 @@ def db(monkeypatch):
     con.executescript(sales.DDL)
     con.executescript(LEGACY)
     con.executescript(sales.SQLITE_GUARDS)
-    for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql"):
+    for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql", "009_commission_fx.up.sql"):
         sql = re.sub(r"CREATE OR REPLACE TRIGGER.*?;", "", (MIG / name).read_text().replace("ernasa_control.", "").replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN"), flags=re.S)
         con.executescript(sql)
     for rep in ("rep1", "rep2"):
@@ -105,7 +105,8 @@ def test_first_period_25_then_5_on_net_basis_and_visible_only_to_owner(db):
     first = next(r for r in rows if r["rate"] == 25)
     # Business: sale 539.99 USD (net 22949.58 TL), commission basis 499.99 USD * 42.5 = 21249.58 TL
     assert net == 2294958 and first["collection_net_minor"] == net
-    assert first["basis_minor"] == 2124958 and first["commission_minor"] == (2124958 * 25 + 50) // 100
+    # Business: 499.99 USD x %25 = 125.00 USD x 42.50 = 5.312,50 TL fixed at the sale rate
+    assert first["basis_minor"] == 2124958 and first["commission_minor"] == 531250
     assert first["commission_window"] == "2026-12-01 – 2026-12-15"
     assert first["customer"].startswith("Firma") and first["plan_name"] == "Business"
     assert bp.rep_sales(db, REP2) == []

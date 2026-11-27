@@ -57,3 +57,36 @@ def commission_basis_for_quote(quote):
         return net
     basis = (plan.commission_usd * Decimal(str(quote["exchange_rate"])) * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP)
     return min(net, int(basis))
+
+
+CENT = Decimal("0.01")
+
+
+def commission_usd(basis_usd: Decimal, rate: int) -> Decimal:
+    """USD commission, rounded to cents first (ROUND_HALF_UP)."""
+    return (Decimal(basis_usd) * Decimal(rate) / Decimal(100)).quantize(CENT, rounding=ROUND_HALF_UP)
+
+
+def fixed_try_minor(amount_usd: Decimal, fx_rate: Decimal) -> int:
+    """TRY entitlement in kuruş at the sale's TCMB rate: USD (2 dp) x rate, ROUND_HALF_UP to kuruş."""
+    return int((Decimal(amount_usd) * Decimal(fx_rate) * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def commission_basis_usd(product, plan_name, monthly_usd):
+    """Approved USD commission basis from the central catalog; None if the quote does not match
+    a current catalog price (historical quotes keep their TRY rules)."""
+    plans = HR_FLOW if product == "hr_flow" else EDUCATION if product == "education" else ()
+    plan = next((p for p in plans if p.name == plan_name), None)
+    if plan is None or Decimal(str(monthly_usd)) != plan.monthly_usd:
+        return None
+    return plan.commission_usd if product == "hr_flow" else plan.monthly_usd
+
+
+def commission_fx_for_quote(quote):
+    """USD basis + the TCMB rate fixed in the sale's quote (never a later rate)."""
+    basis = commission_basis_usd(quote["product"], quote["plan_name"], quote["monthly_usd"])
+    if basis is None:
+        return None
+    return {"basis_usd": basis, "fx_rate": Decimal(str(quote["exchange_rate"])),
+            "fx_date": str(quote["rate_date"])[:10], "fx_source": quote["rate_source"],
+            "rate_type": quote["rate_type"]}

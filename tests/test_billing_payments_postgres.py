@@ -201,3 +201,67 @@ def test_migration_008_payment_link_sharing_on_postgres(monkeypatch):
     finally:
         db.raw.rollback()
         db.close()
+
+
+def test_migration_009_usd_commission_fixed_try_on_postgres():
+    """Real PostgreSQL 18: 009 installs idempotently; a verified bank collection books a USD-based
+    commission fixed in TRY at the sale rate (25.00 USD x 50.77 = 1.269,25 TL), the FX snapshot is
+    append-only and the founder report renders. Rolled back; nothing persists."""
+    dsn = os.getenv("SALES_TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("Disposable local PostgreSQL DSN not supplied")
+    config = parse_dsn(dsn)
+    assert config.get("host") in ("127.0.0.1", "localhost")
+    assert config.get("dbname", "").startswith("sales_test_")
+    from control import app, commission_report as cr, sales, sales_http
+    db = postgres.Connection(postgres.Target(dsn))
+    try:
+        if not db.execute("SELECT to_regnamespace('ernasa_control')").fetchone()[0]:
+            with db.raw, db.raw.cursor() as cursor:
+                for migration in ("001_schema_draft.up.sql", "002_session_rules.up.sql"):
+                    cursor.execute((render_gateway.CONTROL_MIGRATIONS / migration).read_text())
+        render_gateway.ensure_sales_schema(db)
+        render_gateway.ensure_billing_quote_schema(db)
+        render_gateway.ensure_billing_payment_schema(db)
+        render_gateway.ensure_billing_payment_schema(db)  # restart: 005-009 re-run safely
+        now = datetime(2026, 11, 27, 9, tzinfo=timezone.utc)
+        if db.execute("SELECT id FROM users WHERE role='founder'").fetchone() is None:
+            db.execute("INSERT INTO users(email,name,secret,role) VALUES(?,?,?,?)",
+                       ("synthetic-founder@example.test", "Kurucu", "x", "founder"))
+        founder = sales.Actor(str(db.execute("SELECT id FROM users WHERE role='founder'").fetchone()[0]), None, True)
+        dealer = db.execute("INSERT INTO companies (name, status) VALUES (?,?) RETURNING id", ("Synthetic dealer", "Aktif")).fetchone()[0]
+        buyer = db.execute("INSERT INTO companies (name, status) VALUES (?,?) RETURNING id", ("Synthetic buyer", "Aktif")).fetchone()[0]
+        db.execute("INSERT INTO sales_accounts(id,company_id,name,email,secret,active) VALUES(?,?,?,?,?,1)",
+                   ("pg-rep", dealer, "PG Temsilci", "pg-rep@example.test", "x"))
+        rep = sales.Actor("pg-rep", dealer)
+        cust = sales.customer(db, rep, {"name": "PG Müşteri", "tax_id": "9876543210"})["id"]
+        sales.classify(db, founder, {"id": cust, "classification": "new", "reason": "k"})
+        db.execute("INSERT INTO sales_customer_companies VALUES(?,?,?,?)", (cust, buyer, int(founder.id), 1))
+        opp = sales.opportunity(db, rep, {"customer_id": cust, "title": "HR", "kind": "subscription"})["id"]
+        prop = sales.proposal(db, rep, {"opportunity_id": opp, "requested_minor": "100", "brief": "b"})["id"]
+        sales.submit(db, rep, {"id": prop})
+        db.execute("UPDATE sales_proposals SET status='approved', official_minor=100, discount_minor=0 WHERE id=?", (prop,))
+        bp.save_bank_settings(db, actor=founder, bank_name="B", account_holder="ERNASA", iban="TR330006100519786457841326",
+                              enabled=True, now=now)
+        ref = bp.create_payment_request(db, actor=rep, proposal_id=prop, product="hr_flow", plan_name="Starter",
+                                        period_start=date(2027, 4, 1), now=now)
+        rate = ExchangeRate(Decimal("50.77000000"), date(2026, 11, 27))
+        cid = bp.start_bank_checkout(db, ref=ref, rate=rate, vat_rate=Decimal("0.20"), now=now)
+        gross = db.execute("SELECT q.gross_minor FROM billing_checkouts c JOIN billing_quotes q ON q.id=c.quote_id WHERE c.id=?", (cid,)).fetchone()[0]
+        assert bp.confirm_bank_payment(db, actor=founder, checkout_id=cid, transaction_id="PG-FX-1", gross_minor=gross, now=now) == "activated"
+        fx = db.execute("""SELECT f.basis_usd, f.rate, f.commission_usd, f.fx_rate, f.fx_date, f.amount_minor, m.amount_minor AS m_amount
+                           FROM sales_commission_fx f JOIN sales_commissions m ON m.id=f.commission_id""").fetchone()
+        assert (fx["basis_usd"], fx["rate"], fx["commission_usd"], fx["fx_rate"]) == (Decimal("99.99"), 25, Decimal("25.00"), Decimal("50.77000000"))
+        assert str(fx["fx_date"]) == "2026-11-27" and fx["amount_minor"] == fx["m_amount"] == 126925
+        db.execute("SAVEPOINT fx_mut")
+        with pytest.raises(psycopg2.errors.RaiseException):
+            db.execute("UPDATE sales_commission_fx SET amount_minor=1")
+        db.execute("ROLLBACK TO SAVEPOINT fx_mut")
+        rows = cr.rows(db, founder)
+        assert len(rows) == 1 and rows[0]["window_text"] == "01.12.2026 – 15.12.2026" and rows[0]["rep_name"] == "PG Temsilci"
+        assert cr.rows(db, sales.Actor("other-rep", dealer)) == []
+        html = sales_http.commission_cards(app, db, founder)
+        assert "1.269,25 TL" in html and "$25,00" in html and "50,7700 TL" in html and "PG Temsilci" in html
+    finally:
+        db.raw.rollback()
+        db.close()

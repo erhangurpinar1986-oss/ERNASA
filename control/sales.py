@@ -255,19 +255,32 @@ def collection(db, actor, data):
     return {'id': target}
 
 
-def _book(db, p, op, c, period, reference, amount, cost, collected_on, verified_by, reason, commission_basis_minor=None):
-    """Shared booking + automatic commission rules (manual CONTROL entry and verified Shopier payment)."""
+def _book(db, p, op, c, period, reference, amount, cost, collected_on, verified_by, reason, commission_basis_minor=None,
+          commission_fx=None):
+    """Shared booking + automatic commission rules (manual CONTROL entry and verified Shopier/bank payment).
+
+    Rates: new customer's first product subscription: period 1 %25, later %5. Package upgrade of a
+    new customer: upgrade month %0, later periods %5. Second product / add-on: %0 (only the first
+    product subscription is commission-eligible, enforced by the sales_first_product index).
+    Existing customer: %0. A customer who already had a collection never earns %25 again
+    (covers renewals within 60 days).
+    With commission_fx (verified payments) the commission is USD-based: USD basis x rate rounded to
+    cents, then x the sale's TCMB rate -> fixed TRY entitlement, stored separately and never
+    recalculated."""
     sub_id, rate = None, 0
     if op['kind'] != 'project':
         sub = db.execute('SELECT * FROM sales_subscriptions WHERE opportunity_id=?', (op['id'],)).fetchone()
         if sub is None:
             if period != 1:
                 fail('İlk tahsilat dönemi 1 olmalı.')
-            # %25 only for a NEW customer's first product subscription; upgrade/addon/existing => 0.
-            eligible = int(c['classification'] == 'new' and op['kind'] == 'subscription' and not db.execute(
-                'SELECT 1 FROM sales_collections x JOIN sales_proposals p ON p.id=x.proposal_id JOIN sales_opportunities o ON o.id=p.opportunity_id WHERE o.customer_id=?', (c['id'],)).fetchone())
+            new_customer = c['classification'] == 'new'
+            first_ever = not db.execute(
+                'SELECT 1 FROM sales_collections x JOIN sales_proposals p ON p.id=x.proposal_id JOIN sales_opportunities o ON o.id=p.opportunity_id WHERE o.customer_id=?', (c['id'],)).fetchone()
+            eligible = int(new_customer and op['kind'] == 'subscription' and first_ever)
+            first_rate = 25 if eligible else 0
             sub_id = uid()
             db.execute('INSERT INTO sales_subscriptions VALUES(?,?,?,?)', (sub_id, op['id'], c['id'], eligible))
+            rate = first_rate
         else:
             sub_id, eligible = sub['id'], sub['eligible']
             if db.execute('SELECT 1 FROM sales_collections WHERE subscription_id=? AND held=1', (sub_id,)).fetchone():
@@ -275,7 +288,8 @@ def _book(db, p, op, c, period, reference, amount, cost, collected_on, verified_
             last = db.execute('SELECT MAX(period) FROM sales_collections WHERE subscription_id=?', (sub_id,)).fetchone()[0]
             if period != last+1:
                 fail('Tahsilat dönemi mükerrer veya sırasız.')
-        rate = (25 if period == 1 else 5) if eligible else 0
+            upgrade_of_new = op['kind'] == 'upgrade' and c['classification'] == 'new'
+            rate = 5 if (eligible or upgrade_of_new) else 0
     elif period != 1:
         fail('Tek seferlik proje dönemi 1 olmalı.', 422)
     target = uid()
@@ -286,8 +300,29 @@ def _book(db, p, op, c, period, reference, amount, cost, collected_on, verified_
         fail('Komisyon matrahı geçersiz.', 422)
     # Projects deliberately have no automatic accrual.
     if op['kind'] != 'project':
-        db.execute('INSERT INTO sales_commissions(id,collection_id,amount_minor,rate,status) VALUES(?,?,?,?,?)',
-                   (uid(), target, (basis*rate+50)//100, rate, 'pending'))
+        commission_id = uid()
+        if commission_fx is None:
+            db.execute('INSERT INTO sales_commissions(id,collection_id,amount_minor,rate,status) VALUES(?,?,?,?,?)',
+                       (commission_id, target, (basis*rate+50)//100, rate, 'pending'))
+        else:
+            from decimal import Decimal
+            from .billing_catalog import commission_usd, fixed_try_minor
+            from .tcmb_rates import RATE_TYPE, SOURCE
+            fx_rate = commission_fx.get('fx_rate')
+            if (not isinstance(fx_rate, Decimal) or not fx_rate.is_finite() or fx_rate <= 0
+                    or not commission_fx.get('fx_date') or commission_fx.get('fx_source') != SOURCE
+                    or commission_fx.get('rate_type', RATE_TYPE) != RATE_TYPE):
+                fail('Satış kuru doğrulanamadı; kesin hak ediş oluşturulmadı, CONTROL incelemesine alındı.')
+            usd = commission_usd(commission_fx['basis_usd'], rate)
+            amount_try = fixed_try_minor(usd, fx_rate)
+            if fixed_try_minor(commission_fx['basis_usd'], fx_rate) > amount:
+                fail('Komisyon matrahı tahsilattan büyük olamaz.', 422)
+            db.execute('INSERT INTO sales_commissions(id,collection_id,amount_minor,rate,status) VALUES(?,?,?,?,?)',
+                       (commission_id, target, amount_try, rate, 'pending'))
+            db.execute('INSERT INTO sales_commission_fx VALUES(?,?,?,?,?,?,?,?,?)',
+                       (commission_id, str(commission_fx['basis_usd']), rate, str(usd), str(fx_rate),
+                        commission_fx['fx_date'], commission_fx['fx_source'], amount_try,
+                        int(datetime.now(timezone.utc).timestamp())))
     return target, rate
 
 
@@ -298,7 +333,8 @@ def next_period(db, opportunity_id):
     return (db.execute('SELECT MAX(period) FROM sales_collections WHERE subscription_id=?', (sub['id'],)).fetchone()[0] or 0) + 1
 
 
-def book_verified_payment(db, *, proposal_id, net_minor, reference, collected_on, verifier_user_id, commission_basis_minor=None):
+def book_verified_payment(db, *, proposal_id, net_minor, reference, collected_on, verifier_user_id, commission_basis_minor=None,
+                          commission_fx=None):
     """Called inside the payment-activation transaction after Shopier verification.
     HR FLOW may supply a separate approved commission basis; other products retain net collection."""
     p = db.execute('SELECT * FROM sales_proposals WHERE id=?', (proposal_id,)).fetchone()
@@ -311,7 +347,8 @@ def book_verified_payment(db, *, proposal_id, net_minor, reference, collected_on
     if op['kind'] == 'project':
         fail('Proje satışları otomatik komisyona girmez.')
     target, rate = _book(db, p, op, c, next_period(db, op['id']), reference, net_minor, 0,
-                         collected_on, verifier_user_id, 'Shopier API ile doğrulanmış otomatik tahsilat', commission_basis_minor)
+                         collected_on, verifier_user_id, 'Doğrulanmış otomatik tahsilat (Shopier / banka)', commission_basis_minor,
+                         commission_fx)
     db.execute('INSERT INTO sales_audit VALUES(?,?,?,?,?,?,?)',
                (uid(), p['company_id'], 'shopier_verifier', 'collection_verified', target,
                 f'net_minor={net_minor}; basis={commission_basis_minor}; rate={rate}; ref={reference}', stamp()))
