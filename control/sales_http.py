@@ -449,8 +449,8 @@ def tracking_section(c, db, actor, f, inp, options, ref=None):
             action = f('payment_request', c.hidden('proposal_id', p['id'])+options('product','Ürün',products)
                        +options('plan_name','Paket',plans)+inp('period_start','Dönem başlangıcı','date'),
                        'Ödeme bağlantısı oluştur')
-        rows.append([c.e(p['customer']), record_code(c,p['id'],'TEK')+'<br>'+c.e(p['brief'][:60]), '—',
-                     stage_badge(c, p['stage']), '—', '—', action])
+        rows.append([c.e(p['customer']), record_code(c,p['id'],'TEK')+'<br>'+c.e(p['brief'][:60]),
+                     stage_badge(c, p['stage']), '—', action])
     for l in links:
         url = c_public_url(l['ref'])
         info, person, open_ = l['info'], l['contact'], l['stage'] in ('ready','awaiting','bank_review')
@@ -482,18 +482,22 @@ def tracking_section(c, db, actor, f, inp, options, ref=None):
             if person and person['email']:
                 actions += f('send_payment_email', c.hidden('ref', l['ref']), 'E-posta ile gönder')
         actions += f'<p><a class="sales-next-step" href="{base}?tab=payments&amp;ref={c.e(l["ref"])}#odeme-durumu">Ödeme durumunu sorgula</a></p>'
-        rows.append([c.e(l['customer'] or l['company_name'])+'<br><small>'+c.e(l['company_name'])+'</small><br>'+who,
+        name = c.e(l['customer'] or l['company_name'])
+        if l['customer'] and l['customer'] != l['company_name']:
+            name += '<br><small>'+c.e(l['company_name'])+'</small>'
+        rows.append([name+'<br>'+who,
                      (record_code(c,l['proposal_id'],'TEK')+'<br>' if l['proposal_id'] else '<small>Doğrudan satış</small><br>')
-                     + c.e(share.LABELS[l['product']]+' '+l['plan_name']),
-                     c.e(local_date(str(l['period_start']))+' – '+local_date(end.isoformat())),
-                     status_html, commission, sent, actions])
+                     + c.e(share.LABELS[l['product']]+' '+l['plan_name'])
+                     + '<br><small>'+c.e(local_date(str(l['period_start']))+' – '+local_date(end.isoformat()))+'</small>',
+                     status_html + ('<br>'+commission if commission != '—' else ''), sent, actions])
+    rows = [['<div>'+cell+'</div>' for cell in row] for row in rows]  # one grid item per cell on mobile
     out = c.card('Teklif ve ödeme takibi',
         '<span id="odeme-takibi"></span><p>CONTROL onaylı her teklif için tek ödeme bağlantısı oluşturulur; aynı dönem için '
         'tekrar basıldığında mevcut bağlantı kullanılır. WhatsApp ve e-posta yalnız firmanın CONTROL’de kayıtlı yetkilisine '
         'gider. Fiyat, IBAN, banka tahsilat onayı ve komisyon oranı CONTROL kurucusundadır.</p>'
         '<p id="odeme-kopya-sonuc" role="status"></p>'
         + sales_table(c, 'Takip edilecek teklif veya ödeme bağlantısı yok.',
-                      ('Müşteri ve yetkili','Teklif / paket','Abonelik dönemi','Durum','Komisyon','Gönderim','Bağlantı ve işlemler'), rows))
+                      ('Müşteri ve yetkili','Teklif, paket ve dönem','Durum ve komisyon','Gönderim','Bağlantı ve işlemler'), rows))
     if ref:
         out += status_detail(c, db, actor, ref)
     if actor.founder and share.ready(db):
