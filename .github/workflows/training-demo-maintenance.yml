@@ -7,6 +7,10 @@ on:
       - "tests/test_candidate_experience.py"
       - ".github/workflows/training-demo-maintenance.yml"
   workflow_dispatch:
+concurrency:
+  # Cancel superseded runs of the same PR (a newer push will run every check again).
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   safety:
     runs-on: ubuntu-latest
