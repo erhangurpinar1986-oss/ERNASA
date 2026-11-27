@@ -188,7 +188,7 @@ def test_payment_disabled_and_unknown_ref_and_cross_origin(env, monkeypatch):
     assert not shop["products"]
 
 
-def test_founder_only_one_kurus_live_test_plan_is_kept_apart(env, monkeypatch):
+def test_founder_only_fixed_3tl_live_test_plan_is_kept_apart(env, monkeypatch):
     db, server, shop = env
     monkeypatch.setenv("HR_PAYMENTS_ENABLED", "0")   # real customers stay closed
     prop = sale(db)
@@ -206,24 +206,29 @@ def test_founder_only_one_kurus_live_test_plan_is_kept_apart(env, monkeypatch):
     ref = cmd(db, FOUNDER, "payment_request", proposal_id=prop, company_id="2", product="education",
               plan_name="Ödeme Testi", period_start="2099-01-01")["ref"]
     status, _, html = request(server, "GET", f"/odeme/{ref}")
-    assert status == 200 and "0,01 TL" in html and "1 eğitim katılımcısı" in html
+    assert status == 200 and "1 eğitim katılımcısı" in html
+    # Fixed 3,00 TL incl. KDV (2,50 + 0,50), no USD wording, no exchange-rate line
+    assert "Sabit test tutarı: 3,00 TL (KDV dahil)" in html
+    assert "2,50 TL" in html and "0,50 TL" in html and "3,00 TL" in html
+    assert "USD" not in html and "0,01 TL" not in html
     request(server, "POST", f"/odeme/{ref}", b"terms=1",
             {"Content-Type": "application/x-www-form-urlencoded", "Origin": server.origin})
-    assert shop["products"] == {"P1": 1}
-    assert webhook(server, shop, "t1", "P1", 1, "wt1")[0] == 200
-    assert webhook(server, shop, "t1", "P1", 1, "wt2")[0] == 200   # duplicate delivery
+    assert shop["products"] == {"P1": 300}  # Shopier product priced at 3,00 TL
+    assert webhook(server, shop, "t1", "P1", 300, "wt1")[0] == 200
+    assert webhook(server, shop, "t1", "P1", 300, "wt2")[0] == 200   # duplicate delivery
     assert db.execute("SELECT capacity FROM billing_periods").fetchone()[0] == 1
     assert db.execute("SELECT COUNT(*) FROM billing_provider_orders").fetchone()[0] == 1
     # Real Sales Hub ledgers untouched; computed values kept apart
     assert db.execute("SELECT COUNT(*) FROM sales_collections").fetchone()[0] == 0
     assert db.execute("SELECT COUNT(*) FROM sales_commissions").fetchone()[0] == 0
     t = db.execute("SELECT * FROM billing_test_results").fetchone()
-    assert (t["gross_minor"], t["sales_net_minor"], t["sales_rate"], t["sales_commission_minor"]) == (1, 1, 25, 0)
+    assert (t["gross_minor"], t["sales_net_minor"], t["sales_rate"], t["sales_commission_minor"]) == (300, 250, 25, 63)
     assert t["commission_window"]
     assert db.execute("SELECT COUNT(*) FROM service_terms").fetchone()[0] == 0  # HR FLOW untouched
     ident_f = (FOUNDER, "csrf", {"name": "Kurucu", "email": "f@example.test"})
     page = sales_http.content(app, db, ident_f, "payments")
-    assert "Canlı ödeme testi" in page and "TEST · " in page
+    assert "Canlı ödeme testi (3,00 TL, KDV dahil)" in page and "TEST · " in page
+    assert "0,01 TL" not in page and "3,00 TL" in page
     ident_rep = (REP, "csrf", {"name": "Temsilci A", "email": "a@example.test"})
     rep_page = sales_http.content(app, db, ident_rep, "payments")
     assert "Canlı ödeme testi" not in rep_page and ref not in rep_page
