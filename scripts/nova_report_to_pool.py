@@ -36,7 +36,7 @@ def parse(text, report_date):
         parts = cells(line)
         if header is None:
             if parts and parts[0].lower().startswith('şirket'):
-                header = [p.lower() for p in parts]
+                header = [p.replace('İ', 'i').replace('I', 'ı').lower() for p in parts]
             continue
         if set(''.join(parts)) <= set('-: '):
             continue
