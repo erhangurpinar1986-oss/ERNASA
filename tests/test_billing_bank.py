@@ -48,7 +48,7 @@ def db(monkeypatch):
     con.executescript(LEGACY)
     con.executescript(sales.SQLITE_GUARDS)
     for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql",
-                 "007_bank_transfer.up.sql"):
+                 "007_bank_transfer.up.sql", "009_commission_fx.up.sql"):
         con.executescript(sqlite_sql((MIG / name).read_text()))
     con.execute("INSERT INTO sales_accounts(id,company_id,name,email,secret,active) VALUES('rep1',10,'rep1','r@x.tr','s',1)")
     return con
@@ -168,8 +168,11 @@ def test_confirmation_activates_once_and_books_commission_on_approved_basis(db):
     assert db.execute("SELECT COUNT(*) FROM billing_periods").fetchone()[0] == 1
     assert db.execute("SELECT status, user_quota FROM ats_subscriptions WHERE company_id=20").fetchone()[:] == ("Aktif", 3)
     m = db.execute("SELECT rate, amount_minor FROM sales_commissions").fetchall()
-    # Growth commission basis 249.99 USD * 42.5 = 10624.58 TL (sale price 269.99 is not the basis)
-    assert [tuple(r) for r in m] == [(25, (1062458 * 25 + 50) // 100)]
+    # Growth: basis 249.99 USD x %25 = 62.50 USD, x sale rate 42.50 = 2.656,25 TL fixed
+    assert [tuple(r) for r in m] == [(25, 265625)]
+    fx = db.execute("SELECT basis_usd, rate, commission_usd, fx_rate, fx_date, amount_minor FROM sales_commission_fx").fetchone()
+    assert tuple(str(x) for x in fx) == ("249.99", "25", "62.5", "42.50000000", "2026-11-25", "265625") or \
+        (str(fx[2]) in ("62.5", "62.50") and fx[5] == 265625 and str(fx[4]).startswith("2026-11-25"))
     ref_row = db.execute("SELECT reference, net_minor FROM sales_collections").fetchone()
     assert ref_row["reference"] == "bank_transfer:DEKONT-001" and ref_row["net_minor"] == 1147458
     assert bp.pending_bank_payments(db) == []

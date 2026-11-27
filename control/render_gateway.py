@@ -89,6 +89,7 @@ def ensure_billing_payment_schema(db):
         cursor.execute((CONTROL_MIGRATIONS / "006_billing_test.up.sql").read_text(encoding="utf-8"))
         cursor.execute((CONTROL_MIGRATIONS / "007_bank_transfer.up.sql").read_text(encoding="utf-8"))
         cursor.execute((CONTROL_MIGRATIONS / "008_payment_link_events.up.sql").read_text(encoding="utf-8"))
+        cursor.execute((CONTROL_MIGRATIONS / "009_commission_fx.up.sql").read_text(encoding="utf-8"))
 
 
 def ensure_billing_quote_schema(db):
