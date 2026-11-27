@@ -1019,11 +1019,12 @@ def seed_knowledge(db):
         ('hr_flow', 'genel', 'ERNASA HR FLOW nedir?',
          'Başvuru toplama, CV değerlendirme (ATS), yapay zekâ destekli ön mülakat, mülakat planlama ve aday takibini tek panelde '
          'birleştiren işe alım yazılımı. Son karar her zaman şirketin İK yetkilisindedir: "Yapay zekâ analiz eder, insan karar verir."',
-         'draft', 'Ürün ekibi tanımı — kurucu onayı bekliyor'),
-        ('hr_flow', 'ödeme', 'Nasıl ödeme yapılır?', 'Kredi/banka kartı (Shopier güvenli ödeme bağlantısı) veya banka havalesi.',
-         'draft', 'control/billing_http.py — kurucu onayı bekliyor'),
+         'draft', 'kod: ats_*.py, interview_*.py, hr_flow_*.py (CONTROL onaylı ürün kapsamı)'),
+        ('hr_flow', 'ödeme', 'Nasıl ödeme yapılır?', 'Satış temsilcimizin ilettiği kişiye özel güvenli ödeme bağlantısıyla: kredi/banka '
+         'kartı (Shopier) veya, CONTROL\'de açık olduğunda, banka havalesi. Kart ve havalede aynı KDV dahil tutar uygulanır.',
+         'draft', 'kod: control/billing_http.py, control/billing_payments.py'),
         ('hr_flow', 'veri güvenliği', 'Verilerimiz nerede tutuluyor?', 'Kurucu tarafından onaylanacak metin. Onaylanana kadar NOVA bu soruyu insan temsilciye aktarır.',
-         'draft', 'Kurucu onayı bekliyor'),
+         'draft', 'politika bekliyor: veri güvenliği metni'),
         ('ernasa', 'sertifika', 'ISO sertifikanız var mı?', 'ERNASA\'nın şu anda alınmış bir ISO sertifikası yoktur; NOVA sertifika iddiasında bulunmaz.',
          'approved', 'NOVA 2.0 görev talimatı'),
         ('ernasa', 'indirim', 'İndirim yapabilir misiniz?', 'NOVA indirim, özel ödeme koşulu veya sözleşme değişikliği veremez; talebi yetkili satış temsilcisine iletir.',
@@ -1038,40 +1039,40 @@ def seed_knowledge(db):
         ('hr_flow', 'paket', 'Hangi paketi seçmeliyiz?',
          'Aylık aday hacmine göre: ~100 aday Starter, ~500 Growth, ~1.000 Business, ~2.500 PRO. Bir aday işlemi ATS değerlendirmesi ve '
          'gerekiyorsa AI ön mülakatı tek hak olarak kapsar. Kesin öneriyi satış temsilcimiz ihtiyaç görüşmesinden sonra yapar.',
-         'draft', 'control/billing_http.py limits() — kurucu onayı bekliyor'),
+         'draft', 'kod: control/billing_http.py limits(), control/billing_catalog.py'),
         ('hr_flow', 'özellik', 'ATS ve CV değerlendirme ne yapar?',
          'Başvuruları tek yerde toplar, CV dosyalarını (PDF/Word, taranmış belgeler dahil) okur ve pozisyon kriterlerine göre '
          'eşleşme değerlendirmesi üretir; sıralama İK ekibinin incelemesi içindir.',
-         'draft', 'ats_cv_import.py, ats_matching.py, ocr_service — kurucu onayı bekliyor'),
+         'draft', 'kod: ats_cv_import.py, ats_matching.py, ocr_service'),
         ('hr_flow', 'özellik', 'Yapay zekâ destekli ön mülakat nasıl çalışır?',
          'Adaya kişiye özel bağlantı gönderilir; aday şirketin belirlediği veya şablon sorulara çevrim içi yanıt verir; sistem yanıtları '
          'değerlendirip rapor hazırlar. Onay, ret veya ikinci görüşme kararı her zaman İK yetkilisindedir.',
-         'draft', 'interview_assessments.py, portal_interviews.py, hr_flow_decisions.py — kurucu onayı bekliyor'),
+         'draft', 'kod: interview_assessments.py, portal_interviews.py, hr_flow_decisions.py'),
         ('hr_flow', 'özellik', 'Mülakat organizasyonu ve aday takibi var mı?',
          'Mülakat randevusu planlama, adaya bildirim e-postaları, aday aşama takibi ve İK karar merkezi bulunur.',
-         'draft', 'hr_flow_booking.py, flow_candidate_notifications.py, hr_flow_automation.py — kurucu onayı bekliyor'),
+         'draft', 'kod: hr_flow_booking.py, flow_candidate_notifications.py, hr_flow_automation.py'),
         ('hr_flow', 'özellik', 'Raporlama sunuyor musunuz?', 'Aday ve pozisyon bazında değerlendirme raporları ve PDF çıktısı sunulur.',
-         'draft', 'hr_flow_report.py, recruitment_pdf.py — kurucu onayı bekliyor'),
+         'draft', 'kod: hr_flow_report.py, recruitment_pdf.py'),
         ('egitim', 'özellik', 'Eğitim modülleri nedir?',
          'Çalışanlara dijital eğitim ataması, sesli/video içerik ve ilerleme takibi sağlayan ERNASA Eğitim Platformu.',
-         'draft', 'academy_*.py, ernasa_training.py — kurucu onayı bekliyor'),
+         'draft', 'kod: academy_*.py, ernasa_training.py'),
         ('hr_flow', 'destek', 'Teknik destek nasıl alınır?', 'iletisim@ernasa.com adresinden; yanıt süresi taahhüdü kurucu tarafından belirlenecek.',
-         'draft', 'Kurucu onayı bekliyor'),
+         'draft', 'politika bekliyor: destek SLA'),
         ('hr_flow', 'deneme', 'Ücretsiz deneme var mı?', 'Kurucu tarafından belirlenecek. Onaylanana kadar NOVA bu soruyu satış temsilcisine aktarır.',
-         'draft', 'Kurucu onayı bekliyor'),
+         'draft', 'politika bekliyor: ücretsiz deneme'),
         ('itiraz', 'mevcut sistem', 'Zaten bir ATS / Kariyer.net kullanıyoruz.',
          'HR FLOW mevcut ilan kanallarınızın yerine geçmek zorunda değil; başvuruları tek yerde toplayıp ön değerlendirme ve mülakat '
          'organizasyonundaki manuel işi azaltmayı hedefler. 15 dakikalık bir demoda kendi sürecinizle karşılaştırabiliriz.',
-         'draft', 'Satış itiraz kütüphanesi — kurucu onayı bekliyor'),
+         'draft', 'onaylı politika: NOVA 2.0 talimatı (indirim/taahhüt yok, son karar İK) + control/billing_catalog.py'),
         ('itiraz', 'bütçe', 'Bütçemiz yok / pahalı.',
          'Paketler aylık aday hacmine göre başlar; en küçük paket aylık 100 aday içindir. İndirim veya özel koşulu NOVA veremez; '
-         'talebinizi yetkili satış temsilcisine iletirim.', 'draft', 'Satış itiraz kütüphanesi — kurucu onayı bekliyor'),
+         'talebinizi yetkili satış temsilcisine iletirim.', 'draft', 'onaylı politika: NOVA 2.0 talimatı (indirim/taahhüt yok, son karar İK) + control/billing_catalog.py'),
         ('itiraz', 'yapay zekâ güveni', 'Yapay zekâ adayları yanlış eler mi?',
          'Sistem karar vermez, değerlendirme ve rapor üretir; adayı onaylama veya eleme kararı her zaman İK ekibinizdedir: '
-         '"Yapay zekâ analiz eder, insan karar verir."', 'draft', 'Satış itiraz kütüphanesi — kurucu onayı bekliyor'),
+         '"Yapay zekâ analiz eder, insan karar verir."', 'draft', 'onaylı politika: NOVA 2.0 talimatı (indirim/taahhüt yok, son karar İK) + control/billing_catalog.py'),
         ('itiraz', 'zamanlama', 'Şu an ilgilenmiyoruz / sonra arayın.',
          'Anlıyorum. Uygun olduğunuz bir zamanı not edeyim mi, yoksa kısa bir tanıtım e-postası mı tercih edersiniz? İstemezseniz sizi listemizden çıkarırım.',
-         'draft', 'Satış itiraz kütüphanesi — kurucu onayı bekliyor'),
+         'draft', 'onaylı politika: NOVA 2.0 talimatı (indirim/taahhüt yok, son karar İK) + control/billing_catalog.py'),
     ]
     for product, topic, question, answer, status, source in entries:
         db.execute('INSERT INTO nova_knowledge VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(product,topic,question) DO NOTHING',
@@ -1081,6 +1082,14 @@ def seed_knowledge(db):
 def knowledge_command(db, actor, data):
     founder(actor)
     action = s(data, 'knowledge_action', 20) or 'upsert'
+    if action == 'approve_verified':
+        # One management decision: approve every draft whose source is the code or an approved commercial
+        # policy. Drafts that still wait for a policy ('politika bekliyor') are left untouched.
+        rows = db.execute("SELECT id FROM nova_knowledge WHERE status='draft' AND (source LIKE 'kod:%' OR source LIKE 'onaylı politika:%')").fetchall()
+        for row in rows:
+            db.execute('UPDATE nova_knowledge SET status=?,approved_by=?,updated_at=? WHERE id=?', ('approved', actor.id, stamp(), row['id']))
+        event(db, None, 'knowledge', actor.id, f'Toplu yönetim onayı: {len(rows)} kayıt (kod/onaylı politika kaynaklı)')
+        return {'approved': len(rows)}
     if action in ('approve', 'not_live', 'draft'):
         target = s(data, 'id', 64, required=True)
         status = {'approve': 'approved', 'not_live': 'not_live', 'draft': 'draft'}[action]

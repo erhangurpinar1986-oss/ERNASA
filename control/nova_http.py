@@ -211,7 +211,11 @@ def knowledge(c, snap, csrf):
             actions += (f'<form method="post" action="/nova?tab=knowledge">{c.hidden("csrf", csrf)}{c.hidden("action", "knowledge")}'
                         f'{c.hidden("knowledge_action", key)}{c.hidden("id", k["id"])}<button>{label}</button></form>')
         rows.append([c.e(k['product']), c.e(k['topic']), c.e(k['question']), c.e(k['answer']), c.e(k['status']), c.e(k['source']), actions])
-    out = c.card('Ürün bilgi merkezi — NOVA yalnızca “approved” kayıtları müşteriye söyler',
+    pending = sum(1 for k in snap['knowledge'] if k['status'] == 'draft' and k['source'].startswith(('kod:', 'onaylı politika:')))
+    bulk = c.card('Toplu yönetim onayı', f'<p>Kaynağı mevcut kod veya onaylı ticari politika olan {pending} taslak kayıt tek kararla onaylanır. '
+                  '“politika bekliyor” kayıtları taslak kalır ve NOVA bu soruları insan temsilciye aktarır.</p>' +
+                  post_form(c, csrf, 'knowledge', c.hidden('knowledge_action', 'approve_verified'), 'Doğrulanmış taslakları toplu onayla', 'knowledge'))
+    out = bulk + c.card('Ürün bilgi merkezi — NOVA yalnızca “approved” kayıtları müşteriye söyler',
                  c.table(('Ürün', 'Konu', 'Soru', 'Cevap', 'Durum', 'Kaynak', 'İşlem'), rows))
     out += c.card('Bilgi ekle / güncelle (taslak olarak kaydedilir)', post_form(c, csrf, 'knowledge',
                   inp(c, 'Ürün', 'product', 'hr_flow') + inp(c, 'Konu', 'topic') + inp(c, 'Soru', 'question') +

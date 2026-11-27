@@ -391,6 +391,11 @@ def test_knowledge_seed_and_approval(db):
     assert any(k['topic'] == 'genel' for k in nova.approved_knowledge(db))
     with pytest.raises(sales.Invalid):
         run(db, nova.knowledge_command, F, {'product': 'hr_flow', 'topic': 't', 'question': 'q', 'answer': 'Garantiliyoruz', 'source': 's'})
+    with pytest.raises(sales.Invalid):
+        run(db, nova.knowledge_command, REP, {'knowledge_action': 'approve_verified'})
+    assert run(db, nova.knowledge_command, F, {'knowledge_action': 'approve_verified'})['approved'] >= 8
+    waiting = db.execute("SELECT count(*) FROM nova_knowledge WHERE status='draft' AND source LIKE 'politika bekliyor%'").fetchone()[0]
+    assert waiting == 3 and not any(k['topic'] == 'deneme' for k in nova.approved_knowledge(db))
 
 
 def test_report_and_metrics(db):
