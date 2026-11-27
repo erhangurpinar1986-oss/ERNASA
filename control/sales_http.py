@@ -290,15 +290,24 @@ def login(c, h, db, data):
     now = int(time.time())
     address = c.email(data)
     throttle = login_throttle.for_server(h.server, 'sales')
-    wait = throttle.check(address)
+    device = SimpleCookie(h.headers.get('Cookie', '')).get(login_throttle.device_cookie_name('sales'))
+    device = device.value if device else None
+    wait = throttle.check(address, device)
     if wait:
         sales.fail(login_throttle.wait_message(wait), 429)
+    from . import account_security
+    try:
+        account_security.require_turnstile(h, data, 'sales_login', needed=throttle.needs_challenge(address, device))
+    except c.Problem as problem:
+        sales.fail(str(problem), problem.status)
     row = db.execute('SELECT a.* FROM sales_accounts a JOIN companies c ON c.id=a.company_id WHERE a.email=? AND a.active=1 AND c.status=?', (address, 'Aktif')).fetchone()
     valid = c.check_ik_password(str(data.get('password', '')), row['secret'] if row else None)
     if not row or not valid:
-        throttle.failure(address)
+        throttle.failure(address, device)
         sales.fail('Giriş bilgileri geçersiz.', 401)
-    throttle.success(address)
+    device = throttle.success(address, device)
+    h.pending_cookies = [login_throttle.device_cookie('sales', device, h.server.public_prefix + '/sales',
+                                                       h.server.origin.startswith('https://'))]
     token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
     db.execute('DELETE FROM sales_sessions WHERE expires<=?', (now,))
     db.execute('INSERT INTO sales_sessions VALUES(?,?,?,?)', (c.token_hash(token), row['id'], csrf, now+c.TTL))
@@ -314,13 +323,15 @@ def set_cookie(h, name, token, age):
 
 def sales_login_form(c, csrf, error=None):
     """Always show the usable login form and the separate CONTROL founder entry."""
-    fields = input_field(c,'email','E-posta','email')+input_field(c,'password','Parola','password')
+    from . import account_security
+    fields = (input_field(c,'email','E-posta','email')+input_field(c,'password','Parola','password')
+              + account_security.turnstile_widget('sales_login'))
     notice = ('<p>Bu giriş yalnızca CONTROL tarafından etkinleştirilmiş '
               'satış temsilcisi hesapları içindir.</p>'
               '<p><strong>ERNASA kurucusu veya yöneticisi misiniz?</strong> '
               '<a href="/giris">CONTROL yönetim girişini açın</a>.</p>')
     alert = f'<p class="sales-login-error" role="alert">{c.e(str(error))}</p>' if error else ''
-    return alert + notice + form(c,'/sales/login',csrf,'login',fields,'Temsilci girişi')
+    return alert + notice + form(c,'/sales/login',csrf,'login',fields,'Temsilci girişi') + account_security.login_links('sales')
 
 
 
@@ -842,11 +853,16 @@ def handle(h, path, post):
                 if post:
                     token = login(c,h,db,data)
                     db.commit()
-                    h.reply(303,headers=(('Location',h.server.public_prefix+'/sales'),set_cookie(h,'sales_session',token,c.TTL)))
+                    # Session cookie last: some clients keep only the final Set-Cookie of a response.
+                    h.reply(303,headers=(('Location',h.server.public_prefix+'/sales'),*getattr(h,'pending_cookies',()),
+                                         set_cookie(h,'sales_session',token,c.TTL)))
                 elif identity:
                     h.reply(303,headers=(('Location',h.server.public_prefix+'/sales'),))
                 else:
                     token = secrets.token_urlsafe(32)
+                    from . import account_security
+                    if account_security.turnstile_widget('sales_login'):
+                        h.csp_override = account_security.turnstile_csp()
                     render(c,h,'Satış temsilcisi girişi',sales_login_form(c,token),
                            headers=(set_cookie(h,'sales_login_csrf',token,c.LOGIN_CSRF_TTL),))
                 return True
