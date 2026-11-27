@@ -70,9 +70,11 @@ CORPORATE_LOCALPARTS = ('info', 'iletisim', 'bilgi', 'ik', 'insankaynaklari', 'h
 OPT_OUT_LINE = 'Bu tür e-postaları almak istemiyorsanız "LİSTEDEN ÇIKAR" yazarak yanıtlamanız yeterli; sizi tüm iletişim listelerimizden çıkarırız.'
 SENDER_BLOCK = ('ERNASA Yazılım Sistemleri · iletisim@ernasa.com · www.ernasa.com\n'
                 'Bu ileti ERNASA\'nın yapay zekâ destekli satış asistanı NOVA tarafından hazırlanmış ve yetkili onayıyla gönderilmiştir.')
-AI_INTRO = ("Merhaba, ben NOVA, ERNASA'nın yapay zekâ destekli satış asistanıyım. İnsan kaynakları ve işe alım "
-            "süreçlerinize yönelik geliştirdiğimiz yazılım çözümleri hakkında kısa bir bilgi vermek istiyorum. "
-            "Şu anda konuşmaya uygun musunuz?")
+# Ticari İletişim Yönetmeliği: a commercial voice call states the trade name (ticaret unvanı).
+TRADE_NAME = os.getenv('ERNASA_NOVA_TRADE_NAME', 'ERNASA Yazılım Sistemleri')
+AI_INTRO = ("Merhaba, ben NOVA, ERNASA'nın yapay zekâ destekli satış asistanıyım; " + TRADE_NAME + " adına arıyorum. "
+            "İnsan kaynakları ve işe alım süreçlerinize yönelik geliştirdiğimiz yazılım çözümleri hakkında kısa bir bilgi "
+            "vermek istiyorum. Şu anda konuşmaya uygun musunuz?")
 
 
 def founder(actor):
