@@ -54,6 +54,11 @@ class HttpFlow(unittest.TestCase):
         with closing(app.connect(self.path)) as db:
             db.execute("INSERT INTO users(email,name,secret,role,company_id) VALUES(?,?,?,'founder',NULL)",
                        ('founder@example.test', 'Kurucu', app.digest(PASSWORD)))
+            company = db.execute("INSERT INTO companies(name,status) VALUES('Synthetic Co','Aktif') RETURNING id").fetchone()[0]
+            db.execute("INSERT INTO users(email,name,secret,role,company_id) VALUES(?,?,?,'staff',?)",
+                       ('staff@example.test', 'Personel', app.digest(PASSWORD), company))
+            db.execute("INSERT INTO sales_accounts(id,company_id,name,email,secret,active) VALUES('rep0000000000001',?,?,?,?,1)",
+                       (company, 'Temsilci', 'rep@example.test', app.digest(PASSWORD)))
             db.commit()
         self.httpd = app.server(self.path, 0)
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
@@ -98,6 +103,40 @@ class HttpFlow(unittest.TestCase):
         # Existing screens still render for the founder.
         for route in ('/', '/firmalar', '/denetim'):
             self.assertEqual(owner.request('GET', route)[0], 200, route)
+
+    def csrf_of(self, page):
+        return re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+
+    def test_staff_security_post_only(self):
+        staff = Client(self.httpd.server_port)
+        self.assertEqual(staff.login('staff@example.test', PASSWORD)[0], 303)
+        status, page, _, _ = staff.request('GET', '/guvenlik')
+        self.assertEqual(status, 200)
+        csrf = self.csrf_of(page)
+        status, page, _, _ = staff.request('POST', '/guvenlik', {'csrf': csrf, 'action': 'totp_start'})
+        self.assertEqual(status, 200)
+        self.assertIn('<svg', page)  # local QR rendered
+        # Any other write is still refused for staff.
+        status, _, _, _ = staff.request('POST', '/', {'csrf': csrf, 'action': 'x'})
+        self.assertEqual(status, 403)
+        self.assertEqual(staff.request('GET', '/guvenlik-merkezi')[0], 403)
+
+    def test_sales_security_page(self):
+        rep = Client(self.httpd.server_port)
+        _, page, _, _ = rep.request('GET', '/sales/login')
+        csrf = self.csrf_of(page)
+        status, _, _, _ = rep.request('POST', '/sales/login', {'csrf': csrf, 'email': 'rep@example.test',
+                                                               'password': PASSWORD, 'code': ''})
+        self.assertEqual(status, 303)
+        status, page, _, _ = rep.request('GET', '/sales/guvenlik')
+        self.assertEqual(status, 200)
+        self.assertIn('İki adımlı doğrulama', page)
+        csrf = self.csrf_of(page)
+        status, page, _, _ = rep.request('POST', '/sales/guvenlik', {'csrf': csrf, 'action': 'totp_start'})
+        self.assertEqual(status, 200)
+        self.assertIn('<svg', page)
+        status, page, _, _ = rep.request('GET', '/guvenlik')  # a sales session never reaches CONTROL
+        self.assertIn(status, (303, 401, 403))
 
 
 if __name__ == '__main__':

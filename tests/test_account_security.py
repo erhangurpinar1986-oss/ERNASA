@@ -312,3 +312,176 @@ class SecurityCenterTests(Base):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ExtendedTests(Base):
+    """Staff and Sales Hub 2FA, QR enrolment, founder recovery scenarios, Security Center tracking."""
+
+    def setUp(self):
+        super().setUp()
+        import secrets as _s
+        from control import sales_http
+        self.sales_http = sales_http
+        with closing(app.connect(self.path)) as db:
+            self.staff = db.execute("INSERT INTO users(email,name,secret,role,company_id) VALUES(?,?,?,'staff',?) RETURNING id",
+                                    ('staff@example.test', 'Personel', app.digest(PASSWORD), self.company)).fetchone()[0]
+            self.rep = _s.token_hex(8)
+            db.execute('INSERT INTO sales_accounts(id,company_id,name,email,secret,active) VALUES(?,?,?,?,?,1)',
+                       (self.rep, self.company, 'Temsilci', 'rep@example.test', app.digest(PASSWORD)))
+            db.commit()
+        self.server.sales_login_throttle = login_throttle.LoginThrottle('sales')
+
+    def sales_login(self, password, code=''):
+        handler = FakeHandler(self.server, 'sales_login_csrf=' + 's' * 20)
+        with closing(app.connect(self.path)) as db:
+            try:
+                self.sales_http.login(app, handler, db, {'csrf': 's' * 20, 'email': 'rep@example.test',
+                                                         'password': password, 'code': code})
+                db.commit()
+                return 200
+            except Exception as problem:
+                db.rollback()
+                return getattr(problem, 'status', None) or problem.args[-1]
+
+    def sales_action(self, action, **data):
+        handler = FakeHandler(self.server)
+        info = {'id': self.rep, 'email': 'rep@example.test'}
+        with closing(app.connect(self.path)) as db:
+            try:
+                html = sec.handle_sales(handler, db, info, 'csrf', 'current-session', True, {'action': action, **data})
+                db.commit()
+                return html
+            except app.Problem as problem:
+                db.rollback()
+                return problem
+
+    def test_staff_can_enrol_without_gaining_other_rights(self):
+        actor, secret, codes = self.enroll(self.staff, 'staff')
+        self.assertEqual(self.login('staff@example.test', PASSWORD)[0], 401)
+        self.assertEqual(self.login('staff@example.test', PASSWORD, codes[0])[0], 200)
+        self.assertNotIn('/guvenlik-merkezi', app.ACCESS['staff'])
+        with closing(app.connect(self.path)) as db:
+            with self.assertRaises(app.Problem):
+                sec.handle_page(FakeHandler(self.server), db, actor, '/guvenlik-merkezi', False, None, {})
+            # Actions are bound to the signed-in user's id: another user's 2FA cannot be touched.
+            self.assertFalse(sec.has_two_factor(db, 'control', self.manager))
+
+    def test_sales_representative_two_factor(self):
+        self.assertEqual(self.sales_login(PASSWORD), 200)
+        self.sales_action('totp_start')
+        with closing(app.connect(self.path)) as db:
+            secret = sec._decrypt(sec.totp_row(db, 'sales', self.rep)[0])
+            self.assertIsNone(sec.totp_row(db, 'control', self.rep))  # areas never mix
+        html = self.sales_action('totp_confirm', code=sec.totp_at(secret, int(time.time() // 30)))
+        codes = [line.split('<code>')[1].split('</code>')[0] for line in html.split('<li>')[1:]]
+        self.assertEqual(self.sales_login(PASSWORD), 401)
+        self.assertEqual(self.sales_login(PASSWORD, sec.totp_at(secret, int(time.time() // 30) + 1)), 200)
+        self.assertEqual(self.sales_login(PASSWORD, codes[0]), 200)
+        self.assertIsInstance(self.sales_action('totp_disable', password='wrong', code=codes[1]), app.Problem)
+        self.sales_action('totp_disable', password=PASSWORD, code=codes[1])
+        self.assertEqual(self.sales_login(PASSWORD), 200)
+
+    def test_enrolment_page_shows_local_qr(self):
+        actor = self.actor(self.founder, 'founder')
+        self.account_action(actor, 'totp_start')
+        handler = FakeHandler(self.server)
+        with closing(app.connect(self.path)) as db:
+            html = sec.handle_page(handler, db, actor, '/guvenlik', False, None, {})
+            secret = sec._decrypt(sec.totp_row(db, 'control', self.founder)[0])
+        self.assertIn('<svg', html)
+        self.assertNotIn('http://', html.replace('http://www.w3.org/2000/svg', ''))
+        self.assertNotIn('https://', html)  # no external QR service or script
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            return
+        from control import qr
+        uri = sec.otpauth_uri(secret, 'founder@example.test')
+        modules = qr.encode(uri)
+        n, s, b = len(modules), 8, 4
+        img = np.full(((n + 2 * b) * s,) * 2, 255, np.uint8)
+        for y, row in enumerate(modules):
+            for x, v in enumerate(row):
+                if v:
+                    img[(y + b) * s:(y + b + 1) * s, (x + b) * s:(x + b + 1) * s] = 0
+        decoded = {cv2.QRCodeDetector().detectAndDecode(img)[0], cv2.QRCodeDetectorAruco().detectAndDecode(img)[0]}
+        self.assertIn(uri, decoded)
+
+    def test_founder_phone_loss(self):
+        # SMS is never a founder factor: losing the phone number changes nothing while the authenticator works.
+        _, secret, _ = self.enroll(self.founder, 'founder')
+        with closing(app.connect(self.path)) as db:
+            db.execute("INSERT INTO security_phones VALUES('control',?, '+905321234567', NULL, 0)", (str(self.founder),))
+            db.commit()
+        self.assertEqual(self.login('founder@example.test', PASSWORD, sec.totp_at(secret, int(time.time() // 30) + 1))[0], 200)
+
+    def test_founder_device_loss_recovers_with_codes_and_reenrols(self):
+        actor, _, codes = self.enroll(self.founder, 'founder')
+        # Authenticator lost: a recovery code still signs in ...
+        self.assertEqual(self.login('founder@example.test', PASSWORD, codes[0])[0], 200)
+        # ... then the founder replaces the authenticator without help.
+        self.account_action(actor, 'totp_disable', password=PASSWORD, code=codes[1])
+        _, new_secret, new_codes = self.enroll(self.founder, 'founder')
+        self.assertEqual(self.login('founder@example.test', PASSWORD, codes[2])[0], 401)  # old codes are void
+        self.assertEqual(self.login('founder@example.test', PASSWORD, new_codes[0])[0], 200)
+
+    def test_low_recovery_codes_warn_owner_and_security_center(self):
+        actor, _, codes = self.enroll(self.founder, 'founder')
+        for code in codes[:7]:
+            self.assertEqual(self.login('founder@example.test', PASSWORD, code)[0], 200)
+        with closing(app.connect(self.path)) as db:
+            page = sec.handle_page(FakeHandler(self.server), db, actor, '/guvenlik', False, None, {})
+            center = sec.handle_page(FakeHandler(self.server), db, actor, '/guvenlik-merkezi', False, None, {})
+        self.assertIn('Kurtarma kodunuz azaldı', page)
+        self.assertIn('3 kurtarma kodu kaldı', center)
+
+    def test_break_glass_when_every_factor_is_lost(self):
+        self.enroll(self.founder, 'founder')
+        self.actor(self.founder, 'founder')
+        self.assertEqual(self.login('founder@example.test', PASSWORD)[0], 401)
+        with self.assertRaises(ValueError):
+            sec.break_glass_reset(self.path, 'control', 'founder@example.test', 'ops', 'short')
+        sec.break_glass_reset(self.path, 'control', 'founder@example.test', 'ops',
+                              'Kimlik yüz yüze ve nüfus cüzdanı ile doğrulandı')
+        self.assertEqual(self.login('founder@example.test', PASSWORD)[0], 200)  # never permanently locked out
+        with closing(app.connect(self.path)) as db:
+            kinds = [r[0] for r in db.execute('SELECT kind FROM security_events')]
+            self.assertIn('break_glass_2fa_reset', kinds)
+            center = sec.handle_page(FakeHandler(self.server), db, self.actor(self.founder, 'founder'),
+                                     '/guvenlik-merkezi', False, None, {'olay': 'break_glass_2fa_reset'})
+        self.assertIn('Acil durum 2FA kurtarması', center)
+        self.assertIn('Kurucu hesabında iki adımlı doğrulama kapalı', center)
+
+    def test_break_glass_cli_requires_reason_and_confirmation(self):
+        self.enroll(self.founder, 'founder')
+        with mock.patch.dict(os.environ, {'ERNASA_CONTROL_DATABASE_URL': ''}):
+            rc = sec._main(['recover-2fa', '--email', 'founder@example.test', '--reason',
+                            'Kimlik görüntülü görüşmeyle doğrulandı', '--db-path', self.path])
+        self.assertEqual(rc, 0)
+        with closing(app.connect(self.path)) as db:
+            self.assertFalse(sec.has_two_factor(db, 'control', self.founder))
+
+    def test_critical_event_notifies_founder(self):
+        actor, _, codes = self.enroll(self.manager, 'supervisor')
+        self.mail.clear()
+        self.account_action(actor, 'totp_disable', password=PASSWORD, code=codes[0])
+        recipients = [m[0] for m in self.mail]
+        self.assertIn('founder@example.test', recipients)
+        self.assertIn('manager@example.test', recipients)
+        self.assertFalse(any(codes[0] in m[2] for m in self.mail))
+
+    def test_security_center_user_status_and_filters(self):
+        self.enroll(self.manager, 'supervisor')
+        with closing(app.connect(self.path)) as db:
+            sec.log_event(db, 'sales', 'sessions_revoked', self.rep)
+            db.commit()
+            actor = self.actor(self.founder, 'founder')
+            everything = sec.handle_page(FakeHandler(self.server), db, actor, '/guvenlik-merkezi', False, None, {})
+            sales_only = sec.handle_page(FakeHandler(self.server), db, actor, '/guvenlik-merkezi', False, None, {'alan': 'sales'})
+        self.assertIn('Yönetici', everything)
+        self.assertIn('Temsilci', everything)
+        self.assertIn('CONTROL kullanıcılarının güvenlik durumu', everything)
+        self.assertIn('<td data-label="Olay">2FA açıldı</td>', everything)
+        self.assertNotIn('<td data-label="Olay">2FA açıldı</td>', sales_only)
+        self.assertIn('<td data-label="Olay">Oturumlar kapatıldı</td>', sales_only)

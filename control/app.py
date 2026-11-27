@@ -1523,7 +1523,8 @@ class Handler(BaseHTTPRequestHandler):
                     actor['routes'] = actor['routes'] - {ERNASA_INVITE_PATH}
                 if not getattr(self.server,'experience_summary',None):
                     actor['routes'] = actor['routes'] - {'/aday-deneyimi'}
-                if path not in actor['routes'] or (post and actor['role']=='staff'):
+                # Staff may change only their own account security (no other write access is granted).
+                if path not in actor['routes'] or (post and actor['role']=='staff' and path!='/guvenlik'):
                     raise Problem(403,'Bu ekran için yetkiniz yok.')
                 if post and path=='/aday-deneyimi':
                     raise Problem(405,'Bu ekranda değişiklik yapılamaz.')

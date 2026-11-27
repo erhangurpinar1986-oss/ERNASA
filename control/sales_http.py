@@ -305,6 +305,12 @@ def login(c, h, db, data):
     if not row or not valid:
         throttle.failure(address, device)
         sales.fail('Giriş bilgileri geçersiz.', 401)
+    try:
+        account_security.login_second_factor(h, db, 'sales', row, data)
+    except c.Problem as problem:
+        if str(data.get('code', '')).strip():
+            throttle.failure(address, device)
+        sales.fail(str(problem), problem.status)
     device = throttle.success(address, device)
     h.pending_cookies = [login_throttle.device_cookie('sales', device, h.server.public_prefix + '/sales',
                                                        h.server.origin.startswith('https://'))]
@@ -325,7 +331,7 @@ def sales_login_form(c, csrf, error=None):
     """Always show the usable login form and the separate CONTROL founder entry."""
     from . import account_security
     fields = (input_field(c,'email','E-posta','email')+input_field(c,'password','Parola','password')
-              + account_security.turnstile_widget('sales_login'))
+              + account_security.login_extra_fields() + account_security.turnstile_widget('sales_login'))
     notice = ('<p>Bu giriş yalnızca CONTROL tarafından etkinleştirilmiş '
               'satış temsilcisi hesapları içindir.</p>'
               '<p><strong>ERNASA kurucusu veya yöneticisi misiniz?</strong> '
@@ -823,6 +829,7 @@ def content(c, db, identity, tab, ref=None):
         if section == 'profile':
             out += c.card('Profil',f'<p>{c.e(info["name"])} · {c.e(info["email"])}</p><p>Firma: {actor.company_id}</p>')
             out += c.card('Parolayı değiştir',f('password',inp('old_password','Mevcut parola','password')+inp('password','Yeni parola (12–128 karakter)','password'),'Parolayı değiştir ve oturumları kapat'))
+            out += c.card('Hesap güvenliği','<p>İki adımlı doğrulama, kurtarma kodları ve açık oturumlar.</p><p><a href="/sales/guvenlik">Güvenlik ayarlarını aç</a></p>')
     return '<div class="sales-hub-ui">'+out+'</div>'
 
 
@@ -891,6 +898,12 @@ def handle(h, path, post):
                     db.commit()
                     h.reply(303,headers=(('Location',h.server.public_prefix+'/sales/login'),set_cookie(h,'sales_session','',0)))
                     return True
+                if path == '/sales/guvenlik' and area == 'sales':
+                    from . import account_security
+                    session = SimpleCookie(h.headers.get('Cookie','')).get('sales_session')
+                    body = account_security.handle_sales(h,db,info,csrf,c.token_hash(session.value),True,data)
+                    render(c,h,'Hesap güvenliği',body,identity,tab='profile')
+                    return True
                 if path not in ('/sales','/satis','/sales/api'):
                     sales.fail('İşlem bulunamadı.',404)
                 result = commands(c,db,actor,data)
@@ -927,6 +940,10 @@ def handle(h, path, post):
                 url = billing_share.whatsapp_url(db, actor, query.get('ref', [''])[0], _dt.now(_tz.utc))
                 db.commit()
                 h.reply(303, headers=(('Location', url),))
+            elif path == '/sales/guvenlik' and area == 'sales':
+                from . import account_security
+                body = account_security.handle_sales(h,db,info,csrf,None,False,None)
+                render(c,h,'Hesap güvenliği',body,identity,tab='profile')
             elif path in ('/sales','/satis'):
                 default_tab = 'accounts' if actor.founder else 'overview'
                 tab = query.get('tab',[default_tab])[0]

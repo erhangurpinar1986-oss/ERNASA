@@ -475,6 +475,8 @@ def handle_public(handler, db, path, post, data):
     db.execute('UPDATE security_password_resets SET used_at=? WHERE area=? AND user_id=? AND used_at IS NULL',
                (int(time.time()), area, uid))
     log_event(db, area, 'password_reset_completed', uid)
+    notify_founder(handler, db, 'ERNASA güvenlik: parola sıfırlandı',
+                   f'{"Sales Hub" if area == "sales" else "CONTROL"} hesap no #{uid} parolasını e-posta bağlantısıyla sıfırladı.')
     if area != 'sales':
         c.audit(db, {'email': account['email']}, 'Parola sıfırlandı (e-posta bağlantısı)', None)
     db.commit()
@@ -494,7 +496,17 @@ def handle_public(handler, db, path, post, data):
 
 # ---------------------------------------------------------------- logged-in screens
 
+def _area_tables(area):
+    """(session table, session owner column, account table) for an area."""
+    return ('sales_sessions', 'account_id', 'sales_accounts') if area == 'sales' else ('sessions', 'user_id', 'users')
+
+
+def _db_id(area, uid):
+    return str(uid) if area == 'sales' else int(uid)
+
+
 def handle_page(handler, db, actor, path, post, data, query):
+    """CONTROL screens. Every action changes only the signed-in user's own account."""
     from . import app as c
     ensure_schema(handler.server)
     if path == '/guvenlik-merkezi':
@@ -502,19 +514,35 @@ def handle_page(handler, db, actor, path, post, data, query):
             raise c.Problem(403, 'Bu ekran için yetkiniz yok.')
         if post:
             raise c.Problem(405, 'Security Center salt okunurdur.')
-        return security_center(db, actor)
+        return security_center(db, actor, query, handler.server)
     uid = str(actor['id'])
     notice = ''
     if post:
-        action = data.get('action', '')
-        notice = _account_action(handler, db, actor, uid, action, data)
+        notice = account_action(handler, db, 'control', uid, actor['email'], actor['token'], data.get('action', ''), data,
+                                audit=lambda text: c.audit(db, actor, text, actor['company_id']))
         db.commit()
-    return notice + account_page(db, actor, uid, query)
+    form = lambda fields, action, label: c.form('/guvenlik', actor, c.hidden('action', action) + fields, label)
+    return notice + account_panel(db, 'control', uid, actor['email'], actor['role'], form)
 
 
-def _account_action(handler, db, actor, uid, action, data):
+def handle_sales(h, db, info, csrf, session_hash, post, data):
+    """Sales Hub representative security screen (/sales/guvenlik)."""
     from . import app as c
-    area = 'control'
+    from . import sales_http
+    ensure_schema(h.server)
+    uid = str(info['id'])
+    notice = ''
+    if post:
+        notice = account_action(h, db, 'sales', uid, info['email'], session_hash, data.get('action', ''), data)
+        db.commit()
+    form = lambda fields, action, label: sales_http.form(c, '/sales/guvenlik', csrf, action, fields, label)
+    return notice + account_panel(db, 'sales', uid, info['email'], 'sales', form)
+
+
+def account_action(handler, db, area, uid, email, session_hash, action, data, audit=None):
+    from . import app as c
+    audit = audit or (lambda text: None)
+    session_table, owner, accounts = _area_tables(area)
     row = totp_row(db, area, uid)
     if action == 'totp_start':
         if not two_factor_available():
@@ -535,7 +563,9 @@ def _account_action(handler, db, actor, uid, action, data):
         db.execute('UPDATE security_totp SET enabled=1,last_counter=? WHERE area=? AND user_id=?', (counter, area, uid))
         codes = _replace_recovery_codes(db, area, uid)
         log_event(db, area, 'totp_enabled', uid)
-        c.audit(db, actor, 'İki adımlı doğrulama açıldı', actor['company_id'])
+        audit('İki adımlı doğrulama açıldı')
+        _notify(handler, email, 'ERNASA hesabınızda iki adımlı doğrulama açıldı',
+                'Hesabınızda iki adımlı doğrulama açıldı. Bu işlemi siz yapmadıysanız hemen ERNASA yönetimiyle iletişime geçin.')
         return _codes_notice(c, codes)
     if action == 'recovery_regenerate':
         if not verify_second_factor(db, area, uid, data.get('code', '')):
@@ -544,7 +574,7 @@ def _account_action(handler, db, actor, uid, action, data):
         log_event(db, area, 'recovery_codes_regenerated', uid)
         return _codes_notice(c, codes)
     if action == 'totp_disable':
-        saved = db.execute('SELECT secret FROM users WHERE id=?', (int(uid),)).fetchone()
+        saved = db.execute(f'SELECT secret FROM {accounts} WHERE id=?', (_db_id(area, uid),)).fetchone()
         if not saved or not c.check_ik_password(data.get('password', ''), saved[0]):
             raise c.Problem(401, 'Parola doğrulanamadı.')
         if not verify_second_factor(db, area, uid, data.get('code', '')):
@@ -552,12 +582,17 @@ def _account_action(handler, db, actor, uid, action, data):
         db.execute('DELETE FROM security_totp WHERE area=? AND user_id=?', (area, uid))
         db.execute('DELETE FROM security_recovery_codes WHERE area=? AND user_id=?', (area, uid))
         log_event(db, area, 'totp_disabled', uid)
-        c.audit(db, actor, 'İki adımlı doğrulama kapatıldı', actor['company_id'])
+        audit('İki adımlı doğrulama kapatıldı')
+        notify_founder(handler, db, 'ERNASA güvenlik: bir hesapta 2FA kapatıldı',
+                       f'{"Sales Hub" if area == "sales" else "CONTROL"} hesap no #{uid} iki adımlı doğrulamayı kapattı. '
+                       'Ayrıntılar ERNASA Security Center\'da.')
+        _notify(handler, email, 'ERNASA hesabınızda iki adımlı doğrulama kapatıldı',
+                'Hesabınızda iki adımlı doğrulama kapatıldı. Bu işlemi siz yapmadıysanız hemen ERNASA yönetimiyle iletişime geçin.')
         return '<p class="notice" role="status">İki adımlı doğrulama kapatıldı.</p>'
     if action == 'sessions_revoke_others':
-        db.execute('DELETE FROM sessions WHERE user_id=? AND token<>?', (int(uid), actor['token']))
+        db.execute(f'DELETE FROM {session_table} WHERE {owner}=? AND token<>?', (_db_id(area, uid), session_hash))
         log_event(db, area, 'sessions_revoked', uid)
-        c.audit(db, actor, 'Diğer oturumlar kapatıldı', actor['company_id'])
+        audit('Diğer oturumlar kapatıldı')
         return '<p class="notice" role="status">Bu cihaz dışındaki bütün oturumlar kapatıldı.</p>'
     if action in ('phone_save', 'phone_verify'):
         gateway, otp_service = sms_gateway(), _otp_service()
@@ -579,12 +614,9 @@ def _account_action(handler, db, actor, uid, action, data):
                 gateway.send(number, f'ERNASA telefon doğrulama kodunuz: {code}', 'phone_verification')
             except otp_module.OtpError as exc:
                 raise c.Problem(429, 'Çok sık kod istendi. Biraz sonra tekrar deneyin.') from exc
-            try:
-                _send_mail(handler, actor['email'], 'ERNASA hesabınıza telefon eklendi',
-                           f'Hesabınıza {phone_module.mask(number)} numarası eklendi. Bu işlemi siz yapmadıysanız '
-                           'ERNASA yönetimiyle iletişime geçin.', f'phone-{secrets.token_hex(8)}')
-            except Exception:
-                pass
+            _notify(handler, email, 'ERNASA hesabınıza telefon eklendi',
+                    f'Hesabınıza {phone_module.mask(number)} numarası eklendi. Bu işlemi siz yapmadıysanız '
+                    'ERNASA yönetimiyle iletişime geçin.')
             return '<p class="notice" role="status">Doğrulama kodu gönderildi.</p>'
         try:
             otp_service.verify('phone_verification', f'{area}:{uid}', data.get('sms_code', ''))
@@ -594,6 +626,13 @@ def _account_action(handler, db, actor, uid, action, data):
         log_event(db, area, 'phone_verified', uid)
         return '<p class="notice" role="status">Telefon numarası doğrulandı.</p>'
     raise c.Problem(400, 'Bilinmeyen işlem.')
+
+
+def _notify(handler, email, subject, body):
+    try:
+        _send_mail(handler, email, subject, body + '\n\nERNASA Güvenlik', f'security-{secrets.token_hex(8)}')
+    except Exception:
+        pass
 
 
 def _replace_recovery_codes(db, area, uid):
@@ -612,33 +651,37 @@ def _codes_notice(c, codes):
             f'giriş ekranındaki doğrulama kodu alanına bir kurtarma kodu yazabilirsiniz.</p><ol>{items}</ol></section>')
 
 
-def account_page(db, actor, uid, query):
+def account_panel(db, area, uid, email, role, form):
     from . import app as c
-    area = 'control'
+    session_table, owner, _ = _area_tables(area)
     row = totp_row(db, area, uid)
-    form = lambda fields, action, label: c.form('/guvenlik', actor, c.hidden('action', action) + fields, label)
     code_input = c.inp('Doğrulama kodu', 'code')
     if row and row[1]:
         remaining = db.execute('SELECT COUNT(*) FROM security_recovery_codes WHERE area=? AND user_id=? AND used_at IS NULL',
                                (area, uid)).fetchone()[0]
-        totp = (f'<p><strong>Açık.</strong> Kullanılmamış kurtarma kodu: {remaining}.</p>'
+        warning = ('<p class="notice" role="alert">Kurtarma kodunuz azaldı; yeni kodlar oluşturun.</p>'
+                   if remaining <= 3 else '')
+        totp = (f'<p><strong>Açık.</strong> Kullanılmamış kurtarma kodu: {remaining}.</p>' + warning
                 + form(code_input, 'recovery_regenerate', 'Kurtarma kodlarını yenile')
                 + form(c.inp('Mevcut parola', 'password', kind='password') + code_input, 'totp_disable',
                        'İki adımlı doğrulamayı kapat'))
     elif row:
         secret = _decrypt(row[0])
         grouped = ' '.join(secret[i:i + 4] for i in range(0, len(secret), 4))
-        totp = ('<p>Doğrulama uygulamanızda (Google Authenticator, Microsoft Authenticator, 1Password vb.) '
-                '"anahtarı elle gir" seçeneğiyle aşağıdaki anahtarı ekleyin, ardından uygulamanın gösterdiği 6 haneli '
-                f'kodu girin.</p><p><code>{c.e(grouped)}</code></p>'
-                f'<p><small>Hesap: {c.e(ISSUER)} · {c.e(actor["email"])} · zaman tabanlı, 6 hane, 30 saniye</small></p>'
+        from . import qr
+        totp = ('<p>Doğrulama uygulamanızla (Google Authenticator, Microsoft Authenticator, 1Password vb.) QR kodu '
+                'okutun veya "anahtarı elle gir" seçeneğiyle aşağıdaki anahtarı ekleyin, ardından uygulamanın gösterdiği '
+                '6 haneli kodu girin. QR kod bu sunucuda oluşturulur; anahtar hiçbir dış servise gönderilmez.</p>'
+                f'<p>{qr.svg(otpauth_uri(secret, email), label="TOTP kurulum QR kodu")}</p>'
+                f'<p><code>{c.e(grouped)}</code></p>'
+                f'<p><small>Hesap: {c.e(ISSUER)} · {c.e(email)} · zaman tabanlı, 6 hane, 30 saniye</small></p>'
                 + form(code_input, 'totp_confirm', 'Kurulumu tamamla'))
     elif two_factor_available():
         totp = ('<p>Kapalı. Açtığınızda girişte parolanın yanında doğrulama uygulamasındaki kod da istenir.</p>'
                 + form('', 'totp_start', 'Kurulumu başlat'))
     else:
         totp = '<p>Bu ortamda şifreleme anahtarı tanımlı olmadığı için iki adımlı doğrulama henüz kurulamaz.</p>'
-    if actor['role'] == 'founder' and not (row and row[1]):
+    if role == 'founder' and not (row and row[1]):
         totp = ('<p class="notice" role="alert">Kurucu hesabı için iki adımlı doğrulama önerilir; çevrimiçi parola '
                 'sıfırlama kurucu hesabında yalnızca iki adımlı doğrulama açıkken çalışır.</p>') + totp
     phone = db.execute('SELECT e164,verified_at FROM security_phones WHERE area=? AND user_id=?', (area, uid)).fetchone()
@@ -652,16 +695,34 @@ def account_page(db, actor, uid, query):
     else:
         phone_html = ('<p>SMS sağlayıcısı henüz etkinleştirilmediği için telefon doğrulaması kapalı. Etkinleştirildiğinde '
                       'numaranızı buradan ekleyip doğrulayabileceksiniz.</p>')
-    sessions = db.execute('SELECT COUNT(*) FROM sessions WHERE user_id=? AND expires>?',
-                          (int(uid), int(time.time()))).fetchone()[0]
+    sessions = db.execute(f'SELECT COUNT(*) FROM {session_table} WHERE {owner}=? AND expires>?',
+                          (_db_id(area, uid), int(time.time()))).fetchone()[0]
     session_html = (f'<p>Açık oturum sayısı (bu cihaz dahil): {sessions}.</p>'
                     + form('', 'sessions_revoke_others', 'Diğer bütün oturumları kapat'))
     return (c.card('İki adımlı doğrulama', totp) + c.card('Telefon numarası', phone_html)
             + c.card('Oturumlar', session_html))
 
 
-def security_center(db, actor):
+EVENT_LABELS = {
+    'totp_enabled': '2FA açıldı', 'totp_disabled': '2FA kapatıldı', 'recovery_code_used': 'Kurtarma kodu kullanıldı',
+    'recovery_codes_regenerated': 'Kurtarma kodları yenilendi', 'reset_requested': 'Sıfırlama bağlantısı gönderildi',
+    'reset_refused_no_2fa': 'Kurucu sıfırlaması reddedildi (2FA yok)', 'reset_mail_failed': 'Sıfırlama e-postası gönderilemedi',
+    'password_reset_completed': 'Parola sıfırlandı', 'sessions_revoked': 'Oturumlar kapatıldı',
+    'phone_verified': 'Telefon doğrulandı', 'break_glass_2fa_reset': 'Acil durum 2FA kurtarması',
+}
+CRITICAL_EVENTS = frozenset({'totp_disabled', 'break_glass_2fa_reset', 'password_reset_completed', 'reset_mail_failed'})
+
+
+def notify_founder(handler, db, subject, body):
+    """Critical-event notice to the founder (best effort, never blocks the action)."""
+    row = db.execute("SELECT email FROM users WHERE role='founder' AND active=1").fetchone()
+    if row:
+        _notify(handler, row[0], subject, body)
+
+
+def security_center(db, actor, query=None, server=None):
     from . import app as c
+    query = query or {}
     now = int(time.time())
     day = now - 86400
 
@@ -675,36 +736,166 @@ def security_center(db, actor):
     resets = one('SELECT COUNT(*) FROM security_password_resets WHERE created>?', (now - 30 * 86400,))
     resets_done = one('SELECT COUNT(*) FROM security_password_resets WHERE used_at>?', (now - 30 * 86400,))
     phones = one('SELECT COUNT(*) FROM security_phones WHERE verified_at IS NOT NULL')
-    admins = db.execute("SELECT u.name,u.role,t.enabled FROM users u LEFT JOIN security_totp t ON t.area='control' "
-                        "AND t.user_id=CAST(u.id AS TEXT) WHERE u.active=1 AND u.role IN ('founder','supervisor') "
-                        "ORDER BY u.role,u.name").fetchall()
-    events = db.execute('SELECT at,area,kind,subject FROM security_events ORDER BY at DESC LIMIT 40').fetchall()
+    users = db.execute(
+        "SELECT u.id,u.name,u.role,t.enabled,p.verified_at,(SELECT COUNT(*) FROM security_recovery_codes r "
+        "WHERE r.area='control' AND r.user_id=CAST(u.id AS TEXT) AND r.used_at IS NULL),"
+        "(SELECT COUNT(*) FROM sessions s WHERE s.user_id=u.id AND s.expires>?) FROM users u "
+        "LEFT JOIN security_totp t ON t.area='control' AND t.user_id=CAST(u.id AS TEXT) "
+        "LEFT JOIN security_phones p ON p.area='control' AND p.user_id=CAST(u.id AS TEXT) "
+        "WHERE u.active=1 ORDER BY CASE u.role WHEN 'founder' THEN 0 WHEN 'supervisor' THEN 1 ELSE 2 END,u.name",
+        (now,)).fetchall()
+    reps = db.execute(
+        "SELECT a.id,a.name,t.enabled,(SELECT COUNT(*) FROM sales_sessions s WHERE s.account_id=a.id AND s.expires>?) "
+        "FROM sales_accounts a LEFT JOIN security_totp t ON t.area='sales' AND t.user_id=a.id WHERE a.active=1 "
+        "ORDER BY a.name", (now,)).fetchall()
     verifier = turnstile()
+
+    # Alerts: what needs attention now (no secrets, no personal data beyond names already visible in CONTROL).
+    alerts = []
+    founder_rows = [u for u in users if u[2] == 'founder']
+    if founder_rows and not founder_rows[0][3]:
+        alerts.append(('Kritik', 'Kurucu hesabında iki adımlı doğrulama kapalı.'))
+    if founder_rows and founder_rows[0][3] and founder_rows[0][5] <= 3:
+        alerts.append(('Yüksek', f'Kurucu hesabında {founder_rows[0][5]} kurtarma kodu kaldı; yeni kod oluşturun.'))
+    supervisors_without = sum(1 for u in users if u[2] == 'supervisor' and not u[3])
+    if supervisors_without:
+        alerts.append(('Orta', f'{supervisors_without} firma yöneticisi hesabında 2FA kapalı.'))
+    if blocked:
+        alerts.append(('Orta', f'Şu anda {blocked} giriş kovası hatalı denemeler nedeniyle kısıtlı.'))
+    recent_critical = db.execute('SELECT kind,COUNT(*) FROM security_events WHERE at>? AND kind IN (' +
+                                 ','.join('?' * len(CRITICAL_EVENTS)) + ') GROUP BY kind',
+                                 (now - 7 * 86400, *sorted(CRITICAL_EVENTS))).fetchall()
+    for kind, count in recent_critical:
+        alerts.append(('Yüksek' if kind != 'password_reset_completed' else 'Bilgi',
+                       f'Son 7 günde {count} kez: {EVENT_LABELS.get(kind, kind)}.'))
+    if not two_factor_available():
+        alerts.append(('Yüksek', '2FA şifreleme anahtarı tanımlı değil; kurulum yapılamaz.'))
+    if reset_enabled() and verifier.mode != 'enforce':
+        alerts.append(('Orta', 'Çevrimiçi parola sıfırlama açık ama Turnstile zorunlu değil.'))
+    degraded = [area for area in ('control', 'sales')
+                if server is not None and getattr(getattr(server, f'{area}_login_throttle', None), '_degraded_until', 0) > now]
+    for area in degraded:
+        alerts.append(('Yüksek', f'{"Sales Hub" if area == "sales" else "CONTROL"} giriş sayaçları geçici olarak bellekte '
+                                 '(veritabanı yazılamadı).'))
+    order = {'Kritik': 0, 'Yüksek': 1, 'Orta': 2, 'Bilgi': 3}
+    alerts.sort(key=lambda a: order[a[0]])
+    alert_html = (c.table(('Önem', 'Uyarı'), [(level, c.e(text)) for level, text in alerts]) if alerts
+                  else '<p>Şu anda dikkat gerektiren bir güvenlik uyarısı yok.</p>')
+
     metric = lambda label, value: c.card(label, f'<strong>{c.e(value)}</strong>')
-    metrics = ''.join((metric('Şu an kısıtlı giriş kovası', blocked), metric('Son 24 saatte hatalı giriş olan kova', failing),
-                       metric('Güvenilir cihaz', devices), metric('Açık CONTROL oturumu', control_sessions),
-                       metric('Açık Sales Hub oturumu', sales_sessions), metric('Doğrulanmış telefon', phones),
-                       metric('Son 30 günde sıfırlama isteği', resets), metric('Son 30 günde tamamlanan sıfırlama', resets_done)))
+    metrics = ''.join((metric('Açık uyarı', len(alerts)), metric('Şu an kısıtlı giriş kovası', blocked),
+                       metric('Son 24 saatte hatalı giriş olan kova', failing), metric('Güvenilir cihaz', devices),
+                       metric('Açık CONTROL oturumu', control_sessions), metric('Açık Sales Hub oturumu', sales_sessions),
+                       metric('Doğrulanmış telefon', phones), metric('Son 30 günde sıfırlama (istek / tamamlanan)',
+                                                                    f'{resets} / {resets_done}')))
+    try:
+        db.execute('SELECT 1').fetchone()
+        database = 'Erişilebilir'
+    except Exception:
+        database = 'Hata'
     status = c.table(('Bileşen', 'Durum'), [
-        ('Hesap bazlı giriş kısıtlama', 'Açık (kalıcı sayaç, güvenilir cihaz koruması)'),
+        ('Veritabanı', database),
+        ('Hesap bazlı giriş kısıtlama', 'Açık (kalıcı sayaç, güvenilir cihaz koruması)'
+         + ('; bellek modunda: ' + ', '.join(degraded) if degraded else '')),
         ('İki adımlı doğrulama (TOTP)', 'Kurulabilir' if two_factor_available() else 'Şifreleme anahtarı yok'),
         ('Çevrimiçi parola sıfırlama', 'Açık' if reset_enabled() else 'Kapalı (SECURITY_PASSWORD_RESET)'),
         ('Cloudflare Turnstile', {'off': 'Kapalı', 'test': 'Test anahtarı', 'enforce': 'Zorunlu'}[verifier.mode]),
         ('SMS sağlayıcısı', 'Etkin' if sms_gateway() else 'Etkin değil'),
-        ('Yedekleme', 'Render sürekli yedek (PITR); geri yükleme testi Render panelinden izlenir'),
+        ('Yedekleme', 'Render sürekli yedek (PITR); arşiv durumu Render panelinden ve WAL istatistiğinden izlenir'),
     ])
-    admin_rows = [(c.e(r[0]), c.ROLES.get(r[1], r[1]), 'Açık' if r[2] else 'Kapalı') for r in admins]
-    labels = {'totp_enabled': '2FA açıldı', 'totp_disabled': '2FA kapatıldı', 'recovery_code_used': 'Kurtarma kodu kullanıldı',
-              'recovery_codes_regenerated': 'Kurtarma kodları yenilendi', 'reset_requested': 'Sıfırlama bağlantısı gönderildi',
-              'reset_refused_no_2fa': 'Kurucu sıfırlaması reddedildi (2FA yok)', 'reset_mail_failed': 'Sıfırlama e-postası gönderilemedi',
-              'password_reset_completed': 'Parola sıfırlandı', 'sessions_revoked': 'Oturumlar kapatıldı',
-              'phone_verified': 'Telefon doğrulandı'}
-    event_rows = [(time.strftime('%d.%m.%Y %H:%M', time.gmtime(r[0] + 3 * 3600)), 'Sales Hub' if r[1] == 'sales' else 'CONTROL',
-                   labels.get(r[2], r[2]), f'#{c.e(r[3])}') for r in events]
-    return (f'<div class="stats metrics">{metrics}</div>'
-            + c.card('Güvenlik bileşenleri', status)
-            + c.card('Yönetici hesaplarında iki adımlı doğrulama', c.table(('Ad', 'Rol', '2FA'), admin_rows))
-            + c.card('Son güvenlik olayları', c.table(('Zaman (TSİ)', 'Alan', 'Olay', 'Hesap no'), event_rows)
-                     + '<p><small>Olay kayıtları değiştirilemez ve silinemez. Parola, kod ve anahtarlar bu ekranda '
-                       'hiçbir zaman gösterilmez.</small></p>'))
+    yes = lambda v: 'Açık' if v else 'Kapalı'
+    user_rows = [(c.e(u[1]), c.ROLES.get(u[2], u[2]), yes(u[3]), str(u[5]) if u[3] else '—',
+                  'Doğrulandı' if u[4] else '—', str(u[6])) for u in users]
+    rep_rows = [(c.e(r[1]), yes(r[2]), str(r[3])) for r in reps]
 
+    area = query.get('alan', '')
+    kind = query.get('olay', '')
+    where, params = [], []
+    if area in ('control', 'sales'):
+        where.append('area=?')
+        params.append(area)
+    if kind in EVENT_LABELS:
+        where.append('kind=?')
+        params.append(kind)
+    events = db.execute('SELECT at,area,kind,subject FROM security_events' + (' WHERE ' + ' AND '.join(where) if where else '')
+                        + ' ORDER BY at DESC LIMIT 60', params).fetchall()
+    event_rows = [(time.strftime('%d.%m.%Y %H:%M', time.gmtime(r[0] + 3 * 3600)), 'Sales Hub' if r[1] == 'sales' else 'CONTROL',
+                   ('<strong>' + c.e(EVENT_LABELS.get(r[2], r[2])) + '</strong>') if r[2] in CRITICAL_EVENTS
+                   else c.e(EVENT_LABELS.get(r[2], r[2])), f'#{c.e(r[3])}') for r in events]
+    options = lambda current, items: ''.join(
+        f'<option value="{c.e(k)}"{" selected" if k == current else ""}>{c.e(v)}</option>' for k, v in items)
+    filters = ('<form method="get" action="/guvenlik-merkezi" class="filters"><label>Alan<select name="alan">'
+               + options(area, (('', 'Tümü'), ('control', 'CONTROL'), ('sales', 'Sales Hub'))) + '</select></label>'
+               '<label>Olay<select name="olay">' + options(kind, (('', 'Tümü'), *EVENT_LABELS.items())) + '</select></label>'
+               '<button>Filtrele</button></form>')
+    return (f'<div class="stats metrics">{metrics}</div>'
+            + c.card('Uyarılar', alert_html)
+            + c.card('Güvenlik bileşenleri', status)
+            + c.card('CONTROL kullanıcılarının güvenlik durumu',
+                     c.table(('Ad', 'Rol', '2FA', 'Kalan kurtarma kodu', 'Telefon', 'Açık oturum'), user_rows))
+            + c.card('Sales Hub temsilcilerinin güvenlik durumu', c.table(('Ad', '2FA', 'Açık oturum'), rep_rows)
+                     if rep_rows else '<p>Etkin temsilci yok.</p>')
+            + c.card('Güvenlik olayları', filters + c.table(('Zaman (TSİ)', 'Alan', 'Olay', 'Hesap no'), event_rows)
+                     + '<p><small>Olay kayıtları değiştirilemez ve silinemez. Parola, kod ve anahtarlar bu ekranda '
+                       'hiçbir zaman gösterilmez. Kritik olaylarda kurucuya e-posta bildirimi gider.</small></p>'))
+
+
+# ---------------------------------------------------------------- break-glass recovery (infrastructure access only)
+
+def break_glass_reset(target, area, address, operator, reason):
+    """Remove 2FA from one account and close its sessions. For the case where the owner lost the
+    authenticator AND every recovery code. Runs only from a shell with direct database access
+    (Render dashboard + shell, itself protected by the Render account's own 2FA); there is no web
+    route for it. Leaves an append-only security event and the owner keeps their password."""
+    from . import app as c
+    address = str(address or '').strip().lower()
+    if not reason or len(reason.strip()) < 10:
+        raise ValueError('reason must describe the verified identity check (min. 10 characters)')
+    db = c.connect(target)
+    try:
+        if area == 'sales':
+            row = db.execute('SELECT id FROM sales_accounts WHERE email=?', (address,)).fetchone()
+        else:
+            row = db.execute('SELECT id FROM users WHERE email=?', (address,)).fetchone()
+        if not row:
+            raise LookupError('account not found')
+        uid = str(row[0])
+        session_table, owner, _ = _area_tables(area)
+        db.execute('DELETE FROM security_totp WHERE area=? AND user_id=?', (area, uid))
+        db.execute('DELETE FROM security_recovery_codes WHERE area=? AND user_id=?', (area, uid))
+        db.execute(f'DELETE FROM {session_table} WHERE {owner}=?', (_db_id(area, uid),))
+        log_event(db, area, 'break_glass_2fa_reset', uid, f'operator={operator[:40]}; reason={reason.strip()[:200]}')
+        db.commit()
+        return uid
+    finally:
+        db.close()
+
+
+def _main(argv=None):
+    import argparse
+    import getpass
+    import sys
+    from . import postgres
+    parser = argparse.ArgumentParser(description='ERNASA break-glass 2FA recovery (requires direct database access).')
+    parser.add_argument('command', choices=['recover-2fa'])
+    parser.add_argument('--area', choices=['control', 'sales'], default='control')
+    parser.add_argument('--email', required=True)
+    parser.add_argument('--reason', required=True, help='How the owner\'s identity was verified (recorded).')
+    parser.add_argument('--db-path', default='')
+    args = parser.parse_args(argv)
+    dsn = os.getenv('ERNASA_CONTROL_DATABASE_URL', '')
+    target = postgres.Target(dsn) if dsn and not args.db_path else args.db_path
+    if not target:
+        parser.error('ERNASA_CONTROL_DATABASE_URL or --db-path is required')
+    answer = input(f'Type the e-mail again to remove 2FA from {args.email}: ') if sys.stdin.isatty() else args.email
+    if answer.strip().lower() != args.email.strip().lower():
+        print('Cancelled.')
+        return 1
+    uid = break_glass_reset(target, args.area, args.email, getpass.getuser(), args.reason)
+    print(f'2FA removed and sessions closed for account #{uid}. The owner signs in with the password and '
+          'should enrol a new authenticator immediately.')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(_main())
