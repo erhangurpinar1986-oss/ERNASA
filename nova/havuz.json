@@ -65,14 +65,14 @@
     "job_seen_on": "2026-11-25"
    },
    "evidence": "Havalimanı projesi, 10 kişilik alım; 'tam zamanlı çalışma temposuna uyum'",
-   "next_step": "Resmî web sitesini bul (WebSearch), İletişim sayfasını aç.",
+   "next_step": "Resmî web sitesi arama sonuçlarında bulunamadı (2026-11-27); 30 gün sonra tekrar ara, yoksa B'de kalır.",
    "first_seen": "2026-11-27",
    "last_checked": "2026-11-27"
   },
   {
    "id": "dincpak",
    "level": "B",
-   "segment": "KOBI",
+   "segment": "KURUMSAL",
    "record": {
     "legal_name": "Dinçpak Hizmet İşletmeciliği",
     "sector": "Temizlik / tesis hizmetleri",
@@ -81,68 +81,134 @@
     "source_url": "https://www.eleman.net/is-ilani/i4815236",
     "verified_on": "2026-11-27",
     "district": "Mamak",
-    "job_seen_on": "2026-11-26"
+    "job_seen_on": "2026-11-26",
+    "employee_count": "1285",
+    "employee_source_url": "https://www.secretcv.com/firma/dincpak-is-ilanlari",
+    "website": "http://dincpak.com.tr/"
    },
    "evidence": "Profilde 6+ ilan, Temizlik Hizmetleri Proje Müdürü dahil; merkez İstanbul Anadolu yakası görünüyor",
-   "next_step": "dincpak.com.tr İletişim sayfasını aç; ölçeği kontrol et.",
+   "next_step": "İletişim sayfası https→http yönlendirmesi nedeniyle açılmadı; arama sonucunda http adresini bulup aç.",
    "first_seen": "2026-11-27",
    "last_checked": "2026-11-27"
   },
   {
    "id": "dogankoc",
-   "level": "B",
+   "level": "A",
    "segment": "KOBI",
    "record": {
-    "legal_name": "Doğankoç Özel Güvenlik Hizmetleri",
+    "legal_name": "DOĞANKOÇ ÖZEL GÜVENLİK HİZMETLERİ",
     "sector": "Özel güvenlik",
     "city": "İzmir",
     "job_source_url": "https://www.eleman.net/is-ilani/ozel-guvenlik-gorevlisi-kemalpasa-i4809965",
     "source_url": "https://www.eleman.net/is-ilani/ozel-guvenlik-gorevlisi-kemalpasa-i4809965",
     "verified_on": "2026-11-27",
-    "district": "Kemalpaşa",
-    "job_seen_on": "2026-11-26"
+    "job_seen_on": "2026-11-26",
+    "website": "https://dogankocguvenlik.com.tr",
+    "phone": "0232 252 40 54",
+    "phone_source_url": "https://dogankocguvenlik.com.tr/iletisim/",
+    "district": "Gaziemir",
+    "contact_department": "Genel iletişim",
+    "linkedin_url": "https://www.linkedin.com/company/do%C4%9Fanko%C3%A7-%C3%B6zel-g%C3%BCvenli%CC%87k/",
+    "open_jobs": "Özel Güvenlik Görevlisi (Kemalpaşa OSB); İnsan Kaynakları Yöneticisi (Secretcv)",
+    "workload_terms": "2 gündüz / 2 gece vardiya; 12 saat; asgari ücret + fazla mesai",
+    "other_open_jobs": 9,
+    "hiring_need": "İzmir'de 9'dan fazla eş zamanlı güvenlik ve temizlik ilanıyla sürekli saha personeli alıyor.",
+    "product_fit": "HR FLOW toplu başvurularda 5188 kimlik kartı/vardiya uygunluğu ön elemesi, AI puanlama ve mülakat planlama ile saha alımını hızlandırır.",
+    "suggested_package": "Growth"
    },
    "evidence": "2+2 12 saat vardiya; İzmir'de 9+ güvenlik ve temizlik ilanı; Secretcv'de İK Yöneticisi ilanı (secretcv 1540792); 36 ilde faaliyet — ölçek 500 sınırında olabilir",
-   "next_step": "dogankocguvenlik.com.tr İletişim sayfasını aç; çalışan sayısını Kariyer.net profilinden kontrol et (500+ ise kurumsal).",
+   "next_step": "Satışa açık; 30 gün sonra ilan ve iletişim yeniden kontrol.",
    "first_seen": "2026-11-27",
-   "last_checked": "2026-11-27"
+   "last_checked": "2026-11-27",
+   "compliance": {
+    "kurumsal_kanal": true,
+    "alan_adi_eslesmesi": true,
+    "kisisel_veri_yok": true,
+    "ticari_unvan": true,
+    "ret_listesi_kontrolu": true
+   },
+   "export_status": "aktarildi:2026-11-27",
+   "notes": "Sitede görünen info@dogankoc.com.tr alan adı web sitesiyle (dogankocguvenlik.com.tr) aynı değil → kurala göre yazılmadı. 36 ilde faaliyet, 'yüzlerce personel' — 500+ ise KURUMSAL'a taşınacak. Kemalpaşa ilanı 2026-11-26 ('Dün')."
   },
   {
    "id": "ceyber",
-   "level": "B",
+   "level": "A",
    "segment": "KOBI",
    "record": {
-    "legal_name": "Ceyber Eğitim Teknolojileri Ticaret A.Ş. (CeyBer Çağrı Merkezi)",
+    "legal_name": "CEYBER EĞİTİM TEKNOLOJİLERİ TİCARET A.Ş.",
     "sector": "Çağrı merkezi",
     "city": "İzmir",
     "job_source_url": "https://www.kariyer.net/is-ilani/ceyber-egitim-teknolojileri-ticaret-anonim-sirketi-cagri-merkezi-musteri-temsilcisi-bankacilik-proj-4585664",
     "source_url": "https://www.kariyer.net/is-ilani/ceyber-egitim-teknolojileri-ticaret-anonim-sirketi-cagri-merkezi-musteri-temsilcisi-bankacilik-proj-4585664",
     "verified_on": "2026-11-27",
     "district": "Bornova",
-    "job_seen_on": "2026-11-23"
+    "job_seen_on": "2026-11-23",
+    "website": "https://ceyber.com",
+    "email": "info@ceyber.com",
+    "email_source_url": "https://ceyber.com/bize-ulasin",
+    "phone": "0232 215 01 06",
+    "phone_source_url": "https://ceyber.com/bize-ulasin",
+    "contact_department": "Genel iletişim",
+    "linkedin_url": "https://tr.linkedin.com/company/ceyber-cm",
+    "open_jobs": "Çağrı Merkezi Müşteri Temsilcisi (Bankacılık Projesi)",
+    "workload_terms": "hedef ve başarı odaklı; yoğun tempo",
+    "other_open_jobs": 3,
+    "hiring_need": "Bankacılık projesi için aynı anda birden fazla çağrı merkezi müşteri temsilcisi ilanı yayında.",
+    "product_fit": "Çok sayıda eş zamanlı müşteri temsilcisi ilanına gelen başvurularda HR FLOW toplu ön eleme, AI aday puanlama ve vardiya pozisyonları için hızlı mülakat planlama sağlar.",
+    "suggested_package": "Growth"
    },
    "evidence": "'hedef ve başarı odaklı'; aynı anda 3+ temsilci ilanı; Secretcv 1885850 (2026-11-18) 'yoğun tempo'",
-   "next_step": "Resmî siteyi bul, İletişim sayfasını aç.",
+   "next_step": "Satışa açık; 30 gün sonra ilan ve iletişim yeniden kontrol.",
    "first_seen": "2026-11-27",
-   "last_checked": "2026-11-27"
+   "last_checked": "2026-11-27",
+   "compliance": {
+    "kurumsal_kanal": true,
+    "alan_adi_eslesmesi": true,
+    "kisisel_veri_yok": true,
+    "ticari_unvan": true,
+    "ret_listesi_kontrolu": true
+   },
+   "export_status": "aktarildi:2026-11-27",
+   "notes": "kvk@ceyber.com yalnızca KVKK talepleri için; satış için kullanılmaz. Secretcv 1885850 (2026-11-18) 'yoğun tempo'."
   },
   {
    "id": "firstcontact",
-   "level": "B",
+   "level": "A",
    "segment": "KOBI",
    "record": {
-    "legal_name": "First Contact Service İletişim Hizmetleri A.Ş.",
+    "legal_name": "FIRST CONTACT SERVICE İLETİŞİM HİZMETLERİ A.Ş.",
     "sector": "Çağrı merkezi",
-    "city": "İzmir",
+    "city": "İstanbul",
     "job_source_url": "https://www.kariyer.net/is-ilani/4594147",
     "source_url": "https://www.kariyer.net/is-ilani/4594147",
     "verified_on": "2026-11-27",
-    "job_seen_on": "2026-11-09"
+    "job_seen_on": "2026-11-09",
+    "website": "https://firstcontactservice.com",
+    "phone": "0850 480 90 85",
+    "phone_source_url": "https://firstcontactservice.com/?lang=tr",
+    "district": "Sarıyer",
+    "contact_department": "Genel iletişim",
+    "linkedin_url": "https://www.linkedin.com/company/first-contact-service/",
+    "open_jobs": "Takım Lideri; Müşteri Temsilcisi",
+    "workload_terms": "fast-paced; night shift; shift options",
+    "other_open_jobs": 1,
+    "hiring_need": "Vardiyalı ve gece vardiyalı müşteri temsilcisi ile takım lideri alımı yapıyor (ilanlar 2026-10-30 ve 2026-11-09).",
+    "product_fit": "Çok sayıda eş zamanlı müşteri temsilcisi ilanına gelen başvurularda HR FLOW toplu ön eleme, AI aday puanlama ve vardiya pozisyonları için hızlı mülakat planlama sağlar.",
+    "suggested_package": "Growth"
    },
    "evidence": "150-199 çalışan (Kariyer.net); temsilci ilanı 4588463 (2026-10-30) 'fast-paced; night shift; shift options'; takım lideri ilanı 4594147",
-   "next_step": "Resmî siteyi bul, İletişim sayfasını aç. (Paralel bir çalıştırmada doğrulanmış olabilir; o oturumun dosyası erişilemedi.)",
+   "next_step": "Satışa açık; 30 gün sonra ilan ve iletişim yeniden kontrol.",
    "first_seen": "2026-11-27",
-   "last_checked": "2026-11-27"
+   "last_checked": "2026-11-27",
+   "compliance": {
+    "kurumsal_kanal": true,
+    "alan_adi_eslesmesi": true,
+    "kisisel_veri_yok": true,
+    "ticari_unvan": true,
+    "ret_listesi_kontrolu": true
+   },
+   "export_status": "aktarildi:2026-11-27",
+   "notes": "Görünür tek e-posta kvkk@ (KVKK'ya özel) — satış için yazılmadı. Genel e-postalar Cloudflare ile gizli. İzmir operasyonu; merkez İstanbul/Sarıyer. 150-199 çalışan bilgisi kaynağı kayıtlı olmadığı için kayda yazılmadı."
   },
   {
    "id": "omuzomuza",
@@ -155,10 +221,11 @@
     "job_source_url": "https://www.kariyer.net/is-ilani/omuz-omuza-engelsiz-insan-kaynaklari-insan-kaynaklari-uzmani-2156657",
     "source_url": "https://www.kariyer.net/is-ilani/omuz-omuza-engelsiz-insan-kaynaklari-insan-kaynaklari-uzmani-2156657",
     "verified_on": "2026-11-27",
-    "job_seen_on": "2026-11-17"
+    "job_seen_on": "2026-11-17",
+    "website": "https://www.omuzomuza.com.tr"
    },
    "evidence": "İK Uzmanı ilanı; 1-24 çalışan (20 altı olabilir)",
-   "next_step": "Resmî siteyi bul, İletişim sayfasını aç.",
+   "next_step": "Site robots.txt hatası; LinkedIn şirket sayfası veya başka bir iletişim sayfası URL'sini arama sonucundan dene.",
    "first_seen": "2026-11-27",
    "last_checked": "2026-11-27"
   },
@@ -175,27 +242,47 @@
     "verified_on": "2026-11-27"
    },
    "evidence": "Konak, Buca, Kemalpaşa, Bergama, Narlıdere, Çiğli ve Manisa'da çoklu ilan",
-   "next_step": "http://www.sgaguvenlik.com/iletisim/ sayfasını aç; bir ilanın tarihini al.",
+   "next_step": "sgaguvenlik.com https→http yönlendirmesi; arama sonuçlarında http iletişim URL'sini bulup aç; bir ilanın tarihini al.",
    "first_seen": "2026-11-27",
    "last_checked": "2026-11-27"
   },
   {
    "id": "euroserve-guv",
-   "level": "B",
-   "segment": "KOBI",
+   "level": "A",
+   "segment": "KURUMSAL",
    "record": {
-    "legal_name": "Euroserve Güvenlik",
-    "sector": "Özel güvenlik",
-    "city": "Bursa",
+    "legal_name": "EUROSERVE GÜVENLİK A.Ş.",
+    "sector": "Özel güvenlik (Kurumsal)",
+    "city": "İstanbul",
     "job_source_url": "https://www.eleman.net/is-ilani/guvenlik-gorevlisi-i4808009",
-    "source_url": "https://www.eleman.net/is-ilani/guvenlik-gorevlisi-i4808009",
+    "source_url": "https://www.eleman.net/is-ilani/ozel-guvenlik-gorevlisi-i4801774",
     "verified_on": "2026-11-27",
-    "job_seen_on": "2026-11-21"
+    "job_seen_on": "2026-11-25",
+    "website": "https://euroserveguvenlik.com.tr",
+    "phone": "0216 578 97 00",
+    "phone_source_url": "https://euroserveguvenlik.com.tr/iletisim",
+    "district": "Üsküdar",
+    "contact_department": "Genel iletişim",
+    "employee_count": "6000+ (Sofra Grup geneli)",
+    "employee_source_url": "https://www.kariyer.net/firma-profil/sofra-grup-4081-28964",
+    "open_jobs": "Güvenlik Görevlisi (Bursa); Özel Güvenlik Görevlisi (Konya)",
+    "hiring_need": "Bursa ve Konya sahaları için eş zamanlı güvenlik görevlisi alımı (2026-11-21, 2026-11-25).",
+    "product_fit": "Çok şehirli saha alımlarında HR FLOW toplu ön eleme ve lokasyon bazlı aday havuzu sağlar.",
+    "suggested_package": "Business"
    },
    "evidence": "Konya ilanı i4801774 (2026-11-25); ayrıca İzmir/Kemalpaşa temizlik ilanı i4810376",
-   "next_step": "Çalışan sayısını kontrol et (büyük olabilir → kurumsal); resmî sitenin İletişim sayfası.",
+   "next_step": "Satışa açık; 30 gün sonra ilan ve iletişim yeniden kontrol.",
    "first_seen": "2026-11-27",
-   "last_checked": "2026-11-27"
+   "last_checked": "2026-11-27",
+   "compliance": {
+    "kurumsal_kanal": true,
+    "alan_adi_eslesmesi": true,
+    "kisisel_veri_yok": true,
+    "ticari_unvan": true,
+    "ret_listesi_kontrolu": true
+   },
+   "export_status": "aktarildi:2026-11-27",
+   "notes": "Sofra Grup (Compass Group Türkiye) markası. info@euroserve.com.tr alan adı siteyle aynı değil → yazılmadı."
   },
   {
    "id": "pirilpiril",
@@ -211,7 +298,7 @@
     "district": "Çankaya"
    },
    "evidence": "5 kişilik alım",
-   "next_step": "İlan tarihini al; resmî siteyi bul.",
+   "next_step": "Resmî web sitesi arama sonuçlarında bulunamadı (2026-11-27); 30 gün sonra tekrar ara, yoksa B'de kalır.",
    "first_seen": "2026-11-27",
    "last_checked": "2026-11-27"
   },
@@ -265,10 +352,12 @@
    "record": {
     "legal_name": "TURASSIST Yardım ve Servis A.Ş.",
     "sector": "Çağrı merkezi",
-    "city": "Kocaeli"
+    "city": "İstanbul",
+    "website": "https://www.turassist.com",
+    "district": "Sarıyer"
    },
-   "evidence": "250-349 çalışan; ilan 2026-10-12, 7/24 vardiyalı, kapalı — yeni ilan ara",
-   "next_step": "Güncel ilanı bul ve aç (işe alım ihtiyacı → B).",
+   "evidence": "0850 221 00 11 sitede görüldü (https://www.turassist.com/iletisim/); İK sayfasında açık ilan yok (2026-11-27). Ticari unvan sitede yok.",
+   "next_step": "Yeni ilan çıkarsa B; ilan tarihini al.",
    "first_seen": "2026-11-27",
    "last_checked": "2026-11-27"
   },
@@ -467,20 +556,38 @@
   },
   {
    "id": "fms",
-   "level": "B",
+   "level": "A",
    "segment": "KURUMSAL",
    "record": {
-    "legal_name": "FMS Servis Grup / FMS Tesis ve Yönetim Hizmetleri A.Ş.",
-    "sector": "Temizlik / tesis hizmetleri",
-    "employee_count": "1000-1499 (Kariyer.net)",
+    "legal_name": "FMS SERVİS GRUP",
+    "sector": "Temizlik / tesis hizmetleri (Kurumsal)",
     "city": "İzmir",
     "job_source_url": "https://www.eleman.net/is-ilani/i4797406",
     "source_url": "https://www.eleman.net/is-ilani/i4797406",
-    "job_seen_on": "2026-11-25"
+    "job_seen_on": "2026-11-25",
+    "website": "https://fmsservisgrup.com",
+    "phone": "0232 461 22 56",
+    "phone_source_url": "https://fmsservisgrup.com/en/contact/",
+    "district": "Bornova",
+    "contact_department": "Genel iletişim",
+    "linkedin_url": "https://tr.linkedin.com/company/fms-servis-grup",
+    "hiring_need": "İzmir (Bornova, Balçova AVM, Torbalı) ve Ankara'da eş zamanlı tesis/temizlik personeli ilanları.",
+    "product_fit": "Çok lokasyonlu mavi yaka alımlarında HR FLOW toplu ön eleme ve vardiya pozisyonu eşleştirmesi.",
+    "suggested_package": "Business",
+    "verified_on": "2026-11-27"
    },
-   "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
+   "next_step": "Satışa açık; 30 gün sonra ilan ve iletişim yeniden kontrol.",
    "first_seen": "2026-11-27",
-   "last_checked": "2026-11-27"
+   "last_checked": "2026-11-27",
+   "compliance": {
+    "kurumsal_kanal": true,
+    "alan_adi_eslesmesi": true,
+    "kisisel_veri_yok": true,
+    "ticari_unvan": true,
+    "ret_listesi_kontrolu": true
+   },
+   "export_status": "aktarildi:2026-11-27",
+   "notes": "1000-1499 çalışan bilgisi ilk turdaki Kariyer.net profilinden (bu kayda kaynak URL'si olmadan yazılı; yeniden doğrula). E-posta sayfada şifreli."
   },
   {
    "id": "bizimservis",
@@ -632,6 +739,96 @@
    "next_step": "Kurumsal kategori: KOBİ hedefinden sonra; resmî İletişim/Kariyer sayfası doğrulaması.",
    "first_seen": "2026-11-27",
    "last_checked": "2026-11-27"
+  },
+  {
+   "id": "nextlevel",
+   "level": "C",
+   "segment": "KOBI",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27",
+   "record": {
+    "legal_name": "Next Level Management Güvenlik ve Koruma Hizmetleri A.Ş.",
+    "sector": "Özel güvenlik",
+    "city": "Ankara",
+    "source_url": "https://www.kariyer.net/is-ilani/next-level-management-guvenlik-ve-koruma-hizmetler-guvenlik-gorevlisi-4395984"
+   },
+   "evidence": "25-49 çalışan; ilan 2026-07-08, kapalı (200+ başvuru)",
+   "next_step": "Güncel (son 45 gün) ilan ara; varsa resmî İletişim sayfası."
+  },
+  {
+   "id": "remesa",
+   "level": "C",
+   "segment": "KOBI",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27",
+   "record": {
+    "legal_name": "Remesa Personel Temini Hizmetleri",
+    "sector": "Personel temini / temizlik",
+    "city": "Bursa",
+    "source_url": "https://www.kariyer.net/is-ilani/remesa-temizlik-gorevlisi-4502725"
+   },
+   "evidence": "İlan 2026-07-17 kapalı (141 başvuru)",
+   "next_step": "Güncel (son 45 gün) ilan ara; varsa resmî İletişim sayfası."
+  },
+  {
+   "id": "alsancak",
+   "level": "C",
+   "segment": "KOBI",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27",
+   "record": {
+    "legal_name": "Alsancak Grup Savunma Sanayi ve Ticaret Ltd. Şti.",
+    "sector": "Özel güvenlik",
+    "city": "Ankara",
+    "source_url": "https://www.kariyer.net/is-ilani/alsancak-grup-savunma-sanayi-ve-ticaret-ltd-sti-ozel-guvenlik-elemani-4492371"
+   },
+   "evidence": "İlan 2026-07-06 kapalı (200+ başvuru, vardiyalı)",
+   "next_step": "Güncel (son 45 gün) ilan ara; varsa resmî İletişim sayfası."
+  },
+  {
+   "id": "denge",
+   "level": "C",
+   "segment": "KOBI",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27",
+   "record": {
+    "legal_name": "Denge Güvenlik Limited Şirketi",
+    "sector": "Özel güvenlik",
+    "city": "Ankara",
+    "source_url": "https://www.kariyer.net/firma-profil/denge-guvenlik-limited-sirketi-282670-324944"
+   },
+   "evidence": "50-74 çalışan; açık ilan görülmedi; site dengeguvenlik.com.tr",
+   "next_step": "Güncel (son 45 gün) ilan ara; varsa resmî İletişim sayfası."
+  },
+  {
+   "id": "gozen",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27",
+   "record": {
+    "legal_name": "Gözen Güvenlik Hizmetleri A.Ş.",
+    "sector": "Özel güvenlik",
+    "city": "Ankara",
+    "source_url": "https://www.kariyer.net/is-ilani/gozen-guvenlik-hizmetleri-a-s-guvenlik-gorevlisi-esenboga-havalimani-4507183"
+   },
+   "evidence": "Esenboğa Havalimanı güvenlik ilanı (tarih alınmadı)",
+   "next_step": "Güncel (son 45 gün) ilan ara; varsa resmî İletişim sayfası."
+  },
+  {
+   "id": "desmer",
+   "level": "C",
+   "segment": "KURUMSAL",
+   "first_seen": "2026-11-27",
+   "last_checked": "2026-11-27",
+   "record": {
+    "legal_name": "Desmer Güvenlik Hizmetleri Ticaret A.Ş.",
+    "sector": "Özel güvenlik",
+    "city": "Ankara",
+    "source_url": "https://www.kariyer.net/is-ilani/desmer-guvenlik-hizmetleri-ticaret-as-ozel-guvenlik-gorevlisi-ankara-4521088"
+   },
+   "evidence": "Ankara ilanı (tarih alınmadı)",
+   "next_step": "Güncel (son 45 gün) ilan ara; varsa resmî İletişim sayfası."
   }
  ]
 }
