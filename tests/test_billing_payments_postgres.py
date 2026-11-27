@@ -135,3 +135,69 @@ def test_migration_007_bank_transfer_confirmation_on_postgres():
     finally:
         db.raw.rollback()
         db.close()
+
+
+def test_migration_008_payment_link_sharing_on_postgres(monkeypatch):
+    """Real PostgreSQL 18: 008 installs idempotently through the startup path, delivery history is
+    append-only, a repeated link request reuses the open link, e-mail result is recorded and the
+    founder tracking/status screens render. One rolled-back transaction; e-mail is a stub."""
+    dsn = os.getenv("SALES_TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("Disposable local PostgreSQL DSN not supplied")
+    config = parse_dsn(dsn)
+    assert config.get("host") in ("127.0.0.1", "localhost")
+    assert config.get("dbname", "").startswith("sales_test_")
+    monkeypatch.setenv("ERNASA_CONTROL_PUBLIC_ORIGIN", "https://ernasa.com")
+    from control import app, billing_share as share, sales, sales_http
+    db = postgres.Connection(postgres.Target(dsn))
+    try:
+        if not db.execute("SELECT to_regnamespace('ernasa_control')").fetchone()[0]:
+            with db.raw, db.raw.cursor() as cursor:
+                for migration in ("001_schema_draft.up.sql", "002_session_rules.up.sql"):
+                    cursor.execute((render_gateway.CONTROL_MIGRATIONS / migration).read_text())
+        render_gateway.ensure_sales_schema(db)
+        render_gateway.ensure_billing_quote_schema(db)
+        render_gateway.ensure_billing_payment_schema(db)
+        render_gateway.ensure_billing_payment_schema(db)  # restart: 005-008 re-run safely
+        assert share.ready(db)
+        now = datetime.now(timezone.utc)
+        if db.execute("SELECT id FROM users WHERE role='founder'").fetchone() is None:
+            db.execute("INSERT INTO users(email,name,secret,role) VALUES(?,?,?,?)",
+                       ("synthetic-founder@example.test", "Kurucu", "x", "founder"))
+        fid = str(db.execute("SELECT id FROM users WHERE role='founder'").fetchone()[0])
+        founder = sales.Actor(fid, None, True)
+        company_id = db.execute("INSERT INTO companies (name, status) VALUES (?,?) RETURNING id",
+                                ("Synthetic share customer", "Aktif")).fetchone()[0]
+        db.execute("""INSERT INTO company_contacts(company_id,primary_contact,name,title,department,phone,email,kind)
+                      VALUES(?,1,'Ayşe Test','GM','Yönetim','0532 111 22 33','ayse@example.test','Şirket yetkilisi')""",
+                   (company_id,))
+        start = date(2027, 3, 1)
+        ref, reused = share.ensure_link(db, founder, company_id=company_id, product="hr_flow", plan_name="Growth",
+                                        period_start=start, now=now)
+        assert reused is False
+        assert share.ensure_link(db, founder, company_id=company_id, product="hr_flow", plan_name="Growth",
+                                 period_start=start, now=now) == (ref, True)
+        with pytest.raises(sales.Invalid):
+            share.ensure_link(db, founder, company_id=company_id, product="hr_flow", plan_name="Business",
+                              period_start=start, now=now)
+        outbox = []
+        out = share.send_email(db, founder, ref, now, send=lambda to, subject, body, idempotency_key: outbox.append(to) or "m-1")
+        assert out["status"] == "sent" and outbox == ["ayse@example.test"]
+        assert share.whatsapp_url(db, founder, ref, now).startswith("https://wa.me/905321112233?text=")
+        assert [e["channel"] for e in share.events(db, ref)] in (["whatsapp", "email"], ["email", "whatsapp"])
+        db.execute("SAVEPOINT history")
+        with pytest.raises(psycopg2.errors.RaiseException):
+            db.execute("UPDATE billing_link_events SET status='failed' WHERE ref=?", (ref,))
+        db.execute("ROLLBACK TO SAVEPOINT history")
+        assert share.stage(db, ref)[0] == "ready"
+        f = lambda action, fields, button='Kaydet': fields + button
+        inp = lambda name, label, kind='text', required=True: label
+        options = lambda name, label, items: label
+        html = sales_http.tracking_section(app, db, founder, f, inp, options, ref)
+        assert ref in html and "Ödeme durumu" in html and "Ödeme bağlantısı gönderim geçmişi" in html
+        assert "Ayşe Test" in html and "WhatsApp ile gönder" in html
+        rep = sales.Actor("no-such-rep", company_id)
+        assert share.tracking(db, rep) == ([], [])
+    finally:
+        db.raw.rollback()
+        db.close()

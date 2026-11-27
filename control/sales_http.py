@@ -180,7 +180,8 @@ def commands(c, db, actor, data):
         db.execute('DELETE FROM sales_sessions WHERE account_id=?', (actor.id,))
         sales.audit(db, actor, 'password_changed', actor.id)
         return {'detail': 'Parola değişti. Yeniden giriş yapın.'}
-    if action in ('payment_request', 'link_company', 'verify_order', 'end_test', 'bank_settings', 'confirm_bank'):
+    if action in ('payment_request', 'link_company', 'verify_order', 'end_test', 'bank_settings', 'confirm_bank',
+                  'send_payment_email'):
         return billing_command(c, db, actor, data, action)
     if action not in sales.COMMANDS:
         sales.fail('İşlem bulunamadı.', 404)
@@ -205,9 +206,14 @@ def billing_command(c, db, actor, data, action):
         if proposal == 'direct':
             proposal = None
         company = None if proposal else sales.integer(data, 'company_id', 1, 10**12)
-        ref = bp.create_payment_request(db, actor=actor, proposal_id=proposal, company_id=company, product=product,
-                                        plan_name=sales.text(data, 'plan_name', 20), period_start=start, now=now)
-        return {'ref': ref, 'url': c_public_url(ref)}
+        from . import billing_share
+        ref, reused = billing_share.ensure_link(db, actor, proposal_id=proposal, company_id=company, product=product,
+                                                plan_name=sales.text(data, 'plan_name', 20), period_start=start, now=now)
+        return {'ref': ref, 'url': c_public_url(ref), 'reused': reused,
+                'detail': 'Bu dönem için mevcut ödeme bağlantısı kullanıldı.' if reused else 'Ödeme bağlantısı oluşturuldu.'}
+    if action == 'send_payment_email':
+        from . import billing_share
+        return billing_share.send_email(db, actor, sales.text(data, 'ref', 32), now)
     sales.admin(actor)
     if action == 'link_company':
         customer = sales.owned(db, actor, 'customers', sales.text(data, 'customer_id', 32))
@@ -356,7 +362,7 @@ SUB_STATUS = {'active':'Aktif','renewal_due':'Yenileme bekleniyor','expired':'S�
 COMMISSION_STATUS = {'pending':'Onay bekliyor','approved':'Onaylandı','paid':'Ödendi','reversed':'Ters kayıt'}
 
 
-def payments_section(c, db, actor, data, f, inp, options):
+def payments_section(c, db, actor, data, f, inp, options, ref=None):
     from . import billing_payments as bp
     from .billing_quotes import PLANS
     plans = [(p.name, p.name) for p in PLANS['hr_flow']]
@@ -394,6 +400,7 @@ def payments_section(c, db, actor, data, f, inp, options):
         out += c.card('Müşteriye özel ödeme bağlantısı','<p>Yalnız CONTROL onaylı teklifleriniz için. Tutar, müşteri ödemeye başladığında güncel TCMB kuruyla hesaplanır ve 15 dakika sabitlenir.</p>'+
                       guided_form(c, bool(approved), f('payment_request', options('proposal_id','Onaylı teklif',approved)+common,'Bağlantı oluştur'),
                                   'Önce CONTROL onaylı bir teklif gerekir.', '/sales?tab=proposals', 'Tekliflerime git'))
+    out += tracking_section(c, db, actor, f, inp, options, ref)
     money_or = lambda v: money(v) if v is not None else '—'
     for r in rows:
         if r.get('is_test'):
@@ -413,6 +420,115 @@ def payments_section(c, db, actor, data, f, inp, options):
                   sales_table(c,'Henüz ödeme bağlantısı yok.',('Müşteri','Ürün','Paket','Satış tarihi','Ödeme tarihi','Tahsilat (KDV dahil)',
                               'Komisyon matrahı (KDV hariç)','Oran','Komisyon','Komisyon ödeme aralığı','Ödeme / komisyon','Abonelik','Bağlantı'),body))
     return out
+
+
+def stage_badge(c, code):
+    from .billing_share import STAGES
+    label, css = STAGES[code]
+    return f'<span class="status status-{css}">{c.e(label)}</span>'
+
+
+def tracking_section(c, db, actor, f, inp, options, ref=None):
+    """Teklif ve ödeme takibi: create / view / copy / WhatsApp / e-posta / durum for every own
+    CONTROL-approved proposal (rep) or every link (founder). Existing components only."""
+    from . import billing_share as share
+    from .billing_quotes import PLANS
+    base = '/satis' if actor.founder else '/sales'
+    proposals, links = share.tracking(db, actor)
+    plans = [(p.name, p.name) for p in PLANS['hr_flow']]
+    products = [('hr_flow','ERNASA HR FLOW'),('education','ERNASA Eğitim Platformu')]
+    rows = []
+    for p in proposals:
+        if p['has_link']:
+            continue
+        if p['stage'] == 'proposal_submitted':
+            action = '—'
+        elif not p['control_company']:
+            action = '<p class="sales-empty" role="status">CONTROL firma eşleşmesi bekleniyor.</p>'
+        else:
+            action = f('payment_request', c.hidden('proposal_id', p['id'])+options('product','Ürün',products)
+                       +options('plan_name','Paket',plans)+inp('period_start','Dönem başlangıcı','date'),
+                       'Ödeme bağlantısı oluştur')
+        rows.append([c.e(p['customer']), record_code(c,p['id'],'TEK')+'<br>'+c.e(p['brief'][:60]), '—',
+                     stage_badge(c, p['stage']), '—', '—', action])
+    for l in links:
+        url = c_public_url(l['ref'])
+        info, person, open_ = l['info'], l['contact'], l['stage'] in ('ready','awaiting','bank_review')
+        end = share.period_end(l['period_start'])
+        status_html = stage_badge(c, l['stage'])
+        if l['stage'] in ('active','paid') and info['gross_minor'] is not None:
+            status_html += f'<br><small>{money(int(info["gross_minor"]))}</small>'
+        commission = '—'
+        if info['commission_minor'] is not None:
+            commission = (f'<span class="status status-approved">Komisyon hesaplandı</span><br>{money(int(info["commission_minor"]))}'
+                          f'<br><small>Ödeme tarihi: {c.e(info["commission_window"])}</small>')
+        if person:
+            who = c.e(person['name'])+'<br><small>'+c.e(' · '.join(x for x in (share.mask_phone(person['phone']), share.mask_email(person['email'])) if x))+'</small>'
+        else:
+            who = '<small>Kayıtlı yetkili yok</small>'
+        sent = '<br>'.join(
+            f'<small>{c.e({"email":"E-posta","whatsapp":"WhatsApp"}[e["channel"]])} · '
+            f'{c.e({"sent":"gönderildi","failed":"başarısız","opened":"açıldı"}[e["status"]])} · '
+            f'{c.e(local_date(datetime.fromtimestamp(e["created_at"], timezone.utc).isoformat()))}'
+            + (f' · {c.e(e["error"])}' if e['error'] else '') + '</small>' for e in l['events']) or '<small>Henüz gönderilmedi</small>'
+        field = 'odeme-link-' + l['ref']
+        actions = (f'<label>Ödeme bağlantısı<input id="{field}" type="url" readonly value="{c.e(url)}"></label>'
+                   f'<button type="button" data-copy-target="{field}">Bağlantıyı kopyala</button>'
+                   f'<p><a class="sales-next-step" href="{c.e(url)}" target="_blank" rel="noopener">Ödeme bağlantısını görüntüle</a></p>')
+        if open_:
+            if person and share.whatsapp_number(person['phone']):
+                actions += (f'<p><a class="sales-next-step" href="/sales/whatsapp?ref={c.e(l["ref"])}" target="_blank" '
+                            f'rel="noopener">WhatsApp ile gönder</a></p>')
+            if person and person['email']:
+                actions += f('send_payment_email', c.hidden('ref', l['ref']), 'E-posta ile gönder')
+        actions += f'<p><a class="sales-next-step" href="{base}?tab=payments&amp;ref={c.e(l["ref"])}#odeme-durumu">Ödeme durumunu sorgula</a></p>'
+        rows.append([c.e(l['customer'] or l['company_name'])+'<br><small>'+c.e(l['company_name'])+'</small><br>'+who,
+                     (record_code(c,l['proposal_id'],'TEK')+'<br>' if l['proposal_id'] else '<small>Doğrudan satış</small><br>')
+                     + c.e(share.LABELS[l['product']]+' '+l['plan_name']),
+                     c.e(local_date(str(l['period_start']))+' – '+local_date(end.isoformat())),
+                     status_html, commission, sent, actions])
+    out = c.card('Teklif ve ödeme takibi',
+        '<span id="odeme-takibi"></span><p>CONTROL onaylı her teklif için tek ödeme bağlantısı oluşturulur; aynı dönem için '
+        'tekrar basıldığında mevcut bağlantı kullanılır. WhatsApp ve e-posta yalnız firmanın CONTROL’de kayıtlı yetkilisine '
+        'gider. Fiyat, IBAN, banka tahsilat onayı ve komisyon oranı CONTROL kurucusundadır.</p>'
+        '<p id="odeme-kopya-sonuc" role="status"></p>'
+        + sales_table(c, 'Takip edilecek teklif veya ödeme bağlantısı yok.',
+                      ('Müşteri ve yetkili','Teklif / paket','Abonelik dönemi','Durum','Komisyon','Gönderim','Bağlantı ve işlemler'), rows))
+    if ref:
+        out += status_detail(c, db, actor, ref)
+    if actor.founder and share.ready(db):
+        hist = db.execute("""SELECT e.*, r.plan_name, co.name AS company_name FROM billing_link_events e
+                             JOIN billing_payment_requests r ON r.ref=e.ref JOIN companies co ON co.id=r.company_id
+                             ORDER BY e.created_at DESC LIMIT 100""").fetchall()
+        out += c.card('Ödeme bağlantısı gönderim geçmişi', sales_table(c, 'Henüz gönderim yapılmadı.',
+            ('Tarih','Bağlantı','Firma','Kanal','Alıcı','Sonuç','Gönderen','Hata'),
+            [[c.e(local_date(datetime.fromtimestamp(e['created_at'], timezone.utc).isoformat())), c.e(e['ref']),
+              c.e(e['company_name']), c.e({'email':'E-posta','whatsapp':'WhatsApp'}[e['channel']]), c.e(e['recipient']),
+              c.e({'sent':'Gönderildi','failed':'Başarısız','opened':'WhatsApp açıldı'}[e['status']]),
+              record_code(c, e['actor_id'], 'TEM') if not str(e['actor_id']).isdigit() else 'CONTROL',
+              c.e(e['error'] or '—')] for e in hist]))
+    return out
+
+
+def status_detail(c, db, actor, ref):
+    from . import billing_payments as bp, billing_share as share
+    req = share.authorized_request(db, actor, ref)
+    code, info = share.stage(db, ref)
+    _, checkouts = bp.request_view(db, ref)
+    kind = {bp.PROVIDER: 'Kart (Shopier)', bp.BANK_PROVIDER: 'Havale / EFT / FAST'}
+    state = {'pending':'Bekliyor','paid':'Ödendi','expired':'Süresi doldu','failed':'Başarısız','cancelled':'İptal','refunded':'İade edildi'}
+    body = (f'<span id="odeme-durumu"></span><p>{c.e(req["company_name"])} · {c.e(req["plan_name"])} · Referans <strong>{c.e(ref)}</strong></p>'
+            f'<p>{stage_badge(c, code)}</p>'
+            + sales_table(c, 'Müşteri henüz ödeme yöntemi seçmedi.', ('Yöntem','Tutar (KDV dahil)','Durum','Başlangıç'),
+                          [[c.e(kind.get(x['provider'], x['provider'])), money(int(x['gross_minor'])), c.e(state.get(x['status'], x['status'])),
+                            c.e(local_date(datetime.fromtimestamp(x['created_at'], timezone.utc).isoformat()))] for x in checkouts]))
+    if share.ready(db):
+        body += sales_table(c, 'Gönderim kaydı yok.', ('Tarih','Kanal','Alıcı','Sonuç','Hata'),
+            [[c.e(local_date(datetime.fromtimestamp(e['created_at'], timezone.utc).isoformat())),
+              c.e({'email':'E-posta','whatsapp':'WhatsApp'}[e['channel']]), c.e(e['recipient']),
+              c.e({'sent':'Gönderildi','failed':'Başarısız','opened':'WhatsApp açıldı'}[e['status']]), c.e(e['error'] or '—')]
+             for e in share.events(db, ref)])
+    return c.card('Ödeme durumu', body)
 
 
 def bank_section(c, db, f, inp):
@@ -450,7 +566,7 @@ def bank_section(c, db, f, inp):
     return out
 
 
-def content(c, db, identity, tab):
+def content(c, db, identity, tab, ref=None):
     actor, csrf, info = identity
     data = sales.snapshot(db, actor)
     path = '/satis?tab='+tab if actor.founder else '/sales?tab='+tab
@@ -517,7 +633,8 @@ def content(c, db, identity, tab):
                 if r['status']=='submitted' and actor.founder:
                     action = f('decide',c.hidden('id',r['id'])+options('decision','Karar',[('approved','Onayla'),('revision','Revizyon iste'),('rejected','Reddet')])+inp('reason','Karar gerekçesi')+inp('official_minor','Resmi liste tutarı (kuruş)','number',False)+inp('discount_minor','CONTROL indirimi (kuruş)','number',False),'Kararı kaydet')
                 if r['status']=='approved':
-                    action = f'<a href="/sales/official?id={r["id"]}">Onaylı teklifi görüntüle</a>'
+                    action = (f'<a href="/sales/official?id={r["id"]}">Onaylı teklifi görüntüle</a>'
+                              f'<br><a href="{"/satis" if actor.founder else "/sales"}?tab=payments#odeme-takibi">Ödeme bağlantısı</a>')
                 proposals.append([record_code(c,r['id'],'TEK'),str(r['version']),c.e(r['brief']),status(r['status']),money(r['requested_minor']),money(None if r['official_minor'] is None else r['official_minor']-r['discount_minor']),action])
             out += c.card('Teklif değerlendirme',sales_table(c,'Henüz teklif talebi bulunmuyor.',('Kayıt','Sürüm','Kapsam','Durum','Talep','Resmi net','İşlem'),proposals))
             out += c.card('Yönetim karar geçmişi',sales_table(c,'Henüz yönetim kararı kaydedilmedi.',('Teklif','Karar','Gerekçe','Karar sahibi','Tarih'),[[record_code(c,r['proposal_id'],'TEK'),status(r['decision']),c.e(r['reason']),record_code(c,r['actor_id'],'YNT'),c.e(local_date(r['stamp']))] for r in data['decisions']]))
@@ -556,7 +673,7 @@ def content(c, db, identity, tab):
         if section == 'audit':
             out += c.card('Silme ve güncellemeye kapalı satış denetimi',sales_table(c,'Henüz görüntülenecek satış denetim kaydı bulunmuyor.',('Tarih','İşlemi yapan','İşlem','Hedef','Açıklama'),[[c.e(local_date(r['stamp'])),record_code(c,r['actor_id'],'YNT'),c.e(r['event']),record_code(c,r['target'],'KYT'),c.e(r['detail'])] for r in data['audit']]))
         if section == 'payments':
-            out += payments_section(c, db, actor, data, f, inp, options)
+            out += payments_section(c, db, actor, data, f, inp, options, ref)
         if section == 'catalog':
             hr_rows = [
                 [plan.name, str(plan.monthly_usd).replace('.', ','), str(plan.commission_usd).replace('.', ','), str((plan.monthly_usd * Decimal('1.20')).quantize(Decimal('0.01'))).replace('.', ','), str(plan.capacity),
@@ -665,13 +782,19 @@ def handle(h, path, post):
                     render(c,h,'Onaylı teklif',body,identity)
                 else:
                     h.reply(200,json.dumps(dict(row)).encode(),'application/json')
+            elif path == '/sales/whatsapp':
+                from . import billing_share
+                from datetime import datetime as _dt, timezone as _tz
+                url = billing_share.whatsapp_url(db, actor, query.get('ref', [''])[0], _dt.now(_tz.utc))
+                db.commit()
+                h.reply(303, headers=(('Location', url),))
             elif path in ('/sales','/satis'):
                 default_tab = 'accounts' if actor.founder else 'overview'
                 tab = query.get('tab',[default_tab])[0]
                 allowed_tabs = tuple(key for key,_ in FOUNDER_TABS) if actor.founder else ('overview','customers','opportunities','proposals','tasks','finance','payments','catalog','resources','profile')
                 if tab not in allowed_tabs:
                     sales.fail('Ekran bulunamadı.',404)
-                render(c,h,'Satış Yönetimi' if actor.founder else 'ERNASA Sales Hub',content(c,db,identity,tab),identity,tab=tab)
+                render(c,h,'Satış Yönetimi' if actor.founder else 'ERNASA Sales Hub',content(c,db,identity,tab,query.get('ref',[None])[0] if tab=='payments' else None),identity,tab=tab)
             else:
                 sales.fail('Ekran bulunamadı.',404)
     except (sales.Invalid,c.Problem) as error:

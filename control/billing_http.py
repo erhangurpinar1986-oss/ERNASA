@@ -46,14 +46,47 @@ def limits(plan, product):
     return f"<li>Aylık {plan.capacity} eğitim katılımcısı</li>"
 
 
+def _tr(value):
+    from datetime import date
+    value = value if isinstance(value, date) else date.fromisoformat(str(value))
+    return value.strftime("%d.%m.%Y")
+
+
+def company_block(c, db, req):
+    """Buyer details already registered in CONTROL (read-only). Missing optional tables or empty
+    fields are simply skipped, so the page keeps working on any installation."""
+    rows = [("Firma", req["company_name"])]
+    db.execute("SAVEPOINT company_probe")
+    try:
+        prof = db.execute("SELECT tax_id, tax_office FROM company_profile WHERE company_id=?",
+                          (req["company_id"],)).fetchone()
+        addr = db.execute("""SELECT address, district, city FROM company_addresses WHERE company_id=?
+                             ORDER BY CASE kind WHEN 'Fatura' THEN 0 WHEN 'Merkez' THEN 1 ELSE 2 END, id LIMIT 1""",
+                          (req["company_id"],)).fetchone()
+    except Exception:
+        db.execute("ROLLBACK TO SAVEPOINT company_probe")
+        prof = addr = None
+    db.execute("RELEASE SAVEPOINT company_probe")
+    if prof and prof["tax_office"]:
+        rows.append(("Vergi dairesi", prof["tax_office"]))
+    if prof and prof["tax_id"]:
+        rows.append(("Vergi kimlik no", prof["tax_id"]))
+    if addr and addr["address"]:
+        rows.append(("Fatura adresi", " ".join(x for x in (addr["address"], addr["district"], addr["city"]) if x)))
+    return "<table>" + "".join(f"<tr><th>{c.e(k)}</th><td>{c.e(v)}</td></tr>" for k, v in rows) + "</table>"
+
+
 def page(c, h, db, ref, error=None, status=200):
     req, checkouts = bp.request_view(db, ref)
     plan = find_plan(req["product"], req["plan_name"], allow_test=True)
     paid = next((x for x in checkouts if x["status"] in ("paid", "refunded")), None)
     at = int(now().timestamp())
     live = next((x for x in checkouts if x["status"] == "pending" and x["expires_at"] > at and x["provider_url"]), None)
+    from .billing_share import period_end
     body = (f'<p>{c.e(req["company_name"])} için hazırlanan ödeme bağlantısı · Referans <strong>{c.e(ref)}</strong></p>'
-            f'<h2>{c.e(LABELS[req["product"]])} · {c.e(plan.name)}</h2><ul>{limits(plan, req["product"])}</ul>'
+            + company_block(c, db, req)
+            + f'<h2>{c.e(LABELS[req["product"]])} · {c.e(plan.name)}</h2><ul>{limits(plan, req["product"])}</ul>'
+            f'<p>Abonelik dönemi: {c.e(_tr(req["period_start"]))} – {c.e(_tr(period_end(req["period_start"])))} (1 ay)</p>'
             + (f'<p>Sabit test tutarı: {TEST_GROSS_LABEL} (KDV dahil) · Dönem başlangıcı: {c.e(str(req["period_start"]))}</p>'
                if plan is TEST_PLAN else
                f'<p>Liste fiyatı: {plan.monthly_usd} USD / ay (KDV hariç) · Dönem başlangıcı: {c.e(str(req["period_start"]))}</p>'))
