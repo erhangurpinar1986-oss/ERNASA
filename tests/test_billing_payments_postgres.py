@@ -290,7 +290,7 @@ def test_migration_010_commission_policy_upgrade_two_percent_on_postgres():
         render_gateway.ensure_billing_payment_schema(db)  # 010 re-runs safely
         checks = [r[0] for r in db.execute("""SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c
                      WHERE c.conrelid IN ('ernasa_control.sales_commissions'::regclass, 'ernasa_control.sales_commission_fx'::regclass)
-                       AND c.contype='c' AND pg_get_constraintdef(c.oid) LIKE '%rate%'""").fetchall()]
+                       AND c.contype='c' AND pg_get_constraintdef(c.oid) LIKE '%(rate %'""").fetchall()]
         assert len(checks) == 2 and all("2" in c and "25" in c for c in checks), checks
         now = datetime(2026, 11, 27, 9, tzinfo=timezone.utc)
         if db.execute("SELECT id FROM users WHERE role='founder'").fetchone() is None:
