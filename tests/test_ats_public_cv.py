@@ -1,5 +1,6 @@
 """Public ERNASA HR CV application: synthetic security and durability tests."""
 from contextlib import closing
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pymupdf
@@ -178,13 +179,26 @@ def approve_synthetic_interview(manager,position,application_id,document_id,root
     assert hr_flow_screening.decide_permission(manager,permission["id"],"approved")["status"]=="approved"
 
 
+ISTANBUL = timezone(timedelta(hours=3))
+
+
+def future_appointment(days=7):
+    """A candidate-confirmed slot that is always ahead of the test run (rule: 0 < remaining <= 90 days)."""
+    slot = (datetime.now(ISTANBUL) + timedelta(days=days)).replace(hour=10, minute=0, second=0, microsecond=0)
+    return slot.isoformat()
+
+
+def confirmation_time():
+    return (datetime.now(ISTANBUL) - timedelta(hours=1)).replace(microsecond=0).isoformat()
+
+
 def confirm_synthetic_appointment(company_id,application_id):
     with closing(database.get_connection()) as db:
         db.execute("""INSERT INTO flow_candidate_appointment
             (application_id,company_id,proposed_at,confirmed_at,confirmed_by,confirmed_on,updated_at)
             VALUES(?,?,?,?,?,?,?)""",
-            (application_id,company_id,None,"2026-11-24T10:00:00+03:00",
-             "candidate","2026-11-20T15:00:00+03:00",ats.now()))
+            (application_id,company_id,None,future_appointment(),
+             "candidate",confirmation_time(),ats.now()))
         db.commit()
 
 
@@ -319,8 +333,8 @@ def test_flow_contact_channels_are_prepared_but_no_delivery_claims(intake):
         db.execute("""INSERT INTO flow_candidate_appointment
             (application_id,company_id,proposed_at,confirmed_at,confirmed_by,
              confirmed_on,updated_at) VALUES(?,?,?,?,?,?,?)""",
-            (app_id,manager.company_id,None,"2026-11-24T10:00:00+03:00",
-             "candidate","2026-11-20T15:00:00+03:00",ats.now()))
+            (app_id,manager.company_id,None,future_appointment(),
+             "candidate",confirmation_time(),ats.now()))
         db.commit()
     # A confirmed appointment alone never bypasses the manager's ATS approval.
     assert hr_flow_contacts.may_create_interview_link(manager.company_id,app_id,result["document_id"]) is False
