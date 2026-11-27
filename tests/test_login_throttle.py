@@ -17,7 +17,7 @@ class Clock:
 class LoginThrottleTests(unittest.TestCase):
     def setUp(self):
         self.clock = Clock()
-        self.t = LoginThrottle(clock=self.clock)
+        self.t = LoginThrottle('control', clock=self.clock)
 
     def fail(self, address, times):
         for _ in range(times):
@@ -67,7 +67,7 @@ class LoginThrottleTests(unittest.TestCase):
         self.assertEqual(self.t.check('a@ernasa.com'), 0)
 
     def test_global_backstop(self):
-        t = LoginThrottle(clock=self.clock, global_limit=3)
+        t = LoginThrottle('control', clock=self.clock, global_limit=3)
         for i in range(3):
             self.assertEqual(t.check(f'u{i}@x.com'), 0)
         self.assertGreater(t.check('other@x.com'), 0)
@@ -80,9 +80,52 @@ class LoginThrottleTests(unittest.TestCase):
         try:
             for i in range(200):
                 self.t.failure(f'u{i}@x.com')
-            self.assertLessEqual(len(self.t._accounts), 50)
+            self.assertLessEqual(len(self.t.store.failures), 50)
         finally:
             login_throttle.MAX_KEYS = old
+
+    def test_email_is_never_stored(self):
+        self.t.failure('secret.person@ernasa.com')
+        self.assertNotIn('secret.person', repr(self.t.store.failures))
+
+    def test_trusted_device_is_not_locked_by_attacker(self):
+        device = self.t.success('owner@ernasa.com')
+        for _ in range(20):  # attacker has no device token
+            self.t.failure('owner@ernasa.com')
+        self.assertGreater(self.t.check('owner@ernasa.com'), 0)
+        self.assertEqual(self.t.check('owner@ernasa.com', device), 0)
+
+    def test_trusted_device_still_throttled_on_its_own(self):
+        device = self.t.success('owner@ernasa.com')
+        for _ in range(3):
+            self.t.failure('owner@ernasa.com', device)
+        self.assertGreater(self.t.check('owner@ernasa.com', device), 0)
+
+    def test_forged_or_foreign_device_token_counts_as_untrusted(self):
+        other = self.t.success('other@ernasa.com')
+        for _ in range(3):
+            self.t.failure('owner@ernasa.com', 'forged-token')
+        self.assertGreater(self.t.check('owner@ernasa.com', 'forged-token'), 0)
+        self.assertGreater(self.t.check('owner@ernasa.com', other), 0)
+
+    def test_device_trust_expires(self):
+        device = self.t.success('owner@ernasa.com')
+        self.clock.now += login_throttle.DEVICE_TTL + 1
+        for _ in range(3):
+            self.t.failure('owner@ernasa.com')
+        self.assertGreater(self.t.check('owner@ernasa.com', device), 0)
+
+    def test_store_failure_falls_back_to_memory(self):
+        class Broken:
+            def __getattr__(self, name):
+                def fail(*a):
+                    raise OSError('db down')
+                return fail
+        t = LoginThrottle('control', store=Broken(), clock=self.clock)
+        self.assertEqual(t.check('a@x.com'), 0)
+        for _ in range(3):
+            t.failure('a@x.com')
+        self.assertGreater(t.check('a@x.com'), 0)
 
     def test_control_and_sales_areas_are_separate(self):
         server = SimpleNamespace()
