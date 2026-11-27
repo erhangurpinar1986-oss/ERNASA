@@ -1,5 +1,6 @@
 import psycopg2
 from . import postgres
+from . import login_throttle
 
 import argparse, getpass, hashlib, hmac, html, re, secrets, sqlite3, threading, time, warnings
 import json
@@ -7,7 +8,7 @@ import os
 from base64 import b64decode
 from email.parser import BytesParser
 from email.policy import default as email_policy
-from . import address_catalog, billing_http, firma, ik_bridge, interview_templates, login_throttle, nova, nova_http, sales, sales_http
+from . import address_catalog, billing_http, firma, ik_bridge, interview_templates, nova, nova_http, sales, sales_http
 from contextlib import closing
 from datetime import date, timedelta
 from http.cookies import SimpleCookie
