@@ -10,10 +10,13 @@ from .tcmb_rates import ExchangeRate, RATE_TYPE, SOURCE
 
 
 PLANS = {"hr_flow": HR_FLOW, "education": EDUCATION}
-# Founder-only live payment test: Education, 1 participant, fixed 0,01 TL total (KDV 0 kuruş after
-# rounding). Never listed in the catalog, the rep form or the customer price table.
+# Founder-only live payment test: Education, 1 participant, fixed 3,00 TL total incl. KDV
+# (2,50 TL + %20 KDV 0,50 TL), independent of the exchange rate. Never listed in the catalog, the
+# rep form or the customer price table. monthly_usd only satisfies the quote table's NOT NULL / > 0
+# check and is never shown or used for pricing.
 TEST_PLAN = Plan("Ödeme Testi", Decimal("0.01"), 1)
-TEST_AMOUNTS = QuoteAmounts(1, 0, 1)
+TEST_AMOUNTS = QuoteAmounts(250, 50, 300)
+TEST_GROSS_LABEL = "3,00 TL"
 
 
 def find_plan(product, plan_name, *, allow_test=False):

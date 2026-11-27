@@ -379,7 +379,7 @@ def payments_section(c, db, actor, data, f, inp, options):
                       f('payment_request', options('company_id','Firma',[(r['id'],r['name']) for r in companies])+common,'Bağlantı oluştur'))
         approved_all = [(r['id'], f"{r['brief'][:50]} · {r['owner_id']}") for r in data['proposals'] if r['status']=='approved']
         if bp.test_plan_enabled():
-          out += c.card('Canlı ödeme testi (0,01 TL)','<p>Yalnız kurucu görür. Eğitim · 1 katılımcı · 0,01 TL. Temsilcinin onaylı teklifi seçilirse tahsilat ve komisyon kaydı da test edilir (komisyon tutarı 0 kuruş).</p>'+
+          out += c.card('Canlı ödeme testi (3,00 TL, KDV dahil)','<p>Yalnız kurucu görür. Eğitim · 1 katılımcı · sabit 3,00 TL (KDV dahil: 2,50 TL + 0,50 TL KDV). Temsilcinin onaylı teklifi seçilirse tahsilat ve komisyon hesabı da test edilir; test komisyonu yalnız gösterilir, gerçek komisyon olarak ödenmez.</p>'+
                       f('payment_request', '<input type="hidden" name="product" value="education"><input type="hidden" name="plan_name" value="Ödeme Testi">'+
                         options('company_id','Firma (temsilci teklifi seçilmezse)',[(r['id'],r['name']) for r in companies])+
                         options('proposal_id','Temsilci teklifi (isteğe bağlı)',[('direct','— doğrudan satış (komisyonsuz) —')]+approved_all)+

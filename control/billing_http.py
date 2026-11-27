@@ -15,7 +15,7 @@ import re
 import threading
 
 from . import billing_payments as bp, shopier_hr, tcmb_rates
-from .billing_quotes import amounts_for, find_plan
+from .billing_quotes import TEST_GROSS_LABEL, TEST_PLAN, amounts_for, find_plan
 from .ik_bridge import ISTANBUL
 
 VAT_RATE = Decimal("0.20")
@@ -54,7 +54,9 @@ def page(c, h, db, ref, error=None, status=200):
     live = next((x for x in checkouts if x["status"] == "pending" and x["expires_at"] > at and x["provider_url"]), None)
     body = (f'<p>{c.e(req["company_name"])} için hazırlanan ödeme bağlantısı · Referans <strong>{c.e(ref)}</strong></p>'
             f'<h2>{c.e(LABELS[req["product"]])} · {c.e(plan.name)}</h2><ul>{limits(plan, req["product"])}</ul>'
-            f'<p>Liste fiyatı: {plan.monthly_usd} USD / ay (KDV hariç) · Dönem başlangıcı: {c.e(str(req["period_start"]))}</p>')
+            + (f'<p>Sabit test tutarı: {TEST_GROSS_LABEL} (KDV dahil) · Dönem başlangıcı: {c.e(str(req["period_start"]))}</p>'
+               if plan is TEST_PLAN else
+               f'<p>Liste fiyatı: {plan.monthly_usd} USD / ay (KDV hariç) · Dönem başlangıcı: {c.e(str(req["period_start"]))}</p>'))
     if error:
         body += f'<p role="alert">{c.e(error)}</p>'
     if paid:
@@ -69,8 +71,9 @@ def page(c, h, db, ref, error=None, status=200):
         body += (f'<table><tr><th>KDV hariç</th><td>{money(amounts.net_minor)}</td></tr>'
                  f'<tr><th>KDV (%20)</th><td>{money(amounts.vat_minor)}</td></tr>'
                  f'<tr><th>KDV dahil toplam</th><td><strong>{money(amounts.gross_minor)}</strong></td></tr></table>'
-                 f'<p><small>Kur: TCMB döviz satış (gösterge) {rate.value} TL/USD · {rate.published_on.strftime("%d.%m.%Y")} bülteni. '
-                 'Tutar ödeme başlatıldığında 15 dakika sabitlenir; kur güncellemesi başlatılmış ödemeyi değiştirmez.</small></p>')
+                 + ('<p><small>Test tutarı sabittir; döviz kurundan etkilenmez.</small></p>' if plan is TEST_PLAN else
+                    f'<p><small>Kur: TCMB döviz satış (gösterge) {rate.value} TL/USD · {rate.published_on.strftime("%d.%m.%Y")} bülteni. '
+                    'Tutar ödeme başlatıldığında 15 dakika sabitlenir; kur güncellemesi başlatılmış ödemeyi değiştirmez.</small></p>'))
     except tcmb_rates.RateUnavailable as exc:
         body += f'<p role="alert">{c.e(str(exc))} Lütfen daha sonra tekrar deneyin.</p>'
         return h.page("ERNASA ödeme", body, status=503, brand="ERNASA")
