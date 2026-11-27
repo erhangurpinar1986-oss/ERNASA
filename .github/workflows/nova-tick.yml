@@ -1,0 +1,36 @@
+name: ERNASA NOVA scheduler tick
+# Cloud scheduler: wakes CONTROL every 30 minutes on weekdays during Istanbul working hours
+# (06:15-14:45 UTC = 09:15-17:45 TRT). The tick itself only performs what CONTROL allows:
+# kill switch, working hours, limits, policy approvals, İYS and objection list are enforced server-side.
+# Inactive until both repository secrets exist: NOVA_CONTROL_ORIGIN (e.g. https://ernasa.com) and
+# NOVA_TICK_SECRET (same value as Render env ERNASA_NOVA_TICK_SECRET, at least 32 characters).
+on:
+  schedule:
+    - cron: '15,45 6-14 * * 1-5'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nova-tick
+  cancel-in-progress: false
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call NOVA tick
+        env:
+          ORIGIN: ${{ secrets.NOVA_CONTROL_ORIGIN }}
+          TOKEN: ${{ secrets.NOVA_TICK_SECRET }}
+        run: |
+          if [ -z "$ORIGIN" ] || [ -z "$TOKEN" ]; then
+            echo "NOVA scheduler not activated (secrets missing) - nothing to do."; exit 0
+          fi
+          case "$ORIGIN" in https://*) ;; *) echo "NOVA_CONTROL_ORIGIN must be https"; exit 1;; esac
+          status=$(curl -sS -o /tmp/tick.json -w '%{http_code}' --max-time 150 --retry 2 --retry-delay 20 \
+            -X POST "$ORIGIN/control/nova/hook/tick" -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' --data '{}')
+          echo "HTTP $status"
+          # Only counts are printed; the response contains no addresses or message bodies.
+          python3 -c "import json;d=json.load(open('/tmp/tick.json'));print({k:(v if isinstance(v,(int,str)) else len(v) if isinstance(v,list) else v) for k,v in d.items()})" || true
+          [ "$status" = "200" ]
