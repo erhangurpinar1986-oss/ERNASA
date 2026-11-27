@@ -1,6 +1,7 @@
 import psycopg2
 from . import postgres
 from . import login_throttle
+from . import account_security
 
 import argparse, getpass, hashlib, hmac, html, re, secrets, sqlite3, threading, time, warnings
 import json
@@ -48,6 +49,14 @@ ICONS = (
     'M6 3h12v18H6z M9 8h6 M9 12h6 M9 16h4',
     'M4 6h16 M4 12h16 M4 18h16 M8 4v4m8 2v4m-6 2v4',
 )
+# ERNASA SECURITY: account security and Security Center (appended so existing menu order and icons stay).
+NAV['/guvenlik'] = 'Hesap Güvenliği'
+NAV['/guvenlik-merkezi'] = 'ERNASA Security Center'
+ACCESS['founder'] = ACCESS['founder'] | {'/guvenlik', '/guvenlik-merkezi'}
+ACCESS['supervisor'] = ACCESS['supervisor'] | {'/guvenlik'}
+ACCESS['staff'] = ACCESS['staff'] | {'/guvenlik'}
+GROUPS = tuple((label, routes + ('/guvenlik', '/guvenlik-merkezi')) if label == 'Güvenlik ve Sistem' else (label, routes)
+               for label, routes in GROUPS)
 ASSETS = {'/control.css': ('control.css', 'text/css; charset=utf-8'),
           '/sales-menu.js': ('sales-menu.js', 'application/javascript; charset=utf-8'),
           '/design-system.css': ('design-system.css', 'text/css; charset=utf-8'),
@@ -1278,7 +1287,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options','nosniff')
         # Form navigations under no-referrer send Origin: null.
         self.send_header('Referrer-Policy','same-origin')
-        self.send_header('Content-Security-Policy',
+        self.send_header('Content-Security-Policy', getattr(self, 'csp_override', None) or
                          "default-src 'none'; style-src 'self'; img-src 'self'; script-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
         for key,value in headers:
             self.send_header(key,value)
@@ -1375,6 +1384,7 @@ class Handler(BaseHTTPRequestHandler):
         wait = throttle.check(address,device)
         if wait:
             raise Problem(429,login_throttle.wait_message(wait))
+        account_security.require_turnstile(self,data,'login',needed=throttle.needs_challenge(address,device))
         password = data.get('password','')
         if not 1 <= len(password) <= 128:
             throttle.failure(address,device)
@@ -1388,6 +1398,12 @@ class Handler(BaseHTTPRequestHandler):
         if row is None or not valid:
             throttle.failure(address,device)
             raise Problem(401,'Giriş bilgileri geçersiz.')
+        try:
+            account_security.login_second_factor(self,db,'control',row,data)
+        except Problem:
+            if str(data.get('code','')).strip():
+                throttle.failure(address,device)
+            raise
         device = throttle.success(address,device)
         self.pending_cookies = [login_throttle.device_cookie('control',device,self.server.public_prefix or '/',
                                                               self.server.origin.startswith('https://'))]
@@ -1463,6 +1479,8 @@ class Handler(BaseHTTPRequestHandler):
                         token = self.login(db,data)
                         db.commit()
                         return self.redirect('/',token)
+                if path in account_security.PUBLIC_PATHS:
+                    return account_security.handle_public(self,db,path,post,data if post else None)
                 actor = self.session(db)
                 if not actor:
                     if post:
@@ -1470,11 +1488,15 @@ class Handler(BaseHTTPRequestHandler):
                     if path!='/giris':
                         return self.redirect('/giris')
                     fields = ('<label>E-posta<input type="email" name="email" autocomplete="username" required></label>'
-                              '<label>Parola<input type="password" name="password" autocomplete="current-password" required></label>')
+                              '<label>Parola<input type="password" name="password" autocomplete="current-password" required></label>'
+                              + account_security.login_extra_fields() + account_security.turnstile_widget('login'))
+                    if account_security.turnstile_widget('login'):
+                        self.csp_override = account_security.turnstile_csp()
                     csrf = secrets.token_urlsafe(32)
                     secure = '; Secure' if self.server.origin.startswith('https://') else ''
                     cookie = f'control_login_csrf={csrf}; Path={self.server.public_prefix}/giris; HttpOnly; SameSite=Strict; Max-Age={LOGIN_CSRF_TTL}{secure}'
-                    return self.page('Yönetim girişi',form('/giris',{'csrf':csrf},fields,'Giriş yap'),
+                    return self.page('Yönetim girişi',form('/giris',{'csrf':csrf},fields,'Giriş yap')
+                                     + account_security.login_links('control'),
                                      headers=(('Set-Cookie',cookie),))
                 if post and not hmac.compare_digest(actor['csrf'].encode(),data.get('csrf','').encode()):
                     raise Problem(403,'Form doğrulanamadı.')
@@ -1504,6 +1526,11 @@ class Handler(BaseHTTPRequestHandler):
                     raise Problem(403,'Bu ekran için yetkiniz yok.')
                 if post and path=='/aday-deneyimi':
                     raise Problem(405,'Bu ekranda değişiklik yapılamaz.')
+                if path in account_security.PAGES:
+                    query = {k:v[-1] for k,v in parse_qs(url.query,max_num_fields=12).items()}
+                    content = account_security.handle_page(self,db,actor,path,post,data if post else None,query)
+                    brand = db.execute('SELECT name FROM settings WHERE id=1').fetchone()[0]
+                    return self.page(NAV[path],content,actor,path=path,brand=brand)
                 if post:
                     target = (ernasa_invitation_page(self.server.ernasa_invite_handler,db,actor,data,{})
                               if path==ERNASA_INVITE_PATH else mutate(db,actor,path,data))
@@ -1552,6 +1579,7 @@ def server(path,port):
     httpd.public_prefix = ''
     httpd.attempts = []
     httpd.login_lock = threading.Lock()
+    account_security.ensure_schema(httpd)
     return httpd
 
 

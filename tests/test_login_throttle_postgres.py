@@ -56,3 +56,35 @@ def test_postgres_store_persists_and_protects_known_devices():
         raw.close()
     # Idempotent DDL: a third instance creates nothing new and keeps the counter.
     assert throttle().check('founder@example.test') > 0
+
+
+def test_postgres_account_security_schema_and_append_only_events():
+    from types import SimpleNamespace
+    from control import account_security
+    dsn = disposable_dsn()
+    raw = psycopg2.connect(dsn)
+    try:
+        with raw, raw.cursor() as cursor:
+            cursor.execute('DROP TABLE IF EXISTS ernasa_control.security_events, ernasa_control.security_totp, '
+                           'ernasa_control.security_recovery_codes, ernasa_control.security_password_resets, '
+                           'ernasa_control.security_phones')
+    finally:
+        raw.close()
+    server = SimpleNamespace(db_path=postgres.Target(dsn))
+    account_security._schema_ready.clear()
+    account_security.ensure_schema(server)
+    account_security._schema_ready.clear()
+    account_security.ensure_schema(server)  # idempotent on restart
+    db = app.connect(postgres.Target(dsn))
+    try:
+        account_security.log_event(db, 'control', 'ci_check', '1')
+        db.commit()
+        with pytest.raises(psycopg2.Error):
+            db.execute("UPDATE security_events SET kind='tampered'")
+        db.raw.rollback()
+        with pytest.raises(psycopg2.Error):
+            db.execute('DELETE FROM security_events')
+        db.raw.rollback()
+        assert db.execute("SELECT COUNT(*) FROM security_events WHERE kind='ci_check'").fetchone()[0] == 1
+    finally:
+        db.close()

@@ -37,6 +37,7 @@ MAX_KEYS = 10000
 DEVICE_TTL = 90 * 24 * 3600
 MAX_DEVICES_PER_ACCOUNT = 10
 UNTRUSTED = 'untrusted'
+DEGRADED_SECONDS = 300
 
 DDL = (
     """CREATE TABLE IF NOT EXISTS security_login_failures(
@@ -172,12 +173,18 @@ class LoginThrottle:
         self._lock = threading.Lock()
         self._recent = []
         self._global_limit = global_limit
+        self._degraded_until = 0
 
     # -- storage with fail-open-to-memory (never fail-closed for every user) --
     def _call(self, name, *args):
+        # After a storage error, use process memory consistently for a while instead of mixing
+        # database reads with in-memory writes (which would silently stop counting).
+        if self._clock() < self._degraded_until:
+            return getattr(self._fallback, name)(*args)
         try:
             return getattr(self.store, name)(*args)
-        except Exception as exc:  # database unavailable: degrade to process memory, log without data
+        except Exception as exc:  # database unavailable or locked: degrade, log without data
+            self._degraded_until = self._clock() + DEGRADED_SECONDS
             print(f'LOGIN_THROTTLE_STORE_ERROR area={self.area} op={name} type={type(exc).__name__}',
                   file=sys.stderr, flush=True)
             return getattr(self._fallback, name)(*args)
@@ -249,6 +256,16 @@ class LoginThrottle:
 _attach_lock = threading.Lock()
 
 
+def _connect(target):
+    """Separate connection for counters. SQLite (local/dev) holds a database-wide write lock during a
+    request, so wait only briefly there and fall back to memory; PostgreSQL uses row locks."""
+    from . import app
+    db = app.connect(target)
+    if not hasattr(db, 'raw'):
+        db.execute('PRAGMA busy_timeout=200')
+    return db
+
+
 def for_server(server, area):
     """Return the throttle of one login area ('control' or 'sales'); areas never share counters.
 
@@ -261,8 +278,7 @@ def for_server(server, area):
             target = getattr(server, 'db_path', None)
             store = None
             if target is not None:
-                from . import app
-                store = DbStore(lambda: app.connect(target))
+                store = DbStore(lambda: _connect(target))
             throttle = LoginThrottle(area, store)
             setattr(server, name, throttle)
         return throttle
