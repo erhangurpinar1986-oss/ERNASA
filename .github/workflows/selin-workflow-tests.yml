@@ -2,6 +2,8 @@ name: ERNASA HR FLOW end-to-end candidate workflow checks
 on:
   pull_request:
     paths:
+      - 'services/ai_service.py'
+      - 'tests/test_ai_service_privacy.py'
       - 'selin_workflow.py'
       - 'hr_flow_screening.py'
       - 'hr_flow_contacts.py'
@@ -25,7 +27,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt pytest
-      - run: python -m pytest tests/test_selin_workflow.py tests/test_ats_public_cv.py -q
+      - run: python -m pytest tests/test_selin_workflow.py tests/test_ats_public_cv.py tests/test_ai_service_privacy.py -q
       - run: python -m pip install playwright
       - run: python -m playwright install --with-deps chromium
       - run: python -m pytest tests/test_hr_flow_browser.py -q

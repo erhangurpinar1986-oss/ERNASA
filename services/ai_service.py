@@ -118,7 +118,8 @@ Bu örnekleri aynen tekrarlamak zorunda değilsin. Aynı sadelikte ve doğallık
 
     response = client.responses.create(
         model="gpt-5",
-        input=prompt
+        input=prompt,
+        store=False,  # candidate data must not be retained by the provider (KVKK minimisation)
     )
 
     question = response.output_text.strip()
@@ -215,7 +216,8 @@ KURALLAR:
 
     response = client.with_options(timeout=90, max_retries=0).responses.create(
         model="gpt-5",
-        input=prompt
+        input=prompt,
+        store=False,  # candidate data must not be retained by the provider (KVKK minimisation)
     )
 
     return hr_flow_report.normalize(response.output_text.strip())
