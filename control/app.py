@@ -7,7 +7,7 @@ import os
 from base64 import b64decode
 from email.parser import BytesParser
 from email.policy import default as email_policy
-from . import address_catalog, billing_http, firma, ik_bridge, interview_templates, sales, sales_http
+from . import address_catalog, billing_http, firma, ik_bridge, interview_templates, login_throttle, sales, sales_http
 from contextlib import closing
 from datetime import date, timedelta
 from http.cookies import SimpleCookie
@@ -1366,14 +1366,14 @@ class Handler(BaseHTTPRequestHandler):
         if not cookie or not csrf or not hmac.compare_digest(cookie.value.encode(),csrf.encode()):
             raise Problem(403,'Giriş formu doğrulanamadı. Giriş ekranını yenileyin.')
         now = int(time.time())
-        with self.server.login_lock:
-            self.server.attempts = [t for t in self.server.attempts if t > now-60]
-            if len(self.server.attempts)>=12:
-                raise Problem(429,'Çok fazla giriş denemesi. Bir dakika sonra tekrar deneyin.')
-            self.server.attempts.append(now)
         address = email(data)
+        throttle = login_throttle.for_server(self.server,'control')
+        wait = throttle.check(address)
+        if wait:
+            raise Problem(429,login_throttle.wait_message(wait))
         password = data.get('password','')
         if not 1 <= len(password) <= 128:
+            throttle.failure(address)
             raise Problem(401,'Giriş bilgileri geçersiz.')
         row = db.execute("""SELECT users.* FROM users LEFT JOIN companies ON companies.id=company_id
           LEFT JOIN ik_personnel_details d ON d.user_id=users.id
@@ -1382,7 +1382,9 @@ class Handler(BaseHTTPRequestHandler):
         saved = row['secret'] if row else DUMMY
         valid = hmac.compare_digest(saved,digest(password,bytes.fromhex(saved.split(':')[0])))
         if row is None or not valid:
+            throttle.failure(address)
             raise Problem(401,'Giriş bilgileri geçersiz.')
+        throttle.success(address)
         token = secrets.token_urlsafe(32)
         db.execute('DELETE FROM sessions WHERE expires<=?',(now,))
         db.execute('INSERT INTO sessions VALUES(?,?,?,?)',(token_hash(token),row['id'],secrets.token_urlsafe(32),now+TTL))

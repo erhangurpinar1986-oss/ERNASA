@@ -1,5 +1,6 @@
 """CONTROL-integrated Sales Hub HTTP adapter. No public signup or outbound actions."""
 from contextlib import closing
+from . import login_throttle
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 from http.cookies import SimpleCookie
@@ -287,15 +288,17 @@ def login(c, h, db, data):
     if not cookie or not hmac.compare_digest(cookie.value.encode(), str(data.get('csrf', '')).encode()):
         sales.fail('Giriş formunu yenileyin.', 403)
     now = int(time.time())
-    with h.server.login_lock:
-        h.server.attempts = [t for t in h.server.attempts if t > now-60]
-        if len(h.server.attempts) >= 12:
-            sales.fail('Çok fazla giriş denemesi.', 429)
-        h.server.attempts.append(now)
-    row = db.execute('SELECT a.* FROM sales_accounts a JOIN companies c ON c.id=a.company_id WHERE a.email=? AND a.active=1 AND c.status=?', (c.email(data), 'Aktif')).fetchone()
+    address = c.email(data)
+    throttle = login_throttle.for_server(h.server, 'sales')
+    wait = throttle.check(address)
+    if wait:
+        sales.fail(login_throttle.wait_message(wait), 429)
+    row = db.execute('SELECT a.* FROM sales_accounts a JOIN companies c ON c.id=a.company_id WHERE a.email=? AND a.active=1 AND c.status=?', (address, 'Aktif')).fetchone()
     valid = c.check_ik_password(str(data.get('password', '')), row['secret'] if row else None)
     if not row or not valid:
+        throttle.failure(address)
         sales.fail('Giriş bilgileri geçersiz.', 401)
+    throttle.success(address)
     token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
     db.execute('DELETE FROM sales_sessions WHERE expires<=?', (now,))
     db.execute('INSERT INTO sales_sessions VALUES(?,?,?,?)', (c.token_hash(token), row['id'], csrf, now+c.TTL))

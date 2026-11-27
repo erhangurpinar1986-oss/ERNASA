@@ -109,6 +109,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), payment=(), usb=()")
+        forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        if os.getenv("RENDER") == "true" and forwarded_proto == "https":
+            # One year, this host only: no includeSubDomains/preload until every subdomain is HTTPS-verified.
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
         if os.getenv("ERNASA_IK_LOCAL_PREVIEW") == "1":
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
