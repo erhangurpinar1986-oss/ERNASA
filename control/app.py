@@ -1316,6 +1316,8 @@ class Handler(BaseHTTPRequestHandler):
         if token is not None:
             secure = '; Secure' if self.server.origin.startswith('https://') else ''
             cookie_path = self.server.public_prefix or '/'
+            # Session cookie last: some clients keep only the final Set-Cookie of a response.
+            headers.extend(getattr(self,'pending_cookies',()))
             headers.append(('Set-Cookie',f'control_session={token}; Path={cookie_path}; HttpOnly; SameSite=Strict; Max-Age={age}{secure}'))
         self.reply(303,headers=headers)
 
@@ -1369,12 +1371,14 @@ class Handler(BaseHTTPRequestHandler):
         now = int(time.time())
         address = email(data)
         throttle = login_throttle.for_server(self.server,'control')
-        wait = throttle.check(address)
+        device = SimpleCookie(self.headers.get('Cookie','')).get(login_throttle.device_cookie_name('control'))
+        device = device.value if device else None
+        wait = throttle.check(address,device)
         if wait:
             raise Problem(429,login_throttle.wait_message(wait))
         password = data.get('password','')
         if not 1 <= len(password) <= 128:
-            throttle.failure(address)
+            throttle.failure(address,device)
             raise Problem(401,'Giriş bilgileri geçersiz.')
         row = db.execute("""SELECT users.* FROM users LEFT JOIN companies ON companies.id=company_id
           LEFT JOIN ik_personnel_details d ON d.user_id=users.id
@@ -1383,9 +1387,11 @@ class Handler(BaseHTTPRequestHandler):
         saved = row['secret'] if row else DUMMY
         valid = hmac.compare_digest(saved,digest(password,bytes.fromhex(saved.split(':')[0])))
         if row is None or not valid:
-            throttle.failure(address)
+            throttle.failure(address,device)
             raise Problem(401,'Giriş bilgileri geçersiz.')
-        throttle.success(address)
+        device = throttle.success(address,device)
+        self.pending_cookies = [login_throttle.device_cookie('control',device,self.server.public_prefix or '/',
+                                                              self.server.origin.startswith('https://'))]
         token = secrets.token_urlsafe(32)
         db.execute('DELETE FROM sessions WHERE expires<=?',(now,))
         db.execute('INSERT INTO sessions VALUES(?,?,?,?)',(token_hash(token),row['id'],secrets.token_urlsafe(32),now+TTL))

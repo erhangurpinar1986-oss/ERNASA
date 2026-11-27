@@ -12,8 +12,16 @@ from control import app, sales, sales_http
 PASSWORD = 'Synthetic-Pass-2026!'
 
 
-def fake_handler(server, csrf_cookie, cookie_name):
-    return SimpleNamespace(server=server, headers={'Cookie': f'{cookie_name}={csrf_cookie}'})
+def fake_handler(server, csrf_cookie, cookie_name, device=None, area=None):
+    cookie = f'{cookie_name}={csrf_cookie}'
+    if device:
+        cookie += f'; {area}_device={device}'
+    return SimpleNamespace(server=server, headers={'Cookie': cookie})
+
+
+def issued_device(handler):
+    header = handler.pending_cookies[0][1]
+    return header.split(';', 1)[0].split('=', 1)[1]
 
 
 class LoginThrottleIntegration(unittest.TestCase):
@@ -21,7 +29,7 @@ class LoginThrottleIntegration(unittest.TestCase):
         self.tmp = TemporaryDirectory()
         self.path = str(Path(self.tmp.name) / 'control.db')
         app.init(self.path)
-        self.server = SimpleNamespace(attempts=[], login_lock=Lock())  # legacy fields kept for comparison
+        self.server = self.new_server()
         with closing(app.connect(self.path)) as db:
             company = db.execute("INSERT INTO companies(name,status) VALUES('Synthetic Co','Aktif') RETURNING id").fetchone()[0]
             db.execute("INSERT INTO users(email,name,secret,role,company_id) VALUES(?,?,?,'founder',NULL)",
@@ -32,19 +40,26 @@ class LoginThrottleIntegration(unittest.TestCase):
                        (secrets.token_hex(8), company, 'Synthetic Rep', 'rep@example.test', app.digest(PASSWORD)))
             db.commit()
 
+    def new_server(self):
+        # Fresh process state (as after a restart); counters must come from the database.
+        return SimpleNamespace(attempts=[], login_lock=Lock(), db_path=self.path,
+                               origin='https://ernasa.test', public_prefix='/control')
+
     def tearDown(self):
         self.tmp.cleanup()
 
-    def control_login(self, address, password):
+    def control_login(self, address, password, device=None, want_handler=False):
         csrf = 'c' * 20
-        handler = fake_handler(self.server, csrf, 'control_login_csrf')
+        handler = fake_handler(self.server, csrf, 'control_login_csrf', device, 'control')
         with closing(app.connect(self.path)) as db:
             try:
                 app.Handler.login(handler, db, {'csrf': csrf, 'email': address, 'password': password})
                 db.commit()
-                return 200
+                status = 200
             except app.Problem as problem:
-                return problem.status
+                db.rollback()  # the real dispatcher rolls back the request transaction on failure
+                status = problem.status
+        return (status, handler) if want_handler else status
 
     def sales_login(self, address, password):
         csrf = 's' * 20
@@ -55,6 +70,7 @@ class LoginThrottleIntegration(unittest.TestCase):
                 db.commit()
                 return 200
             except Exception as problem:  # sales.fail raises its own error type
+                db.rollback()
                 return getattr(problem, 'status', None) or getattr(problem, 'code', None) or problem.args[-1]
 
     def test_wrong_passwords_block_only_that_account(self):
@@ -78,6 +94,28 @@ class LoginThrottleIntegration(unittest.TestCase):
         for _ in range(3):
             self.assertNotEqual(self.sales_login('rep@example.test', 'wrong-password-x'), 200)
         self.assertEqual(self.sales_login('rep@example.test', PASSWORD), 429)
+
+    def test_counters_survive_restart(self):
+        for _ in range(3):
+            self.control_login('founder@example.test', 'wrong-password-x')
+        self.server = self.new_server()  # simulated process restart
+        self.assertEqual(self.control_login('founder@example.test', PASSWORD), 429)
+        with closing(app.connect(self.path)) as db:
+            stored = db.execute('SELECT account_key FROM security_login_failures').fetchall()
+        self.assertTrue(stored)
+        self.assertNotIn('founder', repr([tuple(r) for r in stored]))
+
+    def test_attacker_cannot_lock_owner_on_known_device(self):
+        status, handler = self.control_login('founder@example.test', PASSWORD, want_handler=True)
+        self.assertEqual(status, 200)
+        device = issued_device(handler)
+        self.assertIn('HttpOnly', handler.pending_cookies[0][1])
+        self.assertIn('Secure', handler.pending_cookies[0][1])
+        for _ in range(10):
+            self.control_login('founder@example.test', 'wrong-password-x')
+        self.assertEqual(self.control_login('founder@example.test', PASSWORD), 429)
+        self.server = self.new_server()
+        self.assertEqual(self.control_login('founder@example.test', PASSWORD, device), 200)
 
     def test_success_resets(self):
         self.control_login('founder@example.test', 'wrong-password-x')
