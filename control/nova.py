@@ -844,9 +844,10 @@ def create_demo(db, target, source, note=''):
 # ---------------------------------------------------------------- spending
 
 def spent(db, day=None, month=None):
+    # PostgreSQL returns sum(bigint) as Decimal; money stays integer kuruş everywhere.
     if day:
-        return db.execute('SELECT COALESCE(sum(amount_minor),0) FROM nova_spend WHERE day=?', (day,)).fetchone()[0]
-    return db.execute('SELECT COALESCE(sum(amount_minor),0) FROM nova_spend WHERE substr(day,1,7)=?', (month,)).fetchone()[0]
+        return int(db.execute('SELECT COALESCE(sum(amount_minor),0) FROM nova_spend WHERE day=?', (day,)).fetchone()[0])
+    return int(db.execute('SELECT COALESCE(sum(amount_minor),0) FROM nova_spend WHERE substr(day,1,7)=?', (month,)).fetchone()[0])
 
 
 def reserve(db, cfg, amount, reference, moment=None):
@@ -1028,6 +1029,50 @@ def seed_knowledge(db):
         ('ernasa', 'indirim', 'İndirim yapabilir misiniz?', 'NOVA indirim, özel ödeme koşulu veya sözleşme değişikliği veremez; talebi yetkili satış temsilcisine iletir.',
          'approved', 'NOVA 2.0 görev talimatı'),
     ]
+    from .billing_catalog import EDUCATION
+    for plan in EDUCATION:
+        entries.append(('egitim', 'fiyat', f'Eğitim Platformu {plan.name} paketi ne kadar?',
+                        f'{plan.name}: aylık {plan.monthly_usd} USD + KDV (ödeme günü TCMB kuruyla TL), aylık {plan.capacity} eğitim katılımcısı.',
+                        'approved', 'control/billing_catalog.py (CONTROL onaylı liste fiyatı)'))
+    entries += [
+        ('hr_flow', 'paket', 'Hangi paketi seçmeliyiz?',
+         'Aylık aday hacmine göre: ~100 aday Starter, ~500 Growth, ~1.000 Business, ~2.500 PRO. Bir aday işlemi ATS değerlendirmesi ve '
+         'gerekiyorsa AI ön mülakatı tek hak olarak kapsar. Kesin öneriyi satış temsilcimiz ihtiyaç görüşmesinden sonra yapar.',
+         'draft', 'control/billing_http.py limits() — kurucu onayı bekliyor'),
+        ('hr_flow', 'özellik', 'ATS ve CV değerlendirme ne yapar?',
+         'Başvuruları tek yerde toplar, CV dosyalarını (PDF/Word, taranmış belgeler dahil) okur ve pozisyon kriterlerine göre '
+         'eşleşme değerlendirmesi üretir; sıralama İK ekibinin incelemesi içindir.',
+         'draft', 'ats_cv_import.py, ats_matching.py, ocr_service — kurucu onayı bekliyor'),
+        ('hr_flow', 'özellik', 'Yapay zekâ destekli ön mülakat nasıl çalışır?',
+         'Adaya kişiye özel bağlantı gönderilir; aday şirketin belirlediği veya şablon sorulara çevrim içi yanıt verir; sistem yanıtları '
+         'değerlendirip rapor hazırlar. Onay, ret veya ikinci görüşme kararı her zaman İK yetkilisindedir.',
+         'draft', 'interview_assessments.py, portal_interviews.py, hr_flow_decisions.py — kurucu onayı bekliyor'),
+        ('hr_flow', 'özellik', 'Mülakat organizasyonu ve aday takibi var mı?',
+         'Mülakat randevusu planlama, adaya bildirim e-postaları, aday aşama takibi ve İK karar merkezi bulunur.',
+         'draft', 'hr_flow_booking.py, flow_candidate_notifications.py, hr_flow_automation.py — kurucu onayı bekliyor'),
+        ('hr_flow', 'özellik', 'Raporlama sunuyor musunuz?', 'Aday ve pozisyon bazında değerlendirme raporları ve PDF çıktısı sunulur.',
+         'draft', 'hr_flow_report.py, recruitment_pdf.py — kurucu onayı bekliyor'),
+        ('egitim', 'özellik', 'Eğitim modülleri nedir?',
+         'Çalışanlara dijital eğitim ataması, sesli/video içerik ve ilerleme takibi sağlayan ERNASA Eğitim Platformu.',
+         'draft', 'academy_*.py, ernasa_training.py — kurucu onayı bekliyor'),
+        ('hr_flow', 'destek', 'Teknik destek nasıl alınır?', 'iletisim@ernasa.com adresinden; yanıt süresi taahhüdü kurucu tarafından belirlenecek.',
+         'draft', 'Kurucu onayı bekliyor'),
+        ('hr_flow', 'deneme', 'Ücretsiz deneme var mı?', 'Kurucu tarafından belirlenecek. Onaylanana kadar NOVA bu soruyu satış temsilcisine aktarır.',
+         'draft', 'Kurucu onayı bekliyor'),
+        ('itiraz', 'mevcut sistem', 'Zaten bir ATS / Kariyer.net kullanıyoruz.',
+         'HR FLOW mevcut ilan kanallarınızın yerine geçmek zorunda değil; başvuruları tek yerde toplayıp ön değerlendirme ve mülakat '
+         'organizasyonundaki manuel işi azaltmayı hedefler. 15 dakikalık bir demoda kendi sürecinizle karşılaştırabiliriz.',
+         'draft', 'Satış itiraz kütüphanesi — kurucu onayı bekliyor'),
+        ('itiraz', 'bütçe', 'Bütçemiz yok / pahalı.',
+         'Paketler aylık aday hacmine göre başlar; en küçük paket aylık 100 aday içindir. İndirim veya özel koşulu NOVA veremez; '
+         'talebinizi yetkili satış temsilcisine iletirim.', 'draft', 'Satış itiraz kütüphanesi — kurucu onayı bekliyor'),
+        ('itiraz', 'yapay zekâ güveni', 'Yapay zekâ adayları yanlış eler mi?',
+         'Sistem karar vermez, değerlendirme ve rapor üretir; adayı onaylama veya eleme kararı her zaman İK ekibinizdedir: '
+         '"Yapay zekâ analiz eder, insan karar verir."', 'draft', 'Satış itiraz kütüphanesi — kurucu onayı bekliyor'),
+        ('itiraz', 'zamanlama', 'Şu an ilgilenmiyoruz / sonra arayın.',
+         'Anlıyorum. Uygun olduğunuz bir zamanı not edeyim mi, yoksa kısa bir tanıtım e-postası mı tercih edersiniz? İstemezseniz sizi listemizden çıkarırım.',
+         'draft', 'Satış itiraz kütüphanesi — kurucu onayı bekliyor'),
+    ]
     for product, topic, question, answer, status, source in entries:
         db.execute('INSERT INTO nova_knowledge VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(product,topic,question) DO NOTHING',
                    (uid(), product, topic, question, answer, status, source, 'system' if status == 'approved' else '', stamp()))
@@ -1180,7 +1225,7 @@ def finish_job(db, job, error=None):
 def metrics(db, moment=None):
     day = today(moment)
     month = day[:7]
-    one = lambda sql, *p: db.execute(sql, p).fetchone()[0]
+    one = lambda sql, *p: int(db.execute(sql, p).fetchone()[0] or 0)
     by_stage = {r['stage']: r['n'] for r in db.execute('SELECT stage, count(*) AS n FROM nova_companies WHERE synthetic=0 GROUP BY stage').fetchall()}
     sent = one("SELECT count(*) FROM nova_emails WHERE direction='out' AND status IN ('sent','delivered','bounced')")
     bounced = one("SELECT count(*) FROM nova_emails WHERE direction='out' AND status='bounced'")
@@ -1218,7 +1263,7 @@ def daily_report(db, moment=None, store=True):
     day = today(moment)
     m = metrics(db, moment)
     cfg = settings(db)
-    tl = lambda minor: f'{minor // 100:,}'.replace(',', '.') + f',{minor % 100:02d} TL'
+    tl = lambda minor: f'{int(minor) // 100:,}'.replace(',', '.') + f',{int(minor) % 100:02d} TL'
     lines = [f'# NOVA günlük yönetim raporu — {day}', '',
              f'Durum: {"ÇALIŞIYOR" if cfg["running"] and not cfg["kill_switch"] else "DURDURULDU"} · '
              f'Acil durdurma: {"açık" if cfg["kill_switch"] else "kapalı"} · Otomatik e-posta: {"açık" if cfg["auto_email"] else "kapalı"} · '
