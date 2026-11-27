@@ -263,10 +263,15 @@ def c_public_url(ref):
     return os.environ.get('ERNASA_CONTROL_PUBLIC_ORIGIN', '') + '/control/odeme/' + ref
 
 
-def current(c, h, db):
-    founder = h.session(db)
-    if founder and founder['role'] == 'founder':
-        return sales.Actor(str(founder['id']), None, True), founder['csrf'], dict(founder)
+def current(c, h, db, area='sales'):
+    """CONTROL (/satis…) and Sales Hub (/sales…) are separate areas: each recognises only its
+    own session, so a CONTROL login in the same browser never takes over the representative
+    screen and a representative session never reaches CONTROL."""
+    if area == 'control':
+        founder = h.session(db)
+        if founder and founder['role'] == 'founder':
+            return sales.Actor(str(founder['id']), None, True), founder['csrf'], dict(founder)
+        return None
     cookie = SimpleCookie(h.headers.get('Cookie', '')).get('sales_session')
     if not cookie or not re.fullmatch(r'[A-Za-z0-9_-]{43}', cookie.value):
         return None
@@ -477,7 +482,7 @@ def tracking_section(c, db, actor, f, inp, options, ref=None):
                    f'<p><a class="sales-next-step" href="{c.e(url)}" target="_blank" rel="noopener">Ödeme bağlantısını görüntüle</a></p>')
         if open_:
             if person and share.whatsapp_number(person['phone']):
-                actions += (f'<p><a class="sales-next-step" href="/sales/whatsapp?ref={c.e(l["ref"])}" target="_blank" '
+                actions += (f'<p><a class="sales-next-step" href="{base}/whatsapp?ref={c.e(l["ref"])}" target="_blank" '
                             f'rel="noopener">WhatsApp ile gönder</a></p>')
             if person and person['email']:
                 actions += f('send_payment_email', c.hidden('ref', l['ref']), 'E-posta ile gönder')
@@ -637,7 +642,7 @@ def content(c, db, identity, tab, ref=None):
                 if r['status']=='submitted' and actor.founder:
                     action = f('decide',c.hidden('id',r['id'])+options('decision','Karar',[('approved','Onayla'),('revision','Revizyon iste'),('rejected','Reddet')])+inp('reason','Karar gerekçesi')+inp('official_minor','Resmi liste tutarı (kuruş)','number',False)+inp('discount_minor','CONTROL indirimi (kuruş)','number',False),'Kararı kaydet')
                 if r['status']=='approved':
-                    action = (f'<a href="/sales/official?id={r["id"]}">Onaylı teklifi görüntüle</a>'
+                    action = (f'<a href="{"/satis" if actor.founder else "/sales"}/official?id={r["id"]}">Onaylı teklifi görüntüle</a>'
                               f'<br><a href="{"/satis" if actor.founder else "/sales"}?tab=payments#odeme-takibi">Ödeme bağlantısı</a>')
                 proposals.append([record_code(c,r['id'],'TEK'),str(r['version']),c.e(r['brief']),status(r['status']),money(r['requested_minor']),money(None if r['official_minor'] is None else r['official_minor']-r['discount_minor']),action])
             out += c.card('Teklif değerlendirme',sales_table(c,'Henüz teklif talebi bulunmuyor.',('Kayıt','Sürüm','Kapsam','Durum','Talep','Resmi net','İşlem'),proposals))
@@ -701,8 +706,9 @@ def content(c, db, identity, tab, ref=None):
 
 def handle(h, path, post):
     from . import app as c
-    if path != '/satis' and path != '/sales' and not path.startswith('/sales/'):
+    if path not in ('/satis', '/sales') and not path.startswith(('/sales/', '/satis/')):
         return False
+    area = 'control' if path == '/satis' or path.startswith('/satis/') else 'sales'
     identity = None
     api = path.startswith('/sales/api')
     try:
@@ -720,21 +726,21 @@ def handle(h, path, post):
                 else:
                     data = h.data()
                 db.execute('BEGIN IMMEDIATE')
-            identity = current(c,h,db)
+            identity = current(c,h,db,area)
             if path == '/sales/login':
                 if post:
                     token = login(c,h,db,data)
                     db.commit()
                     h.reply(303,headers=(('Location',h.server.public_prefix+'/sales'),set_cookie(h,'sales_session',token,c.TTL)))
-                elif identity and identity[0].founder:
-                    h.reply(303,headers=(('Location',h.server.public_prefix+'/satis'),))
+                elif identity:
+                    h.reply(303,headers=(('Location',h.server.public_prefix+'/sales'),))
                 else:
                     token = secrets.token_urlsafe(32)
                     render(c,h,'Satış temsilcisi girişi',sales_login_form(c,token),
                            headers=(set_cookie(h,'sales_login_csrf',token,c.LOGIN_CSRF_TTL),))
                 return True
             if not identity:
-                if path == '/satis' and not post:
+                if area == 'control' and not post:
                     h.reply(303,headers=(('Location',h.server.public_prefix+'/giris'),))
                     return True
                 if api or post:
@@ -742,8 +748,10 @@ def handle(h, path, post):
                 h.reply(303,headers=(('Location',h.server.public_prefix+'/sales/login'),))
                 return True
             actor,csrf,info = identity
-            if path == '/satis':
+            if area == 'control':
                 sales.admin(actor)
+            elif actor.founder:
+                sales.fail('Sales Hub yalnız satış temsilcisi hesabıyla kullanılır.', 403)
             if post:
                 provided = h.headers.get('X-CSRF-Token', '') if h.headers.get_content_type()=='application/json' else data.get('csrf','')
                 if not isinstance(provided,str) or not hmac.compare_digest(csrf.encode(),provided.encode()):
@@ -772,21 +780,21 @@ def handle(h, path, post):
                 payload = sales.snapshot(db,actor)
                 payload['csrf'] = csrf
                 h.reply(200,json.dumps(payload).encode(),'application/json')
-            elif path in ('/sales/api/record','/sales/official'):
+            elif path in ('/sales/api/record','/sales/official','/satis/official'):
                 table = query.get('table',['proposals'])[0]
                 if table not in sales.TABLES:
                     sales.fail('Kayıt türü bulunamadı.',404)
-                if path == '/sales/official':
+                if path in ('/sales/official','/satis/official'):
                     table = 'proposals'
                 row = sales.owned(db,actor,table,query.get('id',[''])[0])
-                if path == '/sales/official':
+                if path in ('/sales/official','/satis/official'):
                     if row['status']!='approved':
                         sales.fail('Resmi teklif için CONTROL onayı gerekli.',409)
                     body = c.card('CONTROL onaylı teklif',f'<p>Teklif: {record_code(c,row["id"],"TEK")} · Sürüm {row["version"]}</p><p>{c.e(row["brief"])}</p><p>Liste: {money(row["official_minor"])} · İndirim: {money(row["discount_minor"])} · KDV hariç net: <strong>{money(row["official_minor"]-row["discount_minor"])}</strong></p>')
                     render(c,h,'Onaylı teklif',body,identity)
                 else:
                     h.reply(200,json.dumps(dict(row)).encode(),'application/json')
-            elif path == '/sales/whatsapp':
+            elif path in ('/sales/whatsapp','/satis/whatsapp'):
                 from . import billing_share
                 from datetime import datetime as _dt, timezone as _tz
                 url = billing_share.whatsapp_url(db, actor, query.get('ref', [''])[0], _dt.now(_tz.utc))
@@ -810,7 +818,8 @@ def handle(h, path, post):
             render(c,h,'Satış temsilcisi girişi',sales_login_form(c,token,error),
                    status=error.status,headers=(set_cookie(h,'sales_login_csrf',token,c.LOGIN_CSRF_TTL),))
         else:
-            render(c,h,'İşlem tamamlanamadı',f'<p role="alert">{c.e(str(error))}</p><p><a href="/sales">Satış paneline dön</a></p>',identity,status=error.status)
+            back = '/satis' if area == 'control' else '/sales'
+            render(c,h,'İşlem tamamlanamadı',f'<p role="alert">{c.e(str(error))}</p><p><a href="{back}">Satış paneline dön</a></p>',identity,status=error.status)
     except (ValueError,TypeError,UnicodeError):
         h.reply(422,json.dumps({'detail':'İstek okunamadı.'}).encode(),'application/json')
     except (c.sqlite3.IntegrityError,c.psycopg2.IntegrityError):

@@ -333,9 +333,12 @@ def test_sales_founder_navigation_without_changing_auth_boundaries(web):
     status,headers,_ = http(web,'/satis')
     assert status == 303
     assert headers['Location'] == '/control/giris'
-    status,headers,_ = http(web,'/sales/login',cookie='control_session=founder-cookie')
-    assert status == 303
-    assert headers['Location'] == '/control/satis'
+    # CONTROL and Sales Hub are separate areas: a CONTROL login never takes over /sales.
+    status,headers,body = http(web,'/sales/login',cookie='control_session=founder-cookie')
+    assert status == 200 and b'Temsilci giri' in body and b'Sat\xc4\xb1\xc5\x9f Y\xc3\xb6netimi' not in body
+    status,headers,_ = http(web,'/sales',cookie='control_session=founder-cookie')
+    assert status == 303 and headers['Location'] == '/control/sales/login'
+    assert http(web,'/sales/api',cookie='control_session=founder-cookie')[0] == 401
     status,_,_ = http(web,'/satis',cookie='control_session=founder-cookie')
     assert status == 200
 
@@ -346,7 +349,9 @@ def test_http_auth_roles_csrf_disabled_accounts_and_no_academy_elevation(store,w
     assert http(web,'/sales/api',cookie='ik_session=synthetic-academy-cookie')[0] == 401
     assert http(web,'/sales/api',cookie='sales_session=rep-a-cookie')[0] == 401
     cookie,csrf = sign_in(web)
-    assert http(web,'/satis',cookie=cookie)[0] == 403
+    status,headers,_ = http(web,'/satis',cookie=cookie)   # rep session is not a CONTROL session
+    assert status == 303 and headers['Location'] == '/control/giris'
+    assert http(web,'/satis','POST',{'action':'decide'},cookie,csrf=csrf)[0] == 401
     payload = {'action':'customer','name':'Sentetik','domain':'http.test'}
     assert http(web,'/sales/api','POST',payload,cookie,csrf='bad')[0] == 403
     assert http(web,'/sales/api','POST',payload,cookie,origin='https://foreign.test',csrf=csrf)[0] == 403
@@ -450,7 +455,7 @@ def test_sales_founder_sections_separated_without_changing_original_ids(web):
     status, headers, _ = http(web, '/satis?tab=finance')
     assert status == 303 and headers['Location'] == '/control/giris'
     cookie, _ = sign_in(web)
-    assert http(web, '/satis?tab=finance', cookie=cookie)[0] == 403
+    assert http(web, '/satis?tab=finance', cookie=cookie)[0] == 303  # rep session: CONTROL login page
 
 
 def test_sales_compact_reference_and_turkiye_local_date_are_presentation_only():
@@ -511,3 +516,18 @@ def test_no_approved_proposal_or_classification_no_collection(store):
     with pytest.raises(sales.Invalid):
         collect(db,p)
     assert db.execute('SELECT count(*) FROM sales_collections').fetchone()[0] == 0
+
+
+def test_control_and_sales_hub_sessions_never_mix(store, web):
+    """Same browser, both logins: /sales shows only the representative, /satis only CONTROL."""
+    cookie, csrf = sign_in(web)
+    both = cookie + '; control_session=founder-cookie'
+    status, _, page = http(web, '/sales?tab=overview', cookie=both)
+    assert status == 200 and b'ERNASA Sales Hub' in page and b'Sat\xc4\xb1\xc5\x9f temsilcisi' in page
+    assert b'Y\xc3\xb6netim paneli' not in page and b'/control/satis' not in page
+    status, _, page = http(web, '/satis', cookie=both)
+    assert status == 200 and b'Sat\xc4\xb1\xc5\x9f Y\xc3\xb6netimi' in page and b'ERNASA Sales Hub' not in page
+    assert b'Sat\xc4\xb1\xc5\x9f men\xc3\xbcs\xc3\xbc' not in page
+    # a representative POST to /sales with both cookies acts as the representative, never as founder
+    assert http(web, '/sales/api', 'POST', {'action': 'decide'}, both, csrf=csrf)[0] == 403
+    assert http(web, '/sales/official?id=x', cookie='control_session=founder-cookie')[0] == 303
