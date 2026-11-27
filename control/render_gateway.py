@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import httpx
 from starlette.responses import PlainTextResponse, Response
 
-from . import app, postgres, sales
+from . import app, nova, postgres, sales
 
 
 # These are strictly new sales tables; existing CONTROL, İK and Academy tables stay untouched.
@@ -93,6 +93,18 @@ def ensure_billing_payment_schema(db):
         cursor.execute((CONTROL_MIGRATIONS / "010_commission_policy.up.sql").read_text(encoding="utf-8"))
 
 
+def ensure_nova_schema(db):
+    """Install the additive NOVA AI SALES CENTER tables (migrations/nova) in one transaction.
+    Own migration family and nova_* table names: never touches CONTROL, Sales Hub or security
+    tables. Every statement is IF NOT EXISTS / OR REPLACE / ON CONFLICT DO NOTHING, so a restart
+    re-runs safely. All outbound channels start closed (kill switch on, NOVA stopped)."""
+    with db.raw, db.raw.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(184093, 47623)")
+        cursor.execute("SET LOCAL search_path = ernasa_control, pg_catalog")
+        cursor.execute(nova.DDL)
+        cursor.execute(nova.PG_GUARDS)
+
+
 def ensure_billing_quote_schema(db):
     """Install the additive checkout quote schema after the CONTROL sales schema."""
     with db.raw, db.raw.cursor() as cursor:
@@ -131,6 +143,7 @@ def start_control():
             ensure_sales_schema(db)
             ensure_billing_quote_schema(db)
             ensure_billing_payment_schema(db)
+            ensure_nova_schema(db)
 
     if dsn:
         threading.Thread(target=shopier_startup_check, args=(origin,), daemon=True).start()
@@ -172,6 +185,10 @@ async def forward(request, server):
         # Shopier webhook metadata (dedupe id, event type, HS256 signature) is needed by the handler.
         headers.update({name:request.headers[name] for name in
                         ("shopier-webhook-id","shopier-event","shopier-signature","shopier-timestamp")
+                        if name in request.headers})
+    if path in ("/nova/hook/vapi", "/nova/hook/tick"):
+        # NOVA provider/scheduler hooks authenticate with these headers (checked in nova_http).
+        headers.update({name: request.headers[name] for name in ("x-vapi-secret", "authorization")
                         if name in request.headers})
     headers["host"] = urlsplit(server.origin).netloc
     url = httpx.URL(scheme="http",host="127.0.0.1",port=server.server_port,path=path,query=request.scope["query_string"])
