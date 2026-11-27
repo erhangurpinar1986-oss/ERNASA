@@ -19,27 +19,57 @@ Kurucu kararları (27.11.2026 19:44):
 | Zamanlayıcı | **Pasif** | GitHub secret'ları girilene kadar |
 | ernasa.com HR FLOW tanıtım metni | Güncellendi | Satıştaki ve kodla doğrulanan özellikler; “geliştirme aşamasında” ibaresi HR FLOW'dan kaldırıldı |
 
-## 2. Canlıya geçiş öncesi kontrol listesi
+## 2. Sıralı canlıya geçiş planı (güncel: 27.11.2026 21:10, SECURITY koordinasyonu)
 
-1. **Üretim yedeği (kurucu, 2 dk):**
-   - dashboard.render.com › Databases › **ernasa-db** › sol menü **Recovery** sayfasını açın.
-   - Point-in-time recovery penceresini ve son yedeğin tarih/saatini kontrol edin. Ekran görüntüsünü ya da tarih/saati bildirin.
-   - Plan PITR sunmuyorsa aynı ekrandaki **Export** ile bir dışa aktarım başlatın ve tamamlandığını bildirin.
-   - Bu doğrulama bu oturumdan yapılamıyor: Render bağlantısında yedekleme aracı yok.
-2. **Birleşik testler:** NOVA #81 ile SECURITY #79 ve #80'in en güncel commit'leri `integration/nova-security-20261127` dalında
-   test edilir: yerel testler ve GitHub Actions PG18. Sonuçlar PR #81'e yazılır.
-3. **Merge sırası:** #79 → #80 → #81 (tümü draft; kurucu “Ready for review” ve merge yapar ya da yetki verir).
-4. **Dağıtım:** Render › ERNASA › **Manual Deploy › Deploy latest commit**. Başlangıçta yalnızca ek `nova_*` tabloları
-   oluşturulur. Mevcut tablolar değişmez.
-5. **Canlı doğrulama (salt okunur):**
-   - `ernasa_control.nova_settings` kaydında `kill_switch=1` olmalı.
-   - Mevcut tablo satır sayıları dağıtımdan önceki ve sonraki sorgularda aynı olmalı.
-   - `/control/nova` yalnızca kurucu oturumuyla açılmalı; oturumsuz istek giriş sayfasına yönlenmeli.
-   - `/control/nova/hook/tick` gizli anahtar olmadan 403 dönmeli.
-   - Ana sayfa ve HR FLOW sayfası güncel görünmeli.
-6. **Geri dönüş:** Render › ERNASA › Deploys bölümünde önceki canlı dağıtım `dep-dc4niobl550s73a19po0` (commit `fbde788`) için
-   **Rollback**. NOVA tabloları ekleme niteliğinde olduğundan yerinde kalır ve eski sürüm onları kullanmaz. Tablo silmek gerekmez.
-   Ret listesi korunmalıdır.
+Güncel durum: #79 main'e birleştirildi (`b117c06`). #80 ve #82, #83 içinde yer aldığından **ayrı ayrı birleştirilmez**. Bu PR'ları
+kapatma kararı SECURITY ekibinindir. NOVA #81 güncel main ile birleştirildi (`83f8d52`).
+
+**Birleşik test (geçerli olan):** `integration/nova81-security83-20261127` @ `b14f026` = main `b117c06` + NOVA `83f8d52` + SECURITY #83 `7df61af`.
+- Yerel: 291 test geçti, 3 test atlandı (PG). CONTROL smoke testi geçti.
+- GitHub Actions PostgreSQL 18: `nova-tests.yml` ✅ ve `sales-hub-tests.yml` ✅. İkincisi #83'ün PG testlerini de çalıştırır.
+- Ortak noktalar kontrol edildi:
+  - 2FA: kayıtlı hesapta ikinci adım geçilmeden oturum oluşmuyor, bu yüzden NOVA paneline yarım oturumla girilemiyor.
+  - Menü: NOVA "Satış ve İş Geliştirme" grubunda, Security Center "Güvenlik ve Sistem" grubunda; tekrar eden kayıt yok.
+  - Advisory lock anahtarları ayrı: CONTROL 47621, billing 47622, NOVA 47623/47624, SECURITY 47630.
+  - Şemalar: iki taraf da yalnızca `CREATE TABLE IF NOT EXISTS` kullanıyor; mevcut tablolara DROP/ALTER yok.
+- Önceki #79+#80 birleşik testi geçersiz sayılır ve kullanılmaz.
+
+**Aşama 0 — Yedek ve geri yüklenebilirlik (kurucu; dağıtım bu aşama tamamlanmadan yapılmaz)**
+1. dashboard.render.com › Databases › **ernasa-db** › **Recovery** › **Export** › *Create export*. Tamamlanınca dosyayı indirin
+   (`.dir.tar.gz`). Bu işlem ücretsizdir ve yeni hizmet açmaz.
+2. Geri yükleme testi ücretsiz yapılmalı ve üretime dokunmamalı. Yeni ücretli veritabanı açılmaz:
+   - Kendi bilgisayarınızda geçici PostgreSQL ile:
+     `tar xzf <dosya>` → `createdb ernasa_restore_test` → `pg_restore --no-owner -d ernasa_restore_test <klasör>`.
+   - Ardından şu sorgu çalıştırılır ve sonuç aşağıdaki referansla karşılaştırılır:
+     `SELECT count(*) FROM ernasa_control.users; … sales_accounts; … subscriptions; public.ats_candidates; public.ats_applications;`
+3. Referans (27.11 üretim, salt okunur):
+   - ernasa_control: users 2, companies 1, subscriptions 1, sales_accounts 3, sales_audit 14, audit 50.
+   - public: ats_candidates 28, ats_applications 28, interview_answers 178.
+4. Sayılar tutarsa yedek "geri yüklenebilir" olarak işaretlenir. Test veritabanı kişisel veri içerdiği için iş bitince silinir
+   (`dropdb ernasa_restore_test`) ve dosya güvenli bir yerde saklanır.
+
+**Aşama 1 — SECURITY #83 (SECURITY ekibi yürütür)**
+- Önce #83 merge edilir. Ardından Render › ERNASA › Manual Deploy yapılır ve SECURITY ekibinin doğrulaması tamamlanır:
+  giriş, 2FA kapalı hesapla giriş, Turnstile/SMS bayrakları kapalı.
+- NOVA bu aşamada dağıtılmaz. Sorun çıkarsa SECURITY rollback yapar; NOVA'nın bundan etkilenecek bir parçası yoktur.
+
+**Aşama 2 — NOVA #81**
+1. #81 dalı, #83'ü içeren yeni main ile birleştirilir. CI (PG18) yeniden çalıştırılır ve yeşil olmalıdır.
+2. Dağıtım öncesinde salt okunur satır sayıları alınır: müşteri, aday, abonelik, ödeme, komisyon.
+3. Merge yapılır, Render › ERNASA › Manual Deploy çalıştırılır. Başlangıçta yalnızca `nova_*` tabloları oluşur.
+4. Dağıtım sonrası doğrulama:
+   - Satır sayıları değişmemiş olmalı.
+   - `nova_settings` kaydında `kill_switch=1, running=0, auto_email=0, auto_call=0` olmalı.
+   - `/control/nova` yalnızca kurucu oturumuyla açılmalı.
+   - Hook'lar gizli anahtar olmadan 403 dönmeli.
+   - Panel sekmeleri, veri havuzu içe aktarma (8 firma) ve ürün bilgi merkezi çalışmalı.
+   - HR FLOW tanıtım sayfası güncel görünmeli.
+5. Kapalı kalanlar:
+   - E-posta gönderimi ve gelen kutusu: Render'a IMAP veya NOVA değişkeni girilmez.
+   - Telefon: Vapi değişkenleri girilmez.
+   - Zamanlayıcı: GitHub secret'ları girilmez.
+   - Otomatik dış iletişim: politika onayları 0 kalır.
+6. Geri dönüş: Render rollback ile Aşama 1 dağıtımına dönülür. NOVA tabloları ekleme niteliğindedir ve yerinde kalır.
 
 ## 3. E-posta — ek maliyetsiz seçenek (öncelikli)
 
