@@ -432,6 +432,7 @@ def rep_sales(db, actor):
     sql = """SELECT r.ref, COALESCE(cu.name, co.name) AS customer, co.name AS company, r.product, r.plan_name,
                     r.created_at AS sold_at, r.owner_id, col.collected_on AS paid_on, q.gross_minor,
                     q.net_minor AS quote_net_minor, col.net_minor AS basis_minor, m.rate,
+                    q.monthly_usd AS quote_monthly_usd, q.exchange_rate AS quote_exchange_rate, ch.provider,
                     m.amount_minor AS commission_minor, m.status AS commission_status, col.held,
                     ch.status AS payment_status, s.status AS subscription_status, r.is_test,
                     t.sales_net_minor AS test_basis, t.sales_rate AS test_rate,
@@ -459,6 +460,12 @@ def rep_sales(db, actor):
     for r in db.execute(sql + " ORDER BY r.created_at DESC", params).fetchall():
         row = dict(r)
         row["payment_status"] = row["payment_status"] or "awaiting_payment"
+        if row["basis_minor"] is not None and not row["is_test"]:
+            # Show the basis the commission was actually computed on (approved HR FLOW basis).
+            row["collection_net_minor"] = row["basis_minor"]
+            row["basis_minor"] = commission_basis_for_quote({
+                "net_minor": row["basis_minor"], "product": row["product"], "plan_name": row["plan_name"],
+                "monthly_usd": row["quote_monthly_usd"], "exchange_rate": row["quote_exchange_rate"]})
         if row["paid_on"]:
             start, end = sales.payment_window(row["paid_on"])
             row["commission_window"] = f"{start.isoformat()} – {end.isoformat()}"
@@ -573,10 +580,25 @@ def bank_settings(db):
     return db.execute("SELECT * FROM billing_bank_settings WHERE id=1").fetchone()
 
 
+def bank_ready(db):
+    """True once migration 007 exists. Probed inside a savepoint so a missing table never aborts
+    the caller's transaction (PostgreSQL) or breaks the existing Shopier page."""
+    db.execute("SAVEPOINT bank_probe")
+    try:
+        db.execute("SELECT 1 FROM billing_bank_settings WHERE id=1").fetchone()
+        db.execute("SELECT 1 FROM billing_bank_checkout_details LIMIT 1").fetchone()
+        ok = True
+    except Exception:
+        db.execute("ROLLBACK TO SAVEPOINT bank_probe")
+        ok = False
+    db.execute("RELEASE SAVEPOINT bank_probe")
+    return ok
+
+
 def save_bank_settings(db, *, actor, bank_name, account_holder, iban, enabled, now):
     from . import sales
     sales.admin(actor)
-    iban = re.sub(r"\\s+", "", str(iban)).upper()
+    iban = re.sub(r"\s+", "", str(iban)).upper()
     bank_name, account_holder = str(bank_name).strip(), str(account_holder).strip()
     if not re.fullmatch(r"TR[0-9]{24}", iban) or int(iban[4:] + "2927" + iban[2:4]) % 97 != 1:
         sales.fail("Geçerli Türkiye IBAN numarası girin.", 422)
@@ -639,3 +661,32 @@ def confirm_bank_payment(db, *, actor, checkout_id, transaction_id, gross_minor,
         raise PaymentRejected("Banka tahsilatı teklif tutarıyla eşleşmiyor.")
     digest = hashlib.sha256(f"{checkout_id}:{transaction_id}:{gross_minor}".encode()).hexdigest()
     return _activate_verified(db, checkout, quote, BANK_PROVIDER, transaction_id, gross_minor, digest, now, "founder:" + str(actor.id))
+
+
+def bank_checkout(db, ref):
+    """Customer-facing bank transfer instructions for the newest bank checkout of a request.
+
+    Shows the immutable IBAN snapshot taken when the checkout was created, never the current
+    settings row, so a later IBAN change cannot redirect an already issued transfer."""
+    return db.execute("""SELECT ch.id, ch.payment_reference, ch.status, ch.created_at, q.gross_minor, q.net_minor,
+                                q.vat_minor, d.bank_name, d.account_holder, d.iban
+                         FROM billing_checkout_requests x JOIN billing_checkouts ch ON ch.id=x.checkout_id
+                         JOIN billing_quotes q ON q.id=ch.quote_id
+                         JOIN billing_bank_checkout_details d ON d.checkout_id=ch.id
+                         WHERE x.request_ref=? AND ch.provider=? ORDER BY ch.created_at DESC, ch.id LIMIT 1""",
+                      (ref, BANK_PROVIDER)).fetchone()
+
+
+def pending_bank_payments(db):
+    """Bank transfers awaiting founder confirmation in CONTROL (oldest first)."""
+    return db.execute("""SELECT ch.id, ch.payment_reference, ch.status, ch.created_at, q.gross_minor, q.plan_name,
+                                q.period_start, co.name AS company_name, r.ref, r.owner_id, d.iban
+                         FROM billing_checkouts ch JOIN billing_quotes q ON q.id=ch.quote_id
+                         JOIN companies co ON co.id=ch.company_id
+                         JOIN billing_checkout_requests x ON x.checkout_id=ch.id
+                         JOIN billing_payment_requests r ON r.ref=x.request_ref
+                         JOIN billing_bank_checkout_details d ON d.checkout_id=ch.id
+                         WHERE ch.provider=? AND ch.status IN ('pending','expired')
+                           AND NOT EXISTS (SELECT 1 FROM billing_checkout_requests x2 JOIN billing_checkouts c2 ON c2.id=x2.checkout_id
+                                           WHERE x2.request_ref=r.ref AND c2.status IN ('paid','refunded'))
+                         ORDER BY ch.created_at, ch.id""", (BANK_PROVIDER,)).fetchall()
