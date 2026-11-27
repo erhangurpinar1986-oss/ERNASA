@@ -255,7 +255,7 @@ def collection(db, actor, data):
     return {'id': target}
 
 
-def _book(db, p, op, c, period, reference, amount, cost, collected_on, verified_by, reason):
+def _book(db, p, op, c, period, reference, amount, cost, collected_on, verified_by, reason, commission_basis_minor=None):
     """Shared booking + automatic commission rules (manual CONTROL entry and verified Shopier payment)."""
     sub_id, rate = None, 0
     if op['kind'] != 'project':
@@ -281,10 +281,13 @@ def _book(db, p, op, c, period, reference, amount, cost, collected_on, verified_
     target = uid()
     db.execute('INSERT INTO sales_collections(id,proposal_id,subscription_id,period,reference,net_minor,cost_minor,collected_on,verified_by,reason) VALUES(?,?,?,?,?,?,?,?,?,?)',
                (target, p['id'], sub_id, period, reference, amount, cost, collected_on, verified_by, reason))
+    basis = amount if commission_basis_minor is None else commission_basis_minor
+    if not 0 <= basis <= amount:
+        fail('Komisyon matrahı geçersiz.', 422)
     # Projects deliberately have no automatic accrual.
     if op['kind'] != 'project':
         db.execute('INSERT INTO sales_commissions(id,collection_id,amount_minor,rate,status) VALUES(?,?,?,?,?)',
-                   (uid(), target, (amount*rate+50)//100, rate, 'pending'))
+                   (uid(), target, (basis*rate+50)//100, rate, 'pending'))
     return target, rate
 
 
@@ -295,9 +298,9 @@ def next_period(db, opportunity_id):
     return (db.execute('SELECT MAX(period) FROM sales_collections WHERE subscription_id=?', (sub['id'],)).fetchone()[0] or 0) + 1
 
 
-def book_verified_payment(db, *, proposal_id, net_minor, reference, collected_on, verifier_user_id):
+def book_verified_payment(db, *, proposal_id, net_minor, reference, collected_on, verifier_user_id, commission_basis_minor=None):
     """Called inside the payment-activation transaction after Shopier verification.
-    Basis is the VAT-exclusive amount actually collected; Shopier fees are never deducted."""
+    HR FLOW may supply a separate approved commission basis; other products retain net collection."""
     p = db.execute('SELECT * FROM sales_proposals WHERE id=?', (proposal_id,)).fetchone()
     if p is None or p['status'] != 'approved':
         fail('Onaylı teklif yok; tahsilat CONTROL incelemesine alındı.')
@@ -308,10 +311,10 @@ def book_verified_payment(db, *, proposal_id, net_minor, reference, collected_on
     if op['kind'] == 'project':
         fail('Proje satışları otomatik komisyona girmez.')
     target, rate = _book(db, p, op, c, next_period(db, op['id']), reference, net_minor, 0,
-                         collected_on, verifier_user_id, 'Shopier API ile doğrulanmış otomatik tahsilat')
+                         collected_on, verifier_user_id, 'Shopier API ile doğrulanmış otomatik tahsilat', commission_basis_minor)
     db.execute('INSERT INTO sales_audit VALUES(?,?,?,?,?,?,?)',
                (uid(), p['company_id'], 'shopier_verifier', 'collection_verified', target,
-                f'net_minor={net_minor}; rate={rate}; ref={reference}', stamp()))
+                f'net_minor={net_minor}; basis={commission_basis_minor}; rate={rate}; ref={reference}', stamp()))
     return target, rate
 
 

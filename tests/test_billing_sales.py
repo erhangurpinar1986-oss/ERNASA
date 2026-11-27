@@ -103,7 +103,9 @@ def test_first_period_25_then_5_on_net_basis_and_visible_only_to_owner(db):
     assert [r["rate"] for r in rows] == [5, 25] or sorted(r["rate"] for r in rows) == [5, 25]
     net = db.execute("SELECT net_minor FROM billing_quotes q JOIN billing_checkouts c ON c.quote_id=q.id WHERE c.id=?", (c1,)).fetchone()[0]
     first = next(r for r in rows if r["rate"] == 25)
-    assert first["basis_minor"] == net and first["commission_minor"] == (net * 25 + 50) // 100
+    # Business: sale 539.99 USD (net 22949.58 TL), commission basis 499.99 USD * 42.5 = 21249.58 TL
+    assert net == 2294958 and first["collection_net_minor"] == net
+    assert first["basis_minor"] == 2124958 and first["commission_minor"] == (2124958 * 25 + 50) // 100
     assert first["commission_window"] == "2026-12-01 – 2026-12-15"
     assert first["customer"].startswith("Firma") and first["plan_name"] == "Business"
     assert bp.rep_sales(db, REP2) == []
@@ -136,8 +138,8 @@ def test_checkout_reuses_live_link_refuses_paid_and_needs_flag(db, monkeypatch):
     url = bp.start_checkout(db, **kw)
     assert bp.start_checkout(db, **kw) == url  # same 15-minute link, no second Shopier product
     assert db.execute("SELECT COUNT(*) FROM billing_checkouts").fetchone()[0] == 1
-    # PRO 999.99 USD * 42.5 = 42499.575 -> 42499.58 net, KDV 8499.92, total 50999.50
-    assert seen["gross_minor"] == 5099950 and ref in seen["title"]
+    # PRO 1079.99 USD * 42.5 = 45899.575 -> 45899.58 net, KDV 9179.92, total 55079.50
+    assert seen["gross_minor"] == 5507950 and ref in seen["title"]
     pay(db, db.execute("SELECT checkout_id FROM billing_checkout_requests").fetchone()[0], "o1")
     with pytest.raises(bp.PaymentRejected, match="zaten ödendi"):
         bp.start_checkout(db, **kw)
@@ -205,7 +207,9 @@ def test_expired_link_is_replaced_and_deleted_but_late_payment_still_activates(d
     # Customer had already paid the old (fixed-price) link: money received -> activate, commission once
     assert pay(db, old["id"], "late-1") == "activated"
     new = db.execute("SELECT id FROM billing_checkouts WHERE provider_product_id='P-NEW'").fetchone()[0]
-    with pytest.raises(sqlite3.IntegrityError):  # same period cannot be paid twice
+    # Same request/period cannot be collected twice: rejected before any row is written,
+    # so the duplicate payment stays visible for CONTROL review and nothing activates twice.
+    with pytest.raises(bp.PaymentRejected, match="daha önce tahsil edilmiş"):
         pay(db, new, "late-2")
     assert db.execute("SELECT COUNT(*) FROM sales_commissions").fetchone()[0] == 1
 

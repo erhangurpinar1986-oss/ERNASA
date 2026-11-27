@@ -2,7 +2,8 @@
 
 Routes (CONTROL server; public under /control):
   GET  /odeme/<REF>                 customer page: package, limits, TL net / KDV / total, terms
-  POST /odeme/<REF>                 terms accepted -> 15-min quote + single-use Shopier link
+  POST /odeme/<REF>                 terms accepted -> 15-min quote + single-use Shopier link (method=shopier)
+                                    or bank transfer instructions with IBAN snapshot (method=bank)
   POST /odeme/shopier/webhook       Shopier notification (hint only; order re-fetched by API)
 """
 from contextlib import closing
@@ -73,20 +74,50 @@ def page(c, h, db, ref, error=None, status=200):
     except tcmb_rates.RateUnavailable as exc:
         body += f'<p role="alert">{c.e(str(exc))} Lütfen daha sonra tekrar deneyin.</p>'
         return h.page("ERNASA ödeme", body, status=503, brand="ERNASA")
+    terms = ('<label><input type="checkbox" name="terms" value="1" required> '
+             'Hizmet sözleşmesini, mesafeli satış ve KVKK aydınlatma metnini okudum, kabul ediyorum. '
+             'Abonelik aylıktır; otomatik yenileme yoktur, her dönem için yeni ödeme bağlantısı gönderilir.</label>')
+    body += ('<h3>Ödeme yöntemi</h3><p><small>Satış fiyatı ödeme yöntemine göre değişmez; '
+             'kart ve banka ödemesinde aynı KDV dahil tutar uygulanır.</small></p>')
+    # 1) Shopier: credit card and debit card on the same Shopier secure page.
+    body += '<section aria-labelledby="pay-card"><h4 id="pay-card">Kredi kartı / banka kartı (Shopier)</h4>'
     if live:
         body += (f'<p>Ödeme tutarı {money(live["gross_minor"])} olarak sabitlendi.</p>'
                  f'<p><a class="button" href="{c.e(live["provider_url"])}" rel="noopener">Shopier ile güvenli öde</a></p>'
                  '<p><small>Kart bilgileriniz ERNASA sunucularına gelmez; ödeme Shopier güvenli ödeme sayfasında yapılır. '
                  'Ödeme sonrası abonelik, Shopier API ile doğrulandıktan sonra otomatik etkinleşir.</small></p>')
-    elif os.environ.get("HR_PAYMENTS_ENABLED") != "1":
-        body += '<p role="status">Online ödeme kabulü henüz açılmadı. Havale/EFT için ERNASA ile iletişime geçin.</p>'
+    elif not (bp.test_plan_enabled() if req["is_test"] else os.environ.get("HR_PAYMENTS_ENABLED") == "1"):
+        body += '<p role="status">Kartla online ödeme kabulü henüz açılmadı.</p>'
     else:
-        body += (f'<form method="post" action="/odeme/{c.e(ref)}">'
-                 '<label><input type="checkbox" name="terms" value="1" required> '
-                 'Hizmet sözleşmesini, mesafeli satış ve KVKK aydınlatma metnini okudum, kabul ediyorum. '
-                 'Abonelik aylıktır; otomatik kart yenilemesi yoktur, her dönem için yeni ödeme bağlantısı gönderilir.</label>'
-                 '<button type="submit">Ödemeye geç</button></form>')
+        body += (f'<form method="post" action="/odeme/{c.e(ref)}"><input type="hidden" name="method" value="shopier">'
+                 + terms + '<button type="submit">Kartla ödemeye geç</button></form>')
+    body += '</section>'
+    # 2) Havale / EFT / FAST to ERNASA's own account; founder confirms the collection in CONTROL.
+    ready = bp.bank_ready(db)
+    settings = bp.bank_settings(db) if ready else None
+    bank_ok = req["product"] == "hr_flow" and not req["is_test"] and settings is not None and bool(settings["enabled"])
+    bank = bp.bank_checkout(db, ref) if ready else None
+    body += '<section aria-labelledby="pay-bank"><h4 id="pay-bank">Havale / EFT / FAST</h4>'
+    if bank is not None and bank["status"] in ("pending", "expired"):
+        body += (f'<table><tr><th>Banka</th><td>{c.e(bank["bank_name"])}</td></tr>'
+                 f'<tr><th>Hesap sahibi</th><td>{c.e(bank["account_holder"])}</td></tr>'
+                 f'<tr><th>IBAN</th><td><strong>{c.e(format_iban(bank["iban"]))}</strong></td></tr>'
+                 f'<tr><th>Gönderilecek tutar</th><td><strong>{money(bank["gross_minor"])}</strong></td></tr>'
+                 f'<tr><th>Açıklama (zorunlu)</th><td><strong>{c.e(bank["payment_reference"])}</strong></td></tr></table>'
+                 '<p><small>Tutarı kuruşu kuruşuna aynı gönderin ve açıklamaya referans kodunu yazın. '
+                 'Abonelik, tahsilat ERNASA CONTROL tarafından banka hesabında doğrulandıktan sonra etkinleşir. '
+                 'Bu tutar ödeme talimatı oluşturulduğu andaki kurla sabitlenmiştir.</small></p>')
+    elif bank_ok:
+        body += (f'<form method="post" action="/odeme/{c.e(ref)}"><input type="hidden" name="method" value="bank">'
+                 + terms + '<button type="submit">Havale / EFT / FAST bilgilerini göster</button></form>')
+    else:
+        body += '<p role="status">Banka ödemesi bu bağlantı için kullanılamıyor.</p>'
+    body += '</section>'
     h.page("ERNASA ödeme", body, status=status, brand="ERNASA")
+
+
+def format_iban(iban):
+    return " ".join(iban[i:i + 4] for i in range(0, len(iban), 4))
 
 
 def read_body(h, limit=65536):
@@ -178,6 +209,10 @@ def handle(h, path, post):
                     return page(c, h, db, ref, "Devam etmek için koşulları kabul edin.", 422)
                 db.execute("BEGIN IMMEDIATE")
                 rate = tcmb_rates.fetch_latest_usd_selling_rate(now().astimezone(ISTANBUL).date())
+                if data.get("method") == "bank":
+                    bp.start_bank_checkout(db, ref=ref, rate=rate, vat_rate=VAT_RATE, now=now())
+                    db.commit()
+                    return h.redirect(f"/odeme/{ref}")
                 bp.start_checkout(db, ref=ref, rate=rate, vat_rate=VAT_RATE, now=now(),
                                   create_product=shopier_hr.create_product, image_url=image_url(h),
                                   delete_product=shopier_hr.delete_product)

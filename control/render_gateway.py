@@ -79,12 +79,15 @@ def shopier_startup_check(origin):
 
 
 def ensure_billing_payment_schema(db):
-    """Install additive payment/subscription tables (005). Activation stays disabled until
-    HR_PAYMENTS_ENABLED=1 and the Shopier order contract is confirmed."""
+    """Install additive payment/subscription tables (005), test isolation (006) and bank transfer
+    tables (007) in one transaction. Every statement is IF NOT EXISTS / OR REPLACE, so a restart
+    re-runs safely and existing rows are never touched. Card activation stays disabled until
+    HR_PAYMENTS_ENABLED=1; bank transfer stays hidden until the founder enables it in CONTROL."""
     with db.raw, db.raw.cursor() as cursor:
         cursor.execute("SELECT pg_advisory_xact_lock(184093, 47622)")
         cursor.execute((CONTROL_MIGRATIONS / "005_billing_payments.up.sql").read_text(encoding="utf-8"))
         cursor.execute((CONTROL_MIGRATIONS / "006_billing_test.up.sql").read_text(encoding="utf-8"))
+        cursor.execute((CONTROL_MIGRATIONS / "007_bank_transfer.up.sql").read_text(encoding="utf-8"))
 
 
 def ensure_billing_quote_schema(db):

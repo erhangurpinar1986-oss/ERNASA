@@ -80,8 +80,8 @@ def run(db, o, **kw):
 
 def test_starter_quote_amounts_use_decimal_kurus(db):
     _, gross = checkout(db)
-    # 99.99 USD * 42.5 = 4249.575 -> 4249.58 TL net, +20% KDV 849.92 -> 5099.50
-    assert gross == 509950
+    # Approved sale price 109.99 USD * 42.5 = 4674.575 -> 4674.58 TL net, +20% KDV 934.92 -> 5609.50
+    assert gross == 560950
 
 
 def test_successful_payment_activates_once_and_freezes_entitlements(db):
