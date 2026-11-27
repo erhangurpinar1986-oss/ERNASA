@@ -257,7 +257,7 @@ def test_migration_009_usd_commission_fixed_try_on_postgres():
         with pytest.raises(psycopg2.errors.RaiseException):
             db.execute("UPDATE sales_commission_fx SET amount_minor=1")
         db.execute("ROLLBACK TO SAVEPOINT fx_mut")
-        rows = cr.rows(db, founder)
+        rows = [r for r in cr.rows(db, founder) if r["owner_id"] == "pg-rep"]  # CI DB is shared with other PG tests
         assert len(rows) == 1 and rows[0]["window_text"] == "01.12.2026 – 15.12.2026" and rows[0]["rep_name"] == "PG Temsilci"
         assert cr.rows(db, sales.Actor("other-rep", dealer)) == []
         html = sales_http.commission_cards(app, db, founder)
