@@ -96,6 +96,8 @@ def ensure_schema(server):
         try:
             from . import login_throttle
             postgres = hasattr(db, 'raw')
+            if not postgres:
+                db.execute('PRAGMA busy_timeout=200')
             if postgres:
                 with db.raw, db.raw.cursor() as cursor:
                     cursor.execute('SELECT pg_advisory_xact_lock(184093, 47630)')
@@ -105,9 +107,21 @@ def ensure_schema(server):
                 for statement in login_throttle.DDL + DDL + SQLITE_GUARDS:
                     db.execute(statement)
                 db.commit()
+        except Exception as exc:
+            # Never break the request that triggered it (e.g. SQLite write lock held by that request);
+            # the server start-up call in app.server() creates the tables in production.
+            import sys
+            print(f'ACCOUNT_SECURITY_SCHEMA_DEFERRED type={type(exc).__name__}', file=sys.stderr, flush=True)
+            return
         finally:
             db.close()
         _schema_ready.add(key)
+
+
+def _table_exists(db, name):
+    if hasattr(db, 'raw'):
+        return db.execute('SELECT to_regclass(?) IS NOT NULL', (name,)).fetchone()[0]
+    return db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
 
 
 # ---------------------------------------------------------------- configuration
@@ -297,8 +311,8 @@ def login_second_factor(handler, db, area, row, data):
     """Called after a correct password. Raises Problem(401) when an enrolled account gives no valid code."""
     from . import app as c
     ensure_schema(handler.server)
-    if not has_two_factor(db, area, row['id']):
-        return
+    if not _table_exists(db, 'security_totp') or not has_two_factor(db, area, row['id']):
+        return  # no table means nobody can have enrolled yet
     code = str(data.get('code', '')).strip()
     if not code:
         raise c.Problem(401, 'Bu hesapta iki adımlı doğrulama açık. Doğrulama uygulamasındaki kodu da girin.')
