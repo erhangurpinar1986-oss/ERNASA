@@ -1316,8 +1316,9 @@ class Handler(BaseHTTPRequestHandler):
         if token is not None:
             secure = '; Secure' if self.server.origin.startswith('https://') else ''
             cookie_path = self.server.public_prefix or '/'
-            headers.append(('Set-Cookie',f'control_session={token}; Path={cookie_path}; HttpOnly; SameSite=Strict; Max-Age={age}{secure}'))
+            # Session cookie last: some clients keep only the final Set-Cookie of a response.
             headers.extend(getattr(self,'pending_cookies',()))
+            headers.append(('Set-Cookie',f'control_session={token}; Path={cookie_path}; HttpOnly; SameSite=Strict; Max-Age={age}{secure}'))
         self.reply(303,headers=headers)
 
     def session(self,db):

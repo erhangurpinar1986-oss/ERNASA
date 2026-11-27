@@ -846,8 +846,9 @@ def handle(h, path, post):
                 if post:
                     token = login(c,h,db,data)
                     db.commit()
-                    h.reply(303,headers=(('Location',h.server.public_prefix+'/sales'),set_cookie(h,'sales_session',token,c.TTL),
-                                         *getattr(h,'pending_cookies',())))
+                    # Session cookie last: some clients keep only the final Set-Cookie of a response.
+                    h.reply(303,headers=(('Location',h.server.public_prefix+'/sales'),*getattr(h,'pending_cookies',()),
+                                         set_cookie(h,'sales_session',token,c.TTL)))
                 elif identity:
                     h.reply(303,headers=(('Location',h.server.public_prefix+'/sales'),))
                 else:
