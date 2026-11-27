@@ -169,10 +169,19 @@ def activate_from_order(db, *, order_id, fetch, contract, now, actor="shopier_ve
     if v.gross_minor != int(quote["gross_minor"]):
         raise PaymentRejected("Ödeme tutarı teklif tutarına eşit değil.")
 
+    return _activate_verified(db, checkout, quote, PROVIDER, order_id, v.gross_minor, v.response_sha256, now, actor, is_test)
+
+
+def _activate_verified(db, checkout, quote, provider, order_id, gross_minor, digest, now, actor, is_test=False):
+    # Both payment methods use the same immutable period and provider-order constraints.
+    request = db.execute("SELECT request_ref FROM billing_checkout_requests WHERE checkout_id=?", (checkout["id"],)).fetchone()
+    if request and db.execute("""SELECT 1 FROM billing_checkout_requests x JOIN billing_checkouts ch ON ch.id=x.checkout_id
+             WHERE x.request_ref=? AND ch.status IN ('paid','refunded')""", (request["request_ref"],)).fetchone():
+        raise PaymentRejected("Bu ödeme talebi daha önce tahsil edilmiş; CONTROL incelemesi gerekli.")
     stamp = int(now.timestamp())
     # Primary key makes a concurrent second delivery fail here; caller rolls back.
     db.execute("INSERT INTO billing_provider_orders VALUES(?,?,?,?,?,?,?,?)",
-               (PROVIDER, order_id, checkout["id"], v.gross_minor, "TRY", stamp, actor, v.response_sha256))
+               (provider, order_id, checkout["id"], gross_minor, "TRY", stamp, actor, digest))
     sub = db.execute("SELECT * FROM billing_subscriptions WHERE company_id=? AND product=?",
                      (checkout["company_id"], quote["product"])).fetchone()
     if sub is None:
@@ -190,7 +199,7 @@ def activate_from_order(db, *, order_id, fetch, contract, now, actor="shopier_ve
                 quote["net_minor"], quote["vat_minor"], stamp))
     db.execute("UPDATE billing_checkouts SET status='paid' WHERE id=? AND status IN ('pending','expired')", (checkout["id"],))
     _audit(db, actor, "payment_verified_activated", checkout["id"],
-           f"order={order_id}; gross_minor={v.gross_minor}; period={quote['period_start']}", now)
+           f"order={order_id}; gross_minor={gross_minor}; period={quote['period_start']}", now)
     if quote["product"] == "hr_flow" and not is_test:
         grant_hr_flow(db, company_id=checkout["company_id"], quote=quote)
     if is_test:
@@ -300,7 +309,7 @@ def _book_sales(db, checkout, quote, order_id, now, actor):
             sales.fail("Aktif CONTROL kurucusu yok.")
         collection_id, _ = sales.book_verified_payment(
             db, proposal_id=link["proposal_id"], net_minor=int(quote["net_minor"]),
-            reference="shopier_hr:" + order_id, collected_on=now.astimezone(ISTANBUL).date().isoformat(),
+            reference=checkout["provider"] + ":" + order_id, collected_on=now.astimezone(ISTANBUL).date().isoformat(),
             verifier_user_id=founder["id"], commission_basis_minor=commission_basis_for_quote(quote))
         db.execute("UPDATE billing_checkout_sales SET sales_collection_id=? WHERE checkout_id=?",
                    (collection_id, checkout["id"]))
@@ -381,12 +390,12 @@ def start_checkout(db, *, ref, rate, vat_rate, now, create_product, image_url, d
         raise PaymentRejected("Bu ödeme bağlantısı zaten ödendi.")
     at = int(now.timestamp())
     for c in checkouts:
-        if c["status"] == "pending" and c["expires_at"] > at and c["provider_url"]:
+        if c["provider"] == PROVIDER and c["status"] == "pending" and c["expires_at"] > at and c["provider_url"]:
             return c["provider_url"]
     stale = [c for c in checkouts if c["status"] == "pending" and c["expires_at"] <= at]
     for c in stale:
         db.execute("UPDATE billing_checkouts SET status='expired' WHERE id=? AND status='pending'", (c["id"],))
-        if delete_product:
+        if delete_product and c["provider"] == PROVIDER:
             try:  # best effort: remove the outdated single-use listing from the shop
                 delete_product(c["provider_product_id"])
             except Exception:
@@ -555,3 +564,78 @@ def mark_refunded(db, *, order_id, actor, reason, now):
         # Commission goes into refund review; CONTROL then posts the reversing entry (sales.reverse).
         db.execute("UPDATE sales_collections SET held=1 WHERE id=?", (link["sales_collection_id"],))
     _audit(db, actor, "payment_refunded", row["checkout_id"], reason, now)
+
+
+BANK_PROVIDER = "bank_transfer"
+
+
+def bank_settings(db):
+    return db.execute("SELECT * FROM billing_bank_settings WHERE id=1").fetchone()
+
+
+def save_bank_settings(db, *, actor, bank_name, account_holder, iban, enabled, now):
+    from . import sales
+    sales.admin(actor)
+    iban = re.sub(r"\\s+", "", str(iban)).upper()
+    bank_name, account_holder = str(bank_name).strip(), str(account_holder).strip()
+    if not re.fullmatch(r"TR[0-9]{24}", iban) or int(iban[4:] + "2927" + iban[2:4]) % 97 != 1:
+        sales.fail("Geçerli Türkiye IBAN numarası girin.", 422)
+    if not (1 <= len(bank_name) <= 120 and 1 <= len(account_holder) <= 180):
+        sales.fail("Banka adı ve hesap sahibi zorunludur.", 422)
+    db.execute("""INSERT INTO billing_bank_settings VALUES(1,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
+                  bank_name=excluded.bank_name, account_holder=excluded.account_holder, iban=excluded.iban,
+                  enabled=excluded.enabled, updated_by=excluded.updated_by, updated_at=excluded.updated_at""",
+               (bank_name, account_holder, iban, bool(enabled), str(actor.id), int(now.timestamp())))
+    _audit(db, str(actor.id), "bank_settings_updated", "bank", "enabled=" + str(bool(enabled)), now)
+
+
+def start_bank_checkout(db, *, ref, rate, vat_rate, now):
+    from .billing_quotes import issue_quote
+    req, checkouts = request_view(db, ref)
+    settings = bank_settings(db)
+    if req["product"] != "hr_flow" or req["is_test"] or not settings or not settings["enabled"]:
+        raise PaymentRejected("Banka ödemesi kullanılamıyor.")
+    if any(ch["status"] in ("paid","refunded") for ch in checkouts):
+        raise PaymentRejected("Bu ödeme bağlantısı daha önce tahsil edilmiş.")
+    at = int(now.timestamp())
+    for ch in checkouts:
+        if ch["provider"] == BANK_PROVIDER and ch["status"] == "pending" and ch["expires_at"] > at:
+            return ch["id"]
+    quote_id = issue_quote(db, company_id=req["company_id"], product="hr_flow", plan_name=req["plan_name"],
+                           period_start=_date(req["period_start"]), rate=rate, expected_rate_date=rate.published_on,
+                           vat_rate=vat_rate, now=now)
+    checkout_id = uuid4().hex
+    db.execute("INSERT INTO billing_checkouts VALUES(?,?,?,?,?,?,?,?,?)",
+               (checkout_id, quote_id, req["company_id"], BANK_PROVIDER, None, None,
+                ref + "-" + checkout_id[:6].upper(), "pending", at))
+    db.execute("INSERT INTO billing_checkout_requests VALUES(?,?)", (checkout_id, ref))
+    db.execute("INSERT INTO billing_bank_checkout_details VALUES(?,?,?,?,?)",
+               (checkout_id, settings["bank_name"], settings["account_holder"], settings["iban"], at))
+    if req["proposal_id"]:
+        db.execute("INSERT INTO billing_checkout_sales VALUES(?,?,?,?)",
+                   (checkout_id, req["proposal_id"], req["owner_id"], None))
+    _audit(db, "customer", "bank_checkout_started", checkout_id, "ref=" + ref, now)
+    return checkout_id
+
+
+def confirm_bank_payment(db, *, actor, checkout_id, transaction_id, gross_minor, now):
+    from . import sales
+    sales.admin(actor)
+    if not re.fullmatch(r"[A-Za-z0-9_.:/-]{1,120}", transaction_id):
+        raise PaymentRejected("Geçerli banka işlem numarası zorunludur.")
+    checkout = db.execute("SELECT * FROM billing_checkouts WHERE id=? AND provider=?", (checkout_id, BANK_PROVIDER)).fetchone()
+    if not checkout or _is_test_checkout(db, checkout_id):
+        raise PaymentRejected("Banka ödeme kaydı bulunamadı.")
+    previous = db.execute("SELECT checkout_id FROM billing_provider_orders WHERE provider=? AND provider_order_id=?",
+                          (BANK_PROVIDER, transaction_id)).fetchone()
+    if previous:
+        if previous["checkout_id"] == checkout_id:
+            return "already_processed"
+        raise PaymentRejected("Banka işlemi başka ödeme için kullanılmış.")
+    if checkout["status"] not in ("pending","expired"):
+        raise PaymentRejected("Ödeme onay beklemiyor.")
+    quote = db.execute("SELECT * FROM billing_quotes WHERE id=? AND company_id=?", (checkout["quote_id"], checkout["company_id"])).fetchone()
+    if not quote or quote["product"] != "hr_flow" or quote["currency"] != "TRY" or int(quote["gross_minor"]) != gross_minor:
+        raise PaymentRejected("Banka tahsilatı teklif tutarıyla eşleşmiyor.")
+    digest = hashlib.sha256(f"{checkout_id}:{transaction_id}:{gross_minor}".encode()).hexdigest()
+    return _activate_verified(db, checkout, quote, BANK_PROVIDER, transaction_id, gross_minor, digest, now, "founder:" + str(actor.id))
