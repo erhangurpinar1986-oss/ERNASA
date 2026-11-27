@@ -180,7 +180,7 @@ def commands(c, db, actor, data):
         db.execute('DELETE FROM sales_sessions WHERE account_id=?', (actor.id,))
         sales.audit(db, actor, 'password_changed', actor.id)
         return {'detail': 'Parola değişti. Yeniden giriş yapın.'}
-    if action in ('payment_request', 'link_company', 'verify_order', 'end_test'):
+    if action in ('payment_request', 'link_company', 'verify_order', 'end_test', 'bank_settings', 'confirm_bank'):
         return billing_command(c, db, actor, data, action)
     if action not in sales.COMMANDS:
         sales.fail('İşlem bulunamadı.', 404)
@@ -221,6 +221,25 @@ def billing_command(c, db, actor, data, action):
         closed = bp.end_test(db, actor=actor, now=now)
         sales.audit(db, actor, 'billing_test_closed', 'billing', f'subscriptions={closed}')
         return {'detail': f'{closed} test aboneliği kapatıldı. Kayıtlar korunur.'}
+    if action == 'bank_settings':
+        bp.save_bank_settings(db, actor=actor, bank_name=sales.text(data, 'bank_name', 120),
+                              account_holder=sales.text(data, 'account_holder', 180), iban=sales.text(data, 'iban', 40),
+                              enabled=data.get('enabled') == '1', now=now)
+        sales.audit(db, actor, 'bank_settings_updated', 'bank', 'enabled=' + str(data.get('enabled') == '1'))
+        return {'detail': 'Banka hesabı kaydedildi. Yeni banka ödeme talimatları bu IBAN ile oluşur; '
+                          'önceden verilmiş talimatlar değişmez.'}
+    if action == 'confirm_bank':
+        checkout_id = sales.text(data, 'checkout_id', 64)
+        gross = tl_to_minor(sales.text(data, 'gross_tl', 24))
+        try:
+            result = bp.confirm_bank_payment(db, actor=actor, checkout_id=checkout_id,
+                                             transaction_id=sales.text(data, 'transaction_id', 120),
+                                             gross_minor=gross, now=now)
+        except bp.PaymentRejected as exc:
+            sales.fail(f'Banka tahsilatı onaylanmadı: {exc}', 409)
+        sales.audit(db, actor, 'bank_payment_confirmed', checkout_id, result)
+        return {'detail': 'Banka tahsilatı onaylandı, abonelik etkinleştirildi.' if result == 'activated'
+                else 'Bu banka işlemi daha önce işlenmiş.'}
     # verify_order: CONTROL reconciliation when a webhook was missed. Same server-side checks.
     order_id = sales.text(data, 'order_id', 80)
     try:
@@ -367,6 +386,7 @@ def payments_section(c, db, actor, data, f, inp, options):
                         inp('period_start','Dönem başlangıcı','date'),'Test bağlantısı oluştur')+
                       '<p>Test bitince test aboneliklerini kapatın; ardından test paketi Render ayarından kapatılır.</p>'+
                       f('end_test','','Test aboneliklerini kapat'))
+        out += bank_section(c, db, f, inp)
         out += c.card('Shopier siparişini elle doğrula','<p>Webhook ulaşmadıysa Shopier sipariş numarasıyla aynı sunucu kontrolleri çalıştırılır.</p>'+
                       f('verify_order', inp('order_id','Shopier sipariş numarası'),'Doğrula'))
     else:
@@ -392,6 +412,41 @@ def payments_section(c, db, actor, data, f, inp, options):
     out += c.card('Satışlar, tahsilatlar ve komisyonlar' if actor.founder else 'Satışlarım ve komisyonlarım',
                   sales_table(c,'Henüz ödeme bağlantısı yok.',('Müşteri','Ürün','Paket','Satış tarihi','Ödeme tarihi','Tahsilat (KDV dahil)',
                               'Komisyon matrahı (KDV hariç)','Oran','Komisyon','Komisyon ödeme aralığı','Ödeme / komisyon','Abonelik','Bağlantı'),body))
+    return out
+
+
+def bank_section(c, db, f, inp):
+    """Founder-only: IBAN settings and Havale/EFT/FAST collections awaiting confirmation."""
+    from . import billing_payments as bp
+    if not bp.bank_ready(db):
+        return c.card('Havale / EFT / FAST','<p role="status">Banka ödeme tabloları henüz kurulmadı (migration 007).</p>')
+    cur = bp.bank_settings(db)
+    val = lambda k: cur[k] if cur else ''
+    enabled = bool(cur and cur['enabled'])
+    out = c.card('Banka hesabı ve IBAN',
+        '<p>Müşterilere gösterilecek ERNASA tahsilat hesabı. Her banka ödeme talimatı oluşturulduğu andaki '
+        'IBAN bilgisini değişmez olarak saklar.</p>'
+        + (f'<p>Durum: <strong>{"Açık" if enabled else "Kapalı"}</strong></p>')
+        + f('bank_settings',
+            input_field(c,'bank_name','Banka adı',value=val('bank_name'),maximum=120)
+            + input_field(c,'account_holder','Hesap sahibi (ünvan)',value=val('account_holder'),maximum=180)
+            + input_field(c,'iban','IBAN (TR ile başlayan 26 karakter)',value=val('iban'),maximum=40)
+            + '<label><input type="checkbox" name="enabled" value="1"' + (' checked' if enabled else '')
+            + '> Havale / EFT / FAST ödemesini müşterilere aç</label>', 'Kaydet'))
+    rows = bp.pending_bank_payments(db)
+    body = [[c.e(r['company_name']), c.e(r['plan_name']), c.e(str(r['period_start'])), money(int(r['gross_minor'])),
+             f'<strong>{c.e(r["payment_reference"])}</strong>', c.e(r['owner_id'] or 'Doğrudan satış'),
+             c.e(local_date(datetime.fromtimestamp(r['created_at'], timezone.utc).isoformat())),
+             f('confirm_bank', c.hidden('checkout_id', r['id'])
+               + inp('transaction_id','Banka işlem / dekont no')
+               + input_field(c,'gross_tl','Hesaba geçen tutar (TL)',maximum=24), 'Tahsilatı onayla')]
+            for r in rows]
+    out += c.card('Bekleyen Havale / EFT / FAST ödemeleri',
+        '<p>Banka hesabında tutarı ve açıklamadaki referansı kontrol edin. Tutar talimattakiyle kuruşu kuruşuna aynı '
+        'olmalıdır; aynı banka işlem numarası ikinci kez kullanılamaz. Onay aboneliği etkinleştirir ve varsa temsilci '
+        'komisyonunu Shopier ödemesiyle aynı kurallarla hesaplar.</p>'
+        + sales_table(c,'Onay bekleyen banka ödemesi yok.',
+                      ('Firma','Paket','Dönem','Tutar (KDV dahil)','Açıklama referansı','Temsilci','Talimat zamanı','Onay'), body))
     return out
 
 

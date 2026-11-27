@@ -44,8 +44,9 @@ def test_checkout_quote_is_tenant_scoped_time_limited_and_immutable():
             assert (row["currency"], row["capacity"], row["positions"], row["hr_users"]) == (
                 "TRY", 100, 2, 1,
             )
+            # Approved Starter sale price 109.99 USD * 48.1234 = 5293.0928 -> 5293.09 TL net
             assert (row["net_minor"], row["vat_minor"], row["gross_minor"]) == (
-                481186, 96237, 577423,
+                529309, 105862, 635171,
             )
             assert active_quote(db, company_id=company_id + 1, quote_id=quote_id, now=now) is None
             assert active_quote(

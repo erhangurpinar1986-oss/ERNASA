@@ -74,3 +74,64 @@ def test_migration_005_and_paid_order_activation_on_postgres(monkeypatch):
     finally:
         db.raw.rollback()
         db.close()
+
+
+def test_migration_007_bank_transfer_confirmation_on_postgres():
+    """Real PostgreSQL 18: 007 installs idempotently through the startup path, the database itself
+    rejects a malformed IBAN, issued bank details are immutable and founder confirmation activates
+    exactly once. One rolled-back transaction: no synthetic row survives."""
+    dsn = os.getenv("SALES_TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("Disposable local PostgreSQL DSN not supplied")
+    config = parse_dsn(dsn)
+    assert config.get("host") in ("127.0.0.1", "localhost")
+    assert config.get("dbname", "").startswith("sales_test_")
+    db = postgres.Connection(postgres.Target(dsn))
+    try:
+        if not db.execute("SELECT to_regnamespace('ernasa_control')").fetchone()[0]:
+            with db.raw, db.raw.cursor() as cursor:
+                for migration in ("001_schema_draft.up.sql", "002_session_rules.up.sql"):
+                    cursor.execute((render_gateway.CONTROL_MIGRATIONS / migration).read_text())
+        render_gateway.ensure_sales_schema(db)
+        render_gateway.ensure_billing_quote_schema(db)
+        render_gateway.ensure_billing_payment_schema(db)
+        render_gateway.ensure_billing_payment_schema(db)  # restart: 005-007 re-run safely
+        assert bp.bank_ready(db)
+        now = datetime(2026, 11, 25, 15, tzinfo=timezone.utc)
+        if db.execute("SELECT id FROM users WHERE role='founder'").fetchone() is None:
+            db.execute("INSERT INTO users(email,name,secret,role) VALUES(?,?,?,?)",
+                       ("synthetic-founder@example.test", "F", "x", "founder"))
+        actor = type("A", (), {"id": "1", "founder": True, "company_id": None})()
+        db.execute("SAVEPOINT bad_iban")
+        with pytest.raises(psycopg2.errors.CheckViolation):
+            db.execute("INSERT INTO billing_bank_settings VALUES(1,'B','H','TR12',FALSE,'1',0)")
+        db.execute("ROLLBACK TO SAVEPOINT bad_iban")
+        bp.save_bank_settings(db, actor=actor, bank_name="Synthetic Bank", account_holder="ERNASA Test",
+                              iban="TR33 0006 1005 1978 6457 8413 26", enabled=True, now=now)
+        company_id = db.execute("INSERT INTO companies (name, status) VALUES (?,?) RETURNING id",
+                                ("Synthetic bank customer", "Aktif")).fetchone()[0]
+        ref = bp.create_payment_request(db, actor=actor, company_id=company_id, product="hr_flow",
+                                        plan_name="Growth", period_start=date(2027, 1, 1), now=now)
+        rate = ExchangeRate(Decimal("42.50000000"), date(2026, 11, 25))
+        checkout_id = bp.start_bank_checkout(db, ref=ref, rate=rate, vat_rate=Decimal("0.20"), now=now)
+        shown = bp.bank_checkout(db, ref)
+        assert shown["iban"] == "TR330006100519786457841326" and shown["gross_minor"] == 1376950
+        assert [r["id"] for r in bp.pending_bank_payments(db)] == [checkout_id]
+        db.execute("SAVEPOINT snapshot")
+        with pytest.raises(psycopg2.errors.RaiseException):
+            db.execute("UPDATE billing_bank_checkout_details SET iban=? WHERE checkout_id=?",
+                       ("TR460001000000000000012345", checkout_id))
+        db.execute("ROLLBACK TO SAVEPOINT snapshot")
+        with pytest.raises(bp.PaymentRejected):
+            bp.confirm_bank_payment(db, actor=actor, checkout_id=checkout_id, transaction_id="PG-TX-1",
+                                    gross_minor=1376949, now=now)
+        assert bp.confirm_bank_payment(db, actor=actor, checkout_id=checkout_id, transaction_id="PG-TX-1",
+                                       gross_minor=1376950, now=now) == "activated"
+        assert bp.confirm_bank_payment(db, actor=actor, checkout_id=checkout_id, transaction_id="PG-TX-1",
+                                       gross_minor=1376950, now=now) == "already_processed"
+        assert db.execute("SELECT status FROM billing_subscriptions WHERE company_id=?",
+                          (company_id,)).fetchone()[0] == "active"
+        assert bp.pending_bank_payments(db) == []
+    finally:
+        db.raw.rollback()
+        db.close()
