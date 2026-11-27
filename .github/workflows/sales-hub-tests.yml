@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt pytest
-      - run: python -m pytest tests/test_sales_hub.py tests/test_sales_postgres.py tests/test_billing_catalog.py tests/test_tcmb_rates.py tests/test_billing_quotes_postgres.py tests/test_billing_payments.py tests/test_billing_sales.py tests/test_billing_e2e.py tests/test_billing_payments_postgres.py tests/test_billing_bank.py tests/test_billing_share.py tests/test_commission_fx.py -q
+      - run: python -m pytest tests/test_sales_hub.py tests/test_sales_postgres.py tests/test_billing_catalog.py tests/test_tcmb_rates.py tests/test_billing_quotes_postgres.py tests/test_billing_payments.py tests/test_billing_sales.py tests/test_billing_e2e.py tests/test_billing_payments_postgres.py tests/test_billing_bank.py tests/test_billing_share.py tests/test_commission_fx.py tests/test_commission_policy.py -q
       - run: python tests/control_smoke.py
         env:
           PYTHONPATH: .

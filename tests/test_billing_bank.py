@@ -31,7 +31,7 @@ CREATE TABLE subscription_history(id INTEGER PRIMARY KEY, company_id INTEGER, sn
 def sqlite_sql(sql):
     sql = sql.replace("ernasa_control.", "").replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN")
     sql = sql.replace("CHECK (iban ~ '^TR[0-9]{24}$')", "")  # PostgreSQL regex check; enforced in code too
-    return re.sub(r"CREATE OR REPLACE TRIGGER.*?;", "", sql, flags=re.S)
+    return re.sub(r"CREATE OR REPLACE TRIGGER.*?;|DO \$\$.*?END \$\$;", "", sql, flags=re.S)
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ def db(monkeypatch):
     con.executescript(LEGACY)
     con.executescript(sales.SQLITE_GUARDS)
     for name in ("004_billing_quotes.up.sql", "005_billing_payments.up.sql", "006_billing_test.up.sql",
-                 "007_bank_transfer.up.sql", "009_commission_fx.up.sql"):
+                 "007_bank_transfer.up.sql", "009_commission_fx.up.sql", "010_commission_policy.up.sql"):
         con.executescript(sqlite_sql((MIG / name).read_text()))
     con.execute("INSERT INTO sales_accounts(id,company_id,name,email,secret,active) VALUES('rep1',10,'rep1','r@x.tr','s',1)")
     return con

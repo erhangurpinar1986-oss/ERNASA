@@ -86,19 +86,24 @@ def test_postgres_migrations_workflow_and_append_only_guards():
             execute(f,'reverse',id=mid,reason='Sentetik kurucu ters kayıt kararı')
             with pytest.raises(sales.Invalid):
                 execute(f,'collection',proposal_id=p,period=3,reference=run+'-3',net_minor=10001,cost_minor=0,collected_on='2026-01-31',reason='İptal sonrası engelle')
-            # Same customer: upgrades/additional products never create new first-period rates.
+            # Same customer (policy 2026-11-27): never a second %25; add-on %5; a manual TRY upgrade entry
+            # cannot carry the USD basis difference for %2, so it goes to CONTROL review.
             for kind in ('upgrade','addon','project'):
                 extra_o = execute(a,'opportunity',customer_id=c,title='Sentetik '+kind,kind=kind)['id']
                 extra_p = execute(a,'proposal',opportunity_id=extra_o,requested_minor=10001,brief='Sentetik '+kind)['id']
                 execute(a,'submit',id=extra_p)
                 execute(f,'decide',id=extra_p,decision='approved',official_minor=10001,reason='Sentetik '+kind)
+                if kind == 'upgrade':
+                    with pytest.raises(sales.Invalid, match='CONTROL incelemesine'):
+                        execute(f,'collection',proposal_id=extra_p,period=1,reference=run+'-'+kind,net_minor=10001,cost_minor=100,collected_on='2026-01-31',reason='Sentetik '+kind)
+                    continue
                 extra_c = execute(f,'collection',proposal_id=extra_p,period=1,reference=run+'-'+kind,net_minor=10001,cost_minor=100,collected_on='2026-01-31',reason='Sentetik '+kind)['id']
                 accrual = db.execute('SELECT * FROM sales_commissions WHERE collection_id=?',(extra_c,)).fetchone()
                 if kind == 'project':
                     assert accrual is None
                     execute(f,'project_commission',collection_id=extra_c,amount_minor=1500,analysis='Sentetik maliyet 5000; kâr 5001',reason='Açık sentetik proje kararı')
                 else:
-                    assert accrual['rate'] == 0 and accrual['amount_minor'] == 0
+                    assert accrual['rate'] == 5 and accrual['amount_minor'] == (10001*5+50)//100
             audit_id = db.execute('SELECT id FROM sales_audit WHERE actor_id=? ORDER BY stamp DESC LIMIT 1',(a.id,)).fetchone()[0]
             decision_id = db.execute('SELECT id FROM sales_decisions WHERE proposal_id=?',(p,)).fetchone()[0]
             adjustment_id = db.execute('SELECT id FROM sales_adjustments WHERE commission_id=?',(mid,)).fetchone()[0]

@@ -89,13 +89,18 @@ def _has(db, table):
 def rows(db, actor):
     """Commission entitlements: own (representative) or all (founder)."""
     full = _has(db, "sales_commission_fx") and _has(db, "billing_checkout_sales")
+    upgrades = full and _has(db, "sales_commission_upgrades")
     extra = ("f.basis_usd, f.commission_usd, f.fx_rate, f.fx_date, q.plan_name, q.product, q.created_at AS sold_at"
              if full else "NULL AS basis_usd, NULL AS commission_usd, NULL AS fx_rate, NULL AS fx_date, "
                           "NULL AS plan_name, NULL AS product, NULL AS sold_at")
+    extra += (", u.from_plan, u.to_plan, u.old_basis_usd, u.new_basis_usd" if upgrades
+              else ", NULL AS from_plan, NULL AS to_plan, NULL AS old_basis_usd, NULL AS new_basis_usd")
     joins = ("""LEFT JOIN sales_commission_fx f ON f.commission_id=m.id
                 LEFT JOIN billing_checkout_sales cs ON cs.sales_collection_id=col.id
                 LEFT JOIN billing_checkouts ch ON ch.id=cs.checkout_id
                 LEFT JOIN billing_quotes q ON q.id=ch.quote_id""" if full else "")
+    if upgrades:
+        joins += " LEFT JOIN sales_commission_upgrades u ON u.commission_id=m.id"
     sql = f"""SELECT m.id, m.rate, m.status, m.amount_minor, m.paid_on, col.collected_on, col.held, col.net_minor,
                      p.owner_id, a.name AS rep_name, cu.name AS customer, o.title AS opportunity, {extra}
               FROM sales_commissions m JOIN sales_collections col ON col.id=m.collection_id
@@ -154,3 +159,28 @@ def by_window(items):
 def estimate_try(amount_usd, rate):
     """Estimate only (current rate); never stored, never an entitlement."""
     return fixed_try_minor(amount_usd, rate.value)
+
+
+# Single wording of the commission policy (2026-11-27) for every Sales Hub / CONTROL screen.
+POLICY_RULES = (
+    "Yeni müşterinin ilk uygun ürün aboneliği: ilk tahsil edilen dönem %25, sonraki uygun dönemler %5.",
+    "Paket yükseltme ayı: eski ve yeni paketin USD komisyon matrahı farkı üzerinden %2 (yeni paketin tamamı üzerinden değil); "
+    "sonraki uygun dönemler yeni paketin matrahı üzerinden %5.",
+    "Temsilcinin kazandırdığı müşteriye sonradan satılan ayrı ürün abonelikleri: ilk tahsil edilen dönemden itibaren %5.",
+    "Aboneliğini iptal edip yeniden başlatan müşteri (30 gün, 60 gün, 6 ay, 1 yıl… süre fark etmez): %5.",
+    "Aynı müşteriye ikinci kez %25 müşteri kazanım komisyonu uygulanmaz.",
+    "Komisyon matrahları ve oranları USD bazındadır; KDV ve fiyata dahil ödeme sistemi maliyetleri matraha dahil değildir. "
+    "WhatsApp API modülleri komisyon dışıdır. Tahsilat doğrulanmadan hak ediş oluşmaz.",
+)
+POLICY_SHORT = ("Komisyon (USD): ilk ürün aboneliği %25, sonraki dönemler %5 · paket yükseltme ayı matrah farkının %2'si, "
+                "sonra %5 · ayrı ürün ve yeniden abonelik %5 · aynı müşteriye ikinci kez %25 yok.")
+
+
+def upgrade_examples():
+    """All upward HR FLOW package changes from the central catalog: (from, to, diff USD, %2 USD)."""
+    out = []
+    for i, old in enumerate(HR_FLOW):
+        for new in HR_FLOW[i + 1:]:
+            diff = new.commission_usd - old.commission_usd
+            out.append((old.name, new.name, diff, commission_usd(diff, 2)))
+    return out

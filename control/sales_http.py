@@ -440,14 +440,17 @@ def commission_cards(c, db, actor):
     for r in items:
         package = ' '.join(x for x in ({'hr_flow':'HR FLOW','education':'Eğitim'}.get(r['product'] or '', ''), r['plan_name'] or '') if x) or c.e(r['opportunity'])
         row = [c.e(r['customer']), c.e(package), c.e(cr.tr_date(r['sold_at'] if r['sold_at'] is not None else r['collected_on'])),
-               c.e(cr.tr_date(r['collected_on'])), cr.usd(r['basis_usd']), f"%{r['rate']}", cr.usd(r['commission_usd']),
+               c.e(cr.tr_date(r['collected_on'])),
+               cr.usd(r['basis_usd']) + (f"<br><small>{c.e(r['from_plan'])} → {c.e(r['to_plan'])} farkı "
+                                         f"({cr.usd(r['new_basis_usd'])} − {cr.usd(r['old_basis_usd'])})</small>" if r['from_plan'] else ''),
+               f"%{r['rate']}", cr.usd(r['commission_usd']),
                cr.fx(r['fx_rate']), c.e(cr.tr_date(r['fx_date'])), '<strong>'+cr.try_text(r['amount_minor'])+'</strong>',
                c.e(r['window_text']), c.e(r['status_text']), c.e(cr.tr_date(r['paid_on']))]
         if actor.founder:
             row.insert(0, c.e(r['rep_name'] or r['owner_id']))
         body.append(row)
     out = c.card('Komisyon hak edişleri (USD → sabit TL)' if actor.founder else 'Komisyon hak edişlerim (USD → sabit TL)',
-                 f'<p><strong>{c.e(cr.EXPLANATION)}</strong></p>'
+                 f'<p><strong>{c.e(cr.EXPLANATION)}</strong></p><p>{c.e(cr.POLICY_SHORT)}</p>'
                  + sales_table(c, 'Henüz doğrulanmış tahsilata bağlı komisyon hak edişi yok.', tuple(heads), body))
     if not actor.founder:
         return out
@@ -547,6 +550,7 @@ def tracking_section(c, db, actor, f, inp, options, ref=None):
         '<span id="odeme-takibi"></span><p>CONTROL onaylı her teklif için tek ödeme bağlantısı oluşturulur; aynı dönem için '
         'tekrar basıldığında mevcut bağlantı kullanılır. WhatsApp ve e-posta yalnız firmanın CONTROL’de kayıtlı yetkilisine '
         'gider. Fiyat, IBAN, banka tahsilat onayı ve komisyon oranı CONTROL kurucusundadır.</p>'
+        f'<p>{c.e(__import__("control.commission_report", fromlist=["x"]).POLICY_SHORT)}</p>'
         '<p id="odeme-kopya-sonuc" role="status"></p>'
         + sales_table(c, 'Takip edilecek teklif veya ödeme bağlantısı yok.',
                       ('Müşteri ve yetkili','Teklif, paket ve dönem','Durum ve komisyon','Gönderim','Bağlantı ve işlemler'), rows))
@@ -636,7 +640,9 @@ def content(c, db, identity, tab, ref=None):
     sections = (tab,)
     for section in sections:
         if section == 'overview':
-            out += c.card('Satış akışı','<p>Müşterinizi kaydedin, fırsat açın ve teklif taslağını CONTROL değerlendirmesine gönderin. Resmi fiyat ve indirim yalnız CONTROL onayıyla oluşur.</p><p>Tahsilat doğrulaması ve hak ediş onayı ayrı adımlardır.</p>')
+            from . import commission_report as cr
+            out += c.card('Satış akışı','<p>Müşterinizi kaydedin, fırsat açın ve teklif taslağını CONTROL değerlendirmesine gönderin. Resmi fiyat ve indirim yalnız CONTROL onayıyla oluşur.</p><p>Tahsilat doğrulaması ve hak ediş onayı ayrı adımlardır.</p>'
+                          f'<p>{c.e(cr.POLICY_SHORT)}</p>')
         if section == 'accounts':
             companies = db.execute('SELECT id,name FROM companies ORDER BY name').fetchall()
             fields = options('company_id','Firma',[(r['id'],r['name']) for r in companies])+inp('name','Ad soyad')+inp('email','E-posta','email')+inp('password','Başlangıç parolası (12–128 karakter)','password')
@@ -755,23 +761,40 @@ def content(c, db, identity, tab, ref=None):
                     + c.table(('Paket','İlk dönem %25 (USD)','Tahmini TL','Sonraki dönem %5 (USD)','Tahmini TL'),
                               [[r['plan'].name, cr.usd(r['first']), cr.try_text(cr.estimate_try(r['first'], rate)),
                                 cr.usd(r['later']), cr.try_text(cr.estimate_try(r['later'], rate))] for r in prices]))
-            out += c.card('ERNASA Eğitim Platformu', '<p>Ayrı abonelik. Eğitim atama, ilerleme takibi, bilgi ölçme ve izinli sesli/görüntülü sunum. AI eğitim raporu geliştirme ve kabul testi sonrasında sunulur.</p>'+c.table(('Paket','Aylık fiyat (USD)','Aylık eğitim katılımcısı'),education_rows))
+            out += c.card('Paket yükseltme komisyonu (%2, USD)',
+                '<p>Yükseltme ayında komisyon, eski ve yeni paketin USD komisyon matrahı <strong>farkı</strong> üzerinden %2’dir; '
+                'yeni paketin tamamı üzerinden hesaplanmaz. Sonraki uygun dönemlerde yeni paketin matrahı üzerinden %5 uygulanır. '
+                'Yükseltme farkı tahsil edilmeden komisyon oluşmaz; belirsiz durumlar CONTROL incelemesine alınır.</p>'
+                + c.table(('Yükseltme','Matrah farkı (USD)','%2 komisyon (USD)'),
+                          [[f'{a} → {b}', cr.usd(d), cr.usd(u)] for a, b, d, u in cr.upgrade_examples()]))
+            out += c.card('ERNASA Eğitim Platformu', '<p>Ayrı abonelik. Eğitim atama, ilerleme takibi, bilgi ölçme ve izinli sesli/görüntülü sunum. AI eğitim raporu geliştirme ve kabul testi sonrasında sunulur. '
+                          'HR FLOW kullanan müşteriye satıldığında ayrı ürün aboneliğidir: ilk aydan itibaren %5 komisyon (komisyon matrahı aylık USD fiyatıdır).</p>'+c.table(('Paket','Aylık fiyat (USD)','Aylık eğitim katılımcısı'),education_rows))
             out += c.card('Kuruma özel eğitim içeriği', c.table(('Hizmet','Konu başına (TL)'),[['Hazır dokümandan eğitim','750'],['Özgün eğitim ve sınav','1.750'],['İleri teknik / mesleki eğitim','3.500'],['Özel video / animasyon','Özel teklif']]))
             out += c.card('Fiyat koşulları','<p>Fiyatlar KDV hariçtir. Türkiye sözleşme, fatura ve tahsilatları TL ile yapılır. Sabit kur kampanyası yoktur. Güncel kur ve TL tutarı resmi teklif aşamasında CONTROL tarafından doğrulanır. Liste fiyatı resmi teklif değildir; indirim ve teklif onayı CONTROL yetkisindedir.</p>')
         if section == 'resources':
             from . import commission_report as cr
             out += c.card('Yetki ve komisyon rehberi',
                 '<p>Komisyon matrahı merkezi fiyat kataloğundaki USD tutardır (KDV ve fiyata dahil ödeme sistemi maliyeti hariç): '
-                'Starter $99,99 · Growth $249,99 · Business $499,99 · PRO $999,99.</p>'
-                '<p>Yeni müşterinin ilk ürün aboneliği: ilk tahsil edilmiş dönem %25, sonraki uygun dönemler %5. '
-                'Paket yükseltme ayında %0, yükseltmeden sonraki uygun dönemlerde %5. İkinci ürünün ilk döneminde %0. '
-                'Daha önce tahsilatı olan müşteriye (60 gün içinde yenileme dahil) yeniden %25 uygulanmaz. '
-                'Mevcut müşteri %0. WhatsApp API modülleri komisyon dışıdır. Özel projede maliyet/kâr analizi ve açık CONTROL kararı gerekir.</p>'
+                'Starter $99,99 · Growth $249,99 · Business $499,99 · PRO $999,99. Eğitim Platformu için aylık USD fiyatı.</p>'
+                '<ul>' + ''.join(f'<li>{c.e(rule)}</li>' for rule in cr.POLICY_RULES) + '</ul>'
                 f'<p><strong>{c.e(cr.EXPLANATION)}</strong></p>'
-                '<p>Örnek: Starter, %25 → $25,00. Satışta uygulanan kur 50,77 TL ise kesinleşen hak ediş 1.269,25 TL’dir; '
-                'ödeme gününde kur 54 TL veya 48 TL olsa da ödenecek tutar 1.269,25 TL kalır. ERNASA sonradan oluşan kur farkından sorumlu değildir.</p>'
-                '<p>Resmi fiyat, indirim ve taahhüt için onaylı teklif kullanın. Tahsilat doğrulanmadan hak ediş yoktur. '
-                'Ödemeler tahsilatı izleyen ayın 1–15 günlerinde, CONTROL onayıyla yapılır. Test ödemelerinden komisyon doğmaz.</p>')
+                '<p>Resmi fiyat, indirim ve taahhüt için onaylı teklif kullanın. Ödemeler tahsilatı izleyen ayın 1–15 günlerinde, '
+                'CONTROL onayıyla yapılır. Test ödemelerinden komisyon doğmaz. Özel projede maliyet/kâr analizi ve açık CONTROL kararı gerekir.</p>')
+            out += c.card('Komisyon hesaplama örnekleri', c.table(('Durum','USD hesap','Satış kuru','Kesinleşen TL'), [
+                ['Yeni müşteri, Starter, ilk ay', '$99,99 × %25 = $25,00', '50,77 TL', '1.269,25 TL'],
+                ['Aynı abonelik, sonraki ay', '$99,99 × %5 = $5,00', '50,77 TL', '253,85 TL'],
+                ['Starter → Growth yükseltme ayı', '($249,99 − $99,99) $150,00 × %2 = $3,00', '50,77 TL', '152,31 TL'],
+                ['Yükseltmeden sonraki ay (Growth)', '$249,99 × %5 = $12,50', '50,77 TL', '634,63 TL'],
+                ['HR FLOW müşterisine Eğitim Starter, ilk ay', '$75,00 × %5 = $3,75', '50,77 TL', '190,39 TL'],
+                ['İptalden 1 yıl sonra yeniden Starter', '$99,99 × %5 = $5,00', '50,77 TL', '253,85 TL'],
+            ]) + '<p>Ödeme gününde kur 54 TL veya 48 TL olsa da kesinleşen TL tutarı değişmez; ERNASA sonradan oluşan kur farkından sorumlu değildir.</p>')
+            out += c.card('Satış temsilcisi kullanım kılavuzu',
+                '<ol><li>Müşteriyi vergi numarası veya alan adıyla kaydedin; aynı müşteri ikinci kez kaydedilemez, sahiplik talebi CONTROL’e gider.</li>'
+                '<li>Fırsat türünü doğru seçin: ilk abonelik, paket yükseltme, ek/ayrı ürün veya özel proje.</li>'
+                '<li>Teklifi CONTROL değerlendirmesine gönderin; onaydan sonra Ödeme bağlantıları sekmesinden bağlantı oluşturup kopyalayın, WhatsApp veya e-posta ile gönderin.</li>'
+                '<li>Ödeme durumunu aynı ekrandan izleyin; komisyon tahsilat doğrulanınca USD olarak hesaplanır ve satış kuruyla TL’ye sabitlenir.</li>'
+                '<li>Komisyonlarım sekmesinde matrah, oran, USD komisyon, sabit kur, TL hak ediş ve ödeme dönemini kontrol edin.</li></ol>'
+                '<p>Tam metin: <code>docs/sales/satis-temsilcisi-kullanim-kilavuzu.md</code>.</p>')
             out += c.card('Yeni satış ortaklığı sözleşmesi şablonu',
                 '<p>Bu şablon yalnız <strong>yeni</strong> imzalanacak satış ortaklığı sözleşmelerinde kullanılır; mevcut imzalı sözleşmeler '
                 'tek taraflı değiştirilmez. İmza öncesi hukuki inceleme gerekir.</p>'
@@ -780,7 +803,8 @@ def content(c, db, identity, tab, ref=None):
                 'döviz satış kuru üzerinden, tahsilat ERNASA tarafından doğrulandığında kesinleşir ve sabitlenir. Ödeme günündeki kur '
                 'kullanılmaz; sonraki kur değişiklikleri kesinleşmiş tutarı etkilemez ve ERNASA kur farkından sorumlu değildir. Ödeme, '
                 'tahsilatı izleyen ayın 1–15 günleri arasında Türk lirası olarak yapılır. Doğrulanmamış tahsilat, test ödemesi, iade/iptal '
-                'incelemesindeki tahsilat ve WhatsApp API modülleri için hak ediş doğmaz.</p>'
+                'incelemesindeki tahsilat ve WhatsApp API modülleri için hak ediş doğmaz. Oranlar Ek-1 komisyon tablosundadır: '
+                'ilk ürün aboneliği %25 ve devamı %5; paket yükseltme ayı matrah farkının %2’si, sonrası %5; ayrı ürün ve yeniden abonelik %5.</p>'
                 '<p>Tam metin: depo içinde <code>docs/sales/satis-ortakligi-sozlesmesi-sablonu.md</code>.</p>')
         if section == 'profile':
             out += c.card('Profil',f'<p>{c.e(info["name"])} · {c.e(info["email"])}</p><p>Firma: {actor.company_id}</p>')
