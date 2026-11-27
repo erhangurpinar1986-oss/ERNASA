@@ -34,6 +34,15 @@ def tl(minor):
     return sign + f'{minor // 100:,}'.replace(',', '.') + f',{minor % 100:02d} TL'
 
 
+def begin(db, global_lock=False):
+    """NOVA's own write lock. CONTROL's global write lock (BEGIN IMMEDIATE -> advisory 47621 on PG) is
+    taken only for commands that write Sales Hub tables, so slow provider calls never block CONTROL."""
+    if global_lock or not hasattr(db, 'raw'):
+        db.execute('BEGIN IMMEDIATE')
+    else:
+        db.raw.cursor().execute('SELECT pg_advisory_xact_lock(184093, 47624)')
+
+
 def read_form(h):
     if h.headers.get('Origin') != h.server.origin:
         raise Invalid(403, 'İstek kaynağı doğrulanamadı.')
@@ -283,18 +292,18 @@ def command(db, actor, data, origin):
     raise Invalid(404, 'İşlem bulunamadı.')
 
 
-def tick(db, origin):
+def tick(db, origin, messages):
     """One scheduler pass. Every step re-checks the kill switch and limits inside nova.py."""
     result = {}
     try:
         result['emails'] = nova.dispatch_emails(db, nova_providers.EmailTransport())
     except (nova_providers.NotConfigured, Invalid) as exc:
         result['emails'] = str(exc)
-    try:
-        stored = [nova.record_inbound(db, m) for m in nova_providers.Mailbox().fetch()]
+    if isinstance(messages, list):
+        stored = [nova.record_inbound(db, m) for m in messages]
         result['inbound'] = {'read': len(stored), 'new': sum(1 for s in stored if s['status'] == 'stored')}
-    except (nova_providers.NotConfigured, nova_providers.ProviderError, OSError) as exc:
-        result['inbound'] = str(exc)[:200]
+    else:
+        result['inbound'] = messages
     cfg = nova.settings(db)
     if cfg['auto_call'] and cfg['call_policy_approved']:
         started = []
@@ -326,7 +335,7 @@ def hook(c, h, path):
         if not call_id:
             return h.reply(200, b'{"ignored":true}', 'application/json')
         with closing(c.connect(h.server.db_path)) as db, db:
-            db.execute('BEGIN IMMEDIATE')
+            begin(db)
             try:
                 outcome = nova.record_call_result(db, 'vapi', call_id, result)
             except Invalid as exc:
@@ -337,9 +346,13 @@ def hook(c, h, path):
         provided = h.headers.get('Authorization', '').removeprefix('Bearer ')
         if len(secret) < 32 or not hmac.compare_digest(secret.encode(), provided.encode()):
             return h.reply(403, b'{}', 'application/json')
+        try:  # network read happens before any database lock is taken
+            messages = nova_providers.Mailbox().fetch()
+        except (nova_providers.NotConfigured, nova_providers.ProviderError, OSError) as exc:
+            messages = str(exc)[:200]
         with closing(c.connect(h.server.db_path)) as db, db:
-            db.execute('BEGIN IMMEDIATE')
-            outcome = tick(db, h.server.origin)
+            begin(db)
+            outcome = tick(db, h.server.origin, messages)
         return h.reply(200, json.dumps(outcome, ensure_ascii=False, default=str).encode(), 'application/json')
     return h.reply(404, b'{}', 'application/json')
 
@@ -365,7 +378,7 @@ def handle(h, path, post):
         data = read_form(h) if post else None
         with closing(c.connect(h.server.db_path)) as db, db:
             if post:
-                db.execute('BEGIN IMMEDIATE')
+                begin(db, global_lock=data.get('action') == 'assign')
             founder = h.session(db)
             if not founder or founder['role'] != 'founder':
                 if post or api:
